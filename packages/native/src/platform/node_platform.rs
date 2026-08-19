@@ -36,6 +36,34 @@ impl PlatformKeyboardLayout for NodeKeyboardLayout {
     }
 }
 
+/// Lazily-created OS clipboard. Construction is expensive on X11 (spawns a
+/// background thread), so a failure is remembered instead of retried.
+#[derive(Default)]
+enum ClipboardSlot {
+    #[default]
+    Uninit,
+    Ready(arboard::Clipboard),
+    Unavailable,
+}
+
+impl ClipboardSlot {
+    fn get(&mut self) -> Option<&mut arboard::Clipboard> {
+        if matches!(self, ClipboardSlot::Uninit) {
+            *self = match arboard::Clipboard::new() {
+                Ok(clipboard) => ClipboardSlot::Ready(clipboard),
+                Err(e) => {
+                    log::warn!("clipboard unavailable: {e}");
+                    ClipboardSlot::Unavailable
+                }
+            };
+        }
+        match self {
+            ClipboardSlot::Ready(clipboard) => Some(clipboard),
+            _ => None,
+        }
+    }
+}
+
 #[derive(Default)]
 struct NodePlatformCallbacks {
     quit: Option<Box<dyn FnMut()>>,
@@ -54,6 +82,7 @@ pub struct NodePlatform {
     active_window: RefCell<Option<AnyWindowHandle>>,
     active_display: Rc<dyn PlatformDisplay>,
     callbacks: RefCell<NodePlatformCallbacks>,
+    clipboard: RefCell<ClipboardSlot>,
     wgpu_context: GpuContext,
     /// winit event loop — stored here for pump_app_events() in tick()
     event_loop: RefCell<Option<winit::event_loop::EventLoop<()>>>,
@@ -82,6 +111,7 @@ impl NodePlatform {
             active_window: RefCell::new(None),
             active_display,
             callbacks: RefCell::new(NodePlatformCallbacks::default()),
+            clipboard: RefCell::new(ClipboardSlot::default()),
             wgpu_context: Rc::new(RefCell::new(None)),
             event_loop: RefCell::new(None),
             window_state: RefCell::new(None),
@@ -210,12 +240,21 @@ impl NodePlatform {
                         let pos = state.mouse_position.get();
                         let mods = state.modifiers.get();
 
+                        // Pass the delta through with its sign intact.
+                        //
+                        // The OS has already applied the user's scroll-direction
+                        // preference: on macOS winit reads `scrollingDeltaX/Y`
+                        // straight from the NSEvent, which AppKit flips when
+                        // "natural scrolling" is on, and Zed's own `gpui_macos`
+                        // backend forwards those values unchanged. Negating here
+                        // therefore inverts whatever the user chose in System
+                        // Settings, which is exactly the bug this replaced.
                         let scroll_delta = match delta {
                             winit::event::MouseScrollDelta::LineDelta(x, y) => {
-                                ScrollDelta::Lines(point(-x, -y))
+                                ScrollDelta::Lines(point(x, y))
                             }
                             winit::event::MouseScrollDelta::PixelDelta(d) => {
-                                ScrollDelta::Pixels(point(px(-(d.x as f32)), px(-(d.y as f32))))
+                                ScrollDelta::Pixels(point(px(d.x as f32), px(d.y as f32)))
                             }
                         };
 
@@ -701,10 +740,22 @@ impl Platform for NodePlatform {
     fn on_thermal_state_change(&self, _callback: Box<dyn FnMut()>) {}
 
     fn read_from_clipboard(&self) -> Option<ClipboardItem> {
-        None
+        self.clipboard
+            .borrow_mut()
+            .get()?
+            .get_text()
+            .ok()
+            .map(ClipboardItem::new_string)
     }
 
-    fn write_to_clipboard(&self, _item: ClipboardItem) {}
+    fn write_to_clipboard(&self, item: ClipboardItem) {
+        let Some(text) = item.text() else { return };
+        let mut slot = self.clipboard.borrow_mut();
+        let Some(clipboard) = slot.get() else { return };
+        if let Err(e) = clipboard.set_text(text) {
+            log::warn!("clipboard write failed: {e}");
+        }
+    }
 
     // macOS has a "Find Pasteboard" (shared across apps for Cmd+E/Cmd+G).
     #[cfg(target_os = "macos")]
