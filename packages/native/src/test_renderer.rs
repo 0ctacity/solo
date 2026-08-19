@@ -12,7 +12,6 @@
 /// All napi calls happen on the JS main thread (same safety pattern as
 /// NodePlatform in renderer.rs).
 use std::cell::RefCell;
-use std::collections::HashMap;
 use std::rc::Rc;
 use std::sync::{Arc, Mutex};
 
@@ -21,7 +20,6 @@ use napi_derive::napi;
 
 use gpui::AppContext as _;
 
-use crate::custom_elements::CustomElementRegistry;
 use crate::element_tree::EventPayload;
 use crate::renderer::{apply_batch_to_tree, to_element_id, EventCallback, GpuixView};
 use crate::retained_tree::RetainedTree;
@@ -91,6 +89,9 @@ fn u32_to_mouse_button(button: u32) -> gpui::MouseButton {
 pub struct TestGpuixRenderer {
     tree: Arc<Mutex<RetainedTree>>,
     events: Arc<Mutex<Vec<EventPayload>>>,
+    /// Same handle GpuixView paints against, so tests can assert on the live
+    /// selection after simulating a drag.
+    selection: crate::text::SharedSelection,
 }
 
 #[napi]
@@ -108,6 +109,8 @@ impl TestGpuixRenderer {
 
         let tree_clone = tree.clone();
         let callback_clone = event_callback.clone();
+        let selection = crate::text::SharedSelection::default();
+        let selection_clone = selection.clone();
 
         // Create VisualTestAppContext with real macOS Metal rendering +
         // TestDispatcher for deterministic scheduling.
@@ -118,14 +121,13 @@ impl TestGpuixRenderer {
         // rendered by Metal. Uses the same GpuixView as production.
         let window_handle = cx
             .open_offscreen_window_default(|_window, app| {
-                app.new(|_cx| GpuixView {
-                    tree: tree_clone,
-                    event_callback: callback_clone,
-                    window_title: "GPUIX Test".to_string(),
-                    focus_handles: HashMap::new(),
-                    _focus_subscriptions: Vec::new(),
-                    custom_registry: CustomElementRegistry::with_defaults(),
-                    scroll_handles: HashMap::new(),
+                app.new(|_cx| {
+                    GpuixView::new(
+                        tree_clone,
+                        callback_clone,
+                        "GPUIX Test".to_string(),
+                        selection_clone,
+                    )
                 })
             })
             .map_err(|e| Error::from_reason(format!("Failed to open test window: {}", e)))?;
@@ -143,7 +145,11 @@ impl TestGpuixRenderer {
             *cell.borrow_mut() = Some(VisualTestState { cx, window, view });
         });
 
-        Ok(Self { tree, events })
+        Ok(Self {
+            tree,
+            events,
+            selection,
+        })
     }
 
     // ── Mutation API (same interface as GpuixRenderer) ────────────────
@@ -447,6 +453,64 @@ impl TestGpuixRenderer {
             );
             Ok(())
         })
+    }
+
+    // ── Selection API ──────────────────────────────────────────────────
+
+    /// The current text selection joined in document order, or null.
+    #[napi]
+    pub fn get_selected_text(&self) -> Option<String> {
+        self.selection.lock().selected_text()
+    }
+
+    /// Drop the current selection.
+    #[napi]
+    pub fn clear_selection(&self) {
+        self.selection.lock().clear();
+    }
+
+    /// Syntax-cache counters as `[hits, misses, documents]`.
+    ///
+    /// GPUIX rebuilds its whole element tree every frame, so a `<code>` block
+    /// that misses the cache reparses at frame rate. A test can watch the hit
+    /// count to catch that regression before a profiler does.
+    #[napi]
+    pub fn get_syntax_cache_stats(&self) -> Vec<f64> {
+        let stats = crate::syntax::cache::stats();
+        vec![
+            stats.hits as f64,
+            stats.misses as f64,
+            stats.documents as f64,
+        ]
+    }
+
+    /// Every string painted in the last frame, in paint order.
+    ///
+    /// `getAllText()` only sees `<text>` nodes in the retained tree. Native
+    /// elements such as `<code>` and `<diff>` draw their text inside gpui, so
+    /// this is the only way to assert on what they actually rendered.
+    #[napi]
+    pub fn get_painted_text(&self) -> Result<Vec<String>> {
+        self.flush()?;
+        Ok(crate::text::painted_text())
+    }
+
+    /// Drag-select from one point to another: mouse down, move, up.
+    ///
+    /// A single helper rather than three calls because the listeners that drive
+    /// selection are registered during **paint**, so a flush must sit between
+    /// the down and the move. Getting that order wrong silently selects nothing,
+    /// which is a miserable thing to debug from JS.
+    #[napi]
+    pub fn drag_select(&self, x1: f64, y1: f64, x2: f64, y2: f64) -> Result<()> {
+        self.flush()?;
+        self.simulate_mouse_down(x1, y1, None)?;
+        self.flush()?;
+        self.simulate_mouse_move(x2, y2, Some(0))?;
+        self.flush()?;
+        self.simulate_mouse_up(x2, y2, None)?;
+        self.flush()?;
+        Ok(())
     }
 
     // ── Scroll API ─────────────────────────────────────────────────────

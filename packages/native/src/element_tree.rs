@@ -78,6 +78,18 @@ pub struct EventPayload {
     /// Populated for: mouseEnter, mouseLeave.
     pub hovered: Option<bool>,
 
+    // ── Custom element payloads ──────────────────────────────────────
+    /// Element-defined string payload.
+    /// Populated for: `<diff>` toggleFile (the file path) and lineClick (the
+    /// line text); `<markdown>` linkClick (the URL).
+    pub value: Option<String>,
+
+    /// Line number on the pre-change side. Populated for: `<diff>` lineClick.
+    pub old_line: Option<f64>,
+
+    /// Line number on the post-change side. Populated for: `<diff>` lineClick.
+    pub new_line: Option<f64>,
+
     // ── Modifiers ────────────────────────────────────────────────────
     pub modifiers: Option<EventModifiers>,
 }
@@ -101,6 +113,9 @@ impl Default for EventPayload {
             precise: None,
             touch_phase: None,
             hovered: None,
+            value: None,
+            old_line: None,
+            new_line: None,
             modifiers: None,
         }
     }

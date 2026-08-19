@@ -1,9 +1,18 @@
 /// Test utilities shared across GPUIX test files.
 
 import fs from "fs"
+import path from "path"
+import { fileURLToPath } from "url"
 import { expect } from "vitest"
 
 export const isCI = !!process.env.CI
+
+/** Where visual tests write their PNGs. Kept in the repo (gitignored) rather
+ *  than /tmp so the output can actually be looked at after a run. */
+export const SHOTS_DIR = path.resolve(
+  path.dirname(fileURLToPath(import.meta.url)),
+  "../../screenshots"
+)
 
 /** Compute byte-level similarity between two buffers (0..1).
  *  For PNGs from the same renderer, identical pixels → identical bytes

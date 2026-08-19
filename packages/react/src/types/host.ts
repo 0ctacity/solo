@@ -71,6 +71,12 @@ export interface StyleDesc {
 
   cursor?: string
 
+  /** "none" opts this element and its subtree out of text selection.
+   *  Inherited like the CSS property, so a toolbar can disable it once. */
+  userSelect?: "text" | "none" | "auto"
+  /** Selection wash colour for this subtree. Defaults to the theme accent at 35%. */
+  selectionColor?: string
+
   // Pseudo-selector styles — applied by GPUI natively (no JS round-trip).
   // Nesting is one level deep: hover/active cannot contain hover/active.
   hover?: Omit<StyleDesc, "hover" | "active">
@@ -86,6 +92,107 @@ export type ElementType =
   | "canvas"
   | "input"
   | "anchored"
+  | "code"
+  | "diff"
+  | "markdown"
+
+// ── Theme ────────────────────────────────────────────────────────────
+
+/** Colours for one syntax capture class each. Every field is a CSS colour. */
+export interface SyntaxTheme {
+  comment?: string
+  keyword?: string
+  string?: string
+  stringSpecial?: string
+  escape?: string
+  number?: string
+  boolean?: string
+  typeName?: string
+  typeBuiltin?: string
+  constructor?: string
+  function?: string
+  functionBuiltin?: string
+  macroName?: string
+  property?: string
+  constant?: string
+  variable?: string
+  variableSpecial?: string
+  parameter?: string
+  operator?: string
+  punctuation?: string
+  tag?: string
+  attribute?: string
+  label?: string
+  invalid?: string
+}
+
+/**
+ * Every number that decides layout in the native text components.
+ *
+ * These live in the theme, not in Rust constants, so tuning a row height or a
+ * heading scale is a React re-render and needs no native rebuild.
+ */
+export interface GpuixMetrics {
+  // Code blocks
+  codeTextSize?: number
+  codeLineHeight?: number
+  codePaddingX?: number
+  codePaddingY?: number
+  codeRadius?: number
+  codeHeaderPaddingY?: number
+  codeHeaderTextSize?: number
+  codeGutterDigitWidth?: number
+  codeGutterPaddingRight?: number
+  codeGutterMinWidth?: number
+
+  // Diffs
+  diffTextSize?: number
+  diffLineHeight?: number
+  diffFileHeaderHeight?: number
+  diffHunkHeaderHeight?: number
+  diffNoticeHeight?: number
+  diffBodyBottomPad?: number
+  diffGutterWidth?: number
+  diffMarkerWidth?: number
+  diffAccentBarWidth?: number
+  diffRowPaddingX?: number
+
+  // Markdown
+  mdTextSize?: number
+  mdLineHeight?: number
+  mdBlockGap?: number
+  /** `[h1, h2, h3, h4to6]`. A shorter array leaves the rest at their defaults. */
+  mdHeadingSizes?: number[]
+  mdHeadingLineHeights?: number[]
+  mdTableCellPadding?: number
+  mdTableMinColumnWidth?: number
+  mdTableMinColumnContent?: number
+  mdInlineCodeRadius?: number
+}
+
+/**
+ * Theme tokens for the native text components. Every field is optional and
+ * layers on top of the built-in dark theme (or light, via `appearance`).
+ */
+export interface GpuixTheme {
+  appearance?: "dark" | "light"
+  bg?: string
+  border?: string
+  text?: string
+  textMuted?: string
+  textFaint?: string
+  textDim?: string
+  accent?: string
+  codeText?: string
+  codeWash?: string
+  diffAdd?: string
+  diffDel?: string
+  diffHunkBg?: string
+  fontSans?: string
+  fontMono?: string
+  syntax?: SyntaxTheme
+  metrics?: GpuixMetrics
+}
 
 // Props passed to elements.
 // Element IDs are auto-generated numeric IDs (not user-settable).
@@ -135,6 +242,45 @@ export interface ImgProps extends Props {
   alt?: string
 }
 
+// Props for the <code> custom element — a syntax-highlighted code block.
+export interface CodeProps extends Props {
+  /** The source to display. Rendered one div per line at an exact line height. */
+  code?: string
+  /** Language alias such as "ts", "rust", "bash". Beats `path` for detection. */
+  language?: string
+  /** File path, used for extension-based language detection. */
+  path?: string
+  showLineNumbers?: boolean
+  /** Header strip with the language tag. Defaults to true when `language` is set. */
+  showHeader?: boolean
+  theme?: GpuixTheme
+}
+
+// Props for the <diff> custom element — a virtualized unified diff viewer.
+export interface DiffProps extends Props {
+  /** A unified git patch (the output of `git diff`). */
+  patch?: string
+  /** Highlight the words that changed inside paired +/- lines. */
+  wordDiff?: boolean
+  /** File paths rendered as a header only. Collapsed bodies cost one row. */
+  collapsedPaths?: string[]
+  theme?: GpuixTheme
+  /** Fires when a file header is clicked. `event.value` is the file path. */
+  onToggleFile?: (event: EventPayload) => void
+  /** Fires when a diff line is clicked. `event.value` is the line text,
+   *  `event.oldLine` / `event.newLine` are its line numbers. */
+  onLineClick?: (event: EventPayload) => void
+}
+
+// Props for the <markdown> custom element.
+export interface MarkdownProps extends Props {
+  /** GitHub-flavoured markdown. Tables, strikethrough and task lists are on. */
+  source?: string
+  theme?: GpuixTheme
+  /** Fires when a block containing links is clicked. `event.value` is the URL. */
+  onLinkClick?: (event: EventPayload) => void
+}
+
 // Props for the <anchored> custom element.
 export interface AnchoredProps extends Props {
   x?: number
@@ -173,6 +319,12 @@ export interface NativeRenderer {
   scrollToItem?(elementId: number, index: number): void
   /** Get the current scroll offset [x, y] or null if element is not scrollable. */
   getScrollOffset?(elementId: number): Array<number> | null
+
+  // ── Selection API ──────────────────────────────────────────────
+  /** The current text selection joined in document order, or null. */
+  getSelectedText?(): string | null
+  /** Drop the current selection. */
+  clearSelection?(): void
 }
 
 // Container holds the renderer reference.

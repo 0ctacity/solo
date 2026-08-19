@@ -56,6 +56,10 @@ export declare class GpuixRenderer {
   setWindowTitle(title: string): void
   focusElement(elementId: number): void
   blur(): void
+  /** The current text selection joined in document order, or null. */
+  getSelectedText(): string | null
+  /** Drop the current selection and repaint on the next tick. */
+  clearSelection(): void
   /**
    * Set the scroll offset of a scrollable element.
    * x and y are negative pixel values (scroll down = more negative y).
@@ -178,6 +182,35 @@ export declare class TestGpuixRenderer {
    * delta_x and delta_y are in pixels (negative = scroll up/left).
    */
   simulateScrollWheel(x: number, y: number, deltaX: number, deltaY: number): void
+  /** The current text selection joined in document order, or null. */
+  getSelectedText(): string | null
+  /** Drop the current selection. */
+  clearSelection(): void
+  /**
+   * Syntax-cache counters as `[hits, misses, documents]`.
+   *
+   * GPUIX rebuilds its whole element tree every frame, so a `<code>` block
+   * that misses the cache reparses at frame rate. A test can watch the hit
+   * count to catch that regression before a profiler does.
+   */
+  getSyntaxCacheStats(): Array<number>
+  /**
+   * Every string painted in the last frame, in paint order.
+   *
+   * `getAllText()` only sees `<text>` nodes in the retained tree. Native
+   * elements such as `<code>` and `<diff>` draw their text inside gpui, so
+   * this is the only way to assert on what they actually rendered.
+   */
+  getPaintedText(): Array<string>
+  /**
+   * Drag-select from one point to another: mouse down, move, up.
+   *
+   * A single helper rather than three calls because the listeners that drive
+   * selection are registered during **paint**, so a flush must sit between
+   * the down and the move. Getting that order wrong silently selects nothing,
+   * which is a miserable thing to debug from JS.
+   */
+  dragSelect(x1: number, y1: number, x2: number, y2: number): void
   /**
    * Set the scroll offset of a scrollable element.
    * x and y are negative pixel values (scroll down = more negative y).
@@ -300,6 +333,16 @@ export interface EventPayload {
    * Populated for: mouseEnter, mouseLeave.
    */
   hovered?: boolean
+  /**
+   * Element-defined string payload.
+   * Populated for: `<diff>` toggleFile (the file path) and lineClick (the
+   * line text); `<markdown>` linkClick (the URL).
+   */
+  value?: string
+  /** Line number on the pre-change side. Populated for: `<diff>` lineClick. */
+  oldLine?: number
+  /** Line number on the post-change side. Populated for: `<diff>` lineClick. */
+  newLine?: number
   modifiers?: EventModifiers
 }
 

@@ -172,6 +172,14 @@ pub struct StyleDesc {
     // Cursor
     pub cursor: Option<String>,
 
+    // Text selection. "none" opts an element and its subtree out of the
+    // selection registry, so buttons and toolbars never start a drag.
+    // Inherited down the tree like the CSS property of the same name.
+    pub user_select: Option<String>,
+    /// Selection wash colour for this subtree. Defaults to the theme accent at
+    /// 35% opacity, the same tone Comet uses.
+    pub selection_color: Option<String>,
+
     // Pseudo-selector styles — applied by GPUI natively (no JS round-trip).
     // Uses Box to avoid infinite-size struct (StyleDesc contains StyleDesc).
     pub hover: Option<Box<StyleDesc>>,

@@ -1,11 +1,16 @@
 #![deny(clippy::all)]
 
 mod custom_elements;
+mod diff;
 mod element_tree;
+mod markdown;
 mod platform;
 mod renderer;
 mod retained_tree;
 mod style;
+mod syntax;
+mod text;
+mod theme;
 
 #[cfg(all(feature = "test-support", target_os = "macos"))]
 mod test_renderer;

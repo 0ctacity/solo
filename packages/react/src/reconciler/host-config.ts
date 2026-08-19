@@ -51,6 +51,10 @@ function getRenderer(): NativeRenderer {
 // ── Event wiring helpers ─────────────────────────────────────────────
 
 const EVENT_PROPS: Record<string, string> = {
+  // Custom element events
+  onToggleFile: "toggleFile",
+  onLineClick: "lineClick",
+  onLinkClick: "linkClick",
   // Mouse events
   onClick: "click",
   onMouseDown: "mouseDown",

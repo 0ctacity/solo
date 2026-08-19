@@ -14,9 +14,12 @@ use std::collections::{HashMap, HashSet};
 
 use crate::renderer::EventCallback;
 
-pub mod input;
 pub mod anchored;
+pub mod code;
+pub mod diff;
 pub mod img;
+pub mod input;
+pub mod markdown;
 
 // ── Render context ───────────────────────────────────────────────────
 
@@ -35,6 +38,49 @@ pub struct CustomRenderContext<'a> {
     pub style: Option<&'a crate::style::StyleDesc>,
     /// Built child elements from the retained tree for this custom node.
     pub children: Vec<gpui::AnyElement>,
+    /// Live text selection. Elements that paint text MUST route it through
+    /// `crate::text::selectable_text` with this handle, otherwise their glyphs
+    /// are invisible to a drag that starts outside them.
+    pub selection: crate::text::SharedSelection,
+    /// False when an ancestor set `userSelect: "none"`.
+    pub selectable: bool,
+    /// Inherited selection wash colour.
+    pub selection_wash: gpui::Hsla,
+}
+
+impl CustomRenderContext<'_> {
+    /// Build a selectable text run for this element. `sub` distinguishes
+    /// multiple runs painted by the same element, such as code-block lines, and
+    /// must be stable across frames or the selection flickers.
+    pub fn text(
+        &self,
+        sub: usize,
+        text: impl Into<gpui::SharedString>,
+        runs: Option<Vec<gpui::TextRun>>,
+    ) -> gpui::AnyElement {
+        let text = text.into();
+        if !self.selectable {
+            return crate::text::chrome_text(text, runs);
+        }
+        crate::text::selectable_text(crate::text::SelectableText::new(
+            text,
+            runs,
+            crate::text::selection_key(self.id, sub),
+            self.selection.clone(),
+            self.selection_wash,
+        ))
+    }
+
+    /// Chrome text: line numbers, language tags, file headers. Painted and
+    /// logged for tests, but never part of a selection, so copying a code block
+    /// yields code and not a column of line numbers.
+    pub fn chrome_text(
+        &self,
+        text: impl Into<gpui::SharedString>,
+        runs: Option<Vec<gpui::TextRun>>,
+    ) -> gpui::AnyElement {
+        crate::text::chrome_text(text.into(), runs)
+    }
 }
 
 // ── Traits ───────────────────────────────────────────────────────────
@@ -105,6 +151,9 @@ impl CustomElementRegistry {
         registry.register(Box::new(input::InputFactory));
         registry.register(Box::new(anchored::AnchoredFactory));
         registry.register(Box::new(img::ImgFactory));
+        registry.register(Box::new(code::CodeFactory));
+        registry.register(Box::new(diff::DiffFactory));
+        registry.register(Box::new(markdown::MarkdownFactory));
         registry
     }
 

@@ -29,6 +29,8 @@ use crate::element_tree::EventPayload;
 use crate::platform::NodePlatform;
 use crate::retained_tree::RetainedTree;
 use crate::style::{parse_color_hex, StyleDesc};
+use crate::text::{selectable_text, selection_frame_reset, selection_key, SharedSelection};
+use crate::theme::Theme;
 
 /// Parse a CSS font-weight value (string or number) into a GPUI FontWeight.
 /// Accepts named keywords ("bold", "semibold"), numeric strings ("700"),
@@ -105,6 +107,10 @@ pub struct GpuixRenderer {
     tree: Arc<Mutex<RetainedTree>>,
     initialized: Arc<Mutex<bool>>,
     needs_redraw: Arc<AtomicBool>,
+    /// Shared with GpuixView so napi methods can read the live selection
+    /// without an App context. `Rc` + `RefCell` because paint closures run on
+    /// the JS main thread where no `&mut GpuixView` is available.
+    selection: SharedSelection,
 }
 
 #[napi]
@@ -117,6 +123,7 @@ impl GpuixRenderer {
             tree: Arc::new(Mutex::new(RetainedTree::new())),
             initialized: Arc::new(Mutex::new(false)),
             needs_redraw: Arc::new(AtomicBool::new(true)),
+            selection: SharedSelection::default(),
         }
     }
 
@@ -152,6 +159,7 @@ impl GpuixRenderer {
             }) as EventCallback
         });
 
+        let selection = self.selection.clone();
         let app = gpui::Application::with_platform(platform);
         let app_handle = app.run_embedded(move |cx: &mut gpui::App| {
             let bounds = gpui::Bounds::centered(
@@ -167,14 +175,13 @@ impl GpuixRenderer {
                         ..Default::default()
                     },
                     |_window, cx| {
-                        cx.new(|_| GpuixView {
-                            tree: tree.clone(),
-                            event_callback: callback.clone(),
-                            window_title: title,
-                            focus_handles: HashMap::new(),
-                            _focus_subscriptions: Vec::new(),
-                            custom_registry: CustomElementRegistry::with_defaults(),
-                            scroll_handles: HashMap::new(),
+                        cx.new(|_| {
+                            GpuixView::new(
+                                tree.clone(),
+                                callback.clone(),
+                                title,
+                                selection.clone(),
+                            )
                         })
                     },
                 )
@@ -388,6 +395,22 @@ impl GpuixRenderer {
         Ok(())
     }
 
+    // ── Selection API ────────────────────────────────────────────────
+
+    /// The current text selection joined in document order, or null.
+    #[napi]
+    pub fn get_selected_text(&self) -> Option<String> {
+        self.selection.lock().selected_text()
+    }
+
+    /// Drop the current selection and repaint on the next tick.
+    #[napi]
+    pub fn clear_selection(&self) -> Result<()> {
+        self.selection.lock().clear();
+        self.needs_redraw.store(true, Ordering::SeqCst);
+        Ok(())
+    }
+
     // ── Scroll API ───────────────────────────────────────────────────
     // ScrollHandle is Rc<RefCell<...>> — its methods work without an App context.
     // GpuixView syncs handles to the SCROLL_HANDLES thread_local on each render.
@@ -457,6 +480,84 @@ pub(crate) struct GpuixView {
     /// Created lazily for elements with overflow: "scroll" (or per-axis scroll).
     /// Handles persist across renders so GPUI maintains scroll offset state.
     pub(crate) scroll_handles: HashMap<u64, gpui::ScrollHandle>,
+    /// Live text selection, shared with the paint closures and the napi methods.
+    pub(crate) selection: SharedSelection,
+}
+
+impl GpuixView {
+    pub(crate) fn new(
+        tree: Arc<Mutex<RetainedTree>>,
+        event_callback: Option<EventCallback>,
+        window_title: String,
+        selection: SharedSelection,
+    ) -> Self {
+        Self {
+            tree,
+            event_callback,
+            window_title,
+            focus_handles: HashMap::new(),
+            _focus_subscriptions: Vec::new(),
+            custom_registry: CustomElementRegistry::with_defaults(),
+            scroll_handles: HashMap::new(),
+            selection,
+        }
+    }
+}
+
+/// Everything `build_element` threads through the tree.
+///
+/// Split into a struct because the recursion needs eight-plus shared references
+/// and adding one more to every call site is how this file rots. `window` and
+/// `cx` stay separate parameters: they are `&mut` and gpui reborrows them.
+pub(crate) struct BuildCtx<'a> {
+    pub tree: &'a RetainedTree,
+    pub event_callback: &'a Option<EventCallback>,
+    pub focus_handles: &'a HashMap<u64, gpui::FocusHandle>,
+    pub scroll_handles: &'a mut HashMap<u64, gpui::ScrollHandle>,
+    pub custom_registry: &'a mut CustomElementRegistry,
+    pub selection: SharedSelection,
+    /// Inherited text state, resolved the way CSS inherits it. The renderer's
+    /// own theme only seeds the root selection wash; custom elements resolve
+    /// their own theme from their `theme` prop.
+    pub inherited: Inherited,
+}
+
+/// Style properties that cascade into descendants.
+#[derive(Clone, Copy)]
+pub(crate) struct Inherited {
+    /// False once an ancestor sets `userSelect: "none"`.
+    pub selectable: bool,
+    /// Selection wash colour for this subtree.
+    pub selection_wash: gpui::Hsla,
+}
+
+impl Inherited {
+    fn root(theme: &Theme) -> Self {
+        let mut wash = theme.accent;
+        wash.a = 0.35;
+        Self {
+            selectable: true,
+            selection_wash: wash,
+        }
+    }
+
+    /// Apply the inheritable parts of `style` for the subtree below it.
+    fn descend(mut self, style: Option<&StyleDesc>) -> Self {
+        let Some(style) = style else { return self };
+        match style.user_select.as_deref() {
+            Some("none") => self.selectable = false,
+            Some("text") | Some("auto") => self.selectable = true,
+            _ => {}
+        }
+        if let Some(hex) = style
+            .selection_color
+            .as_deref()
+            .and_then(crate::style::parse_color_hex)
+        {
+            self.selection_wash = gpui::rgba(hex).into();
+        }
+        self
+    }
 }
 
 impl GpuixView {
@@ -502,6 +603,11 @@ impl GpuixView {
                     ));
                 }
 
+                // Focus once, at creation. Re-focusing every frame would
+                // steal focus back from whatever the user clicked next.
+                if element.auto_focus {
+                    handle.focus(window, cx);
+                }
                 self.focus_handles.insert(id, handle);
             }
         }
@@ -542,18 +648,34 @@ impl gpui::Render for GpuixView {
 
         // Build the element tree. custom_registry, focus_handles, and scroll_handles
         // are different fields of self, so Rust allows borrowing all simultaneously.
+        let theme = Theme::dark();
         let result = match tree.root_id {
-            Some(root_id) => build_element(
-                root_id,
-                &tree,
-                &callback,
-                &self.focus_handles,
-                &mut self.scroll_handles,
-                &mut self.custom_registry,
-                window,
-                cx,
-            ),
+            Some(root_id) => {
+                let mut ctx = BuildCtx {
+                    tree: &tree,
+                    event_callback: &callback,
+                    focus_handles: &self.focus_handles,
+                    scroll_handles: &mut self.scroll_handles,
+                    custom_registry: &mut self.custom_registry,
+                    selection: self.selection.clone(),
+                    inherited: Inherited::root(&theme),
+                };
+                build_element(root_id, &mut ctx, window, cx)
+            }
             None => gpui::Empty.into_any_element(),
+        };
+
+        // The frame reset must paint BEFORE any text, so it is the first child of
+        // the root wrapper. Without it the selection registry accumulates stale
+        // entries across frames and a drag resolves against elements that are no
+        // longer on screen.
+        let result = {
+            use gpui::prelude::*;
+            gpui::div()
+                .size_full()
+                .child(selection_frame_reset(self.selection.clone()))
+                .child(result)
+                .into_any_element()
         };
 
         // Sync scroll handles to thread_local so napi methods (scrollTo,
@@ -574,68 +696,47 @@ impl gpui::Render for GpuixView {
 
 pub(crate) fn build_element(
     id: u64,
-    tree: &RetainedTree,
-    event_callback: &Option<EventCallback>,
-    focus_handles: &HashMap<u64, gpui::FocusHandle>,
-    scroll_handles: &mut HashMap<u64, gpui::ScrollHandle>,
-    custom_registry: &mut CustomElementRegistry,
+    ctx: &mut BuildCtx,
     window: &mut gpui::Window,
     cx: &mut gpui::Context<GpuixView>,
 ) -> gpui::AnyElement {
     use gpui::IntoElement;
 
-    let Some(element) = tree.elements.get(&id) else {
+    let Some(element) = ctx.tree.elements.get(&id) else {
         return gpui::Empty.into_any_element();
     };
 
-    match element.element_type.as_str() {
+    // Inheritable style resolves once here so both built-ins and custom
+    // elements see the same cascade.
+    let parent_inherited = ctx.inherited;
+    ctx.inherited = parent_inherited.descend(element.style.as_ref());
+
+    let built = match element.element_type.as_str() {
         "div" => {
-            custom_registry.destroy(id);
-            build_div(
-                element,
-                tree,
-                event_callback,
-                focus_handles,
-                scroll_handles,
-                custom_registry,
-                window,
-                cx,
-            )
+            ctx.custom_registry.destroy(id);
+            build_div(element, ctx, window, cx)
         }
         "text" => {
-            custom_registry.destroy(id);
-            build_text(
-                element,
-                tree,
-                event_callback,
-                focus_handles,
-                scroll_handles,
-                custom_registry,
-                window,
-                cx,
-            )
+            ctx.custom_registry.destroy(id);
+            build_text(element, ctx, window, cx)
         }
 
         // Polymorphic dispatch for all custom elements.
         custom_type => {
-            let custom_children: Vec<gpui::AnyElement> = element
+            let child_ids: Vec<u64> = element
                 .children
                 .iter()
-                .filter(|child_id| tree.elements.contains_key(child_id))
-                .map(|child_id| {
-                    build_element(
-                        *child_id,
-                        tree,
-                        event_callback,
-                        focus_handles,
-                        scroll_handles,
-                        custom_registry,
-                        window,
-                        cx,
-                    )
-                })
+                .copied()
+                .filter(|child_id| ctx.tree.elements.contains_key(child_id))
+                .collect();
+            let custom_children: Vec<gpui::AnyElement> = child_ids
+                .into_iter()
+                .map(|child_id| build_element(child_id, ctx, window, cx))
                 .collect();
 
+            let selection = ctx.selection.clone();
+            let inherited = ctx.inherited;
+            let custom_registry = &mut *ctx.custom_registry;
             if let Some(instance) = custom_registry.get_or_create(id, custom_type) {
                 // Sync known props from RetainedElement to the CustomElement instance.
                 // Missing keys are explicitly reset with null to avoid stale state.
@@ -674,31 +775,33 @@ pub(crate) fn build_element(
                     .cloned()
                     .collect();
 
-                let ctx = CustomRenderContext {
+                let render_ctx = CustomRenderContext {
                     id,
                     events: &filtered_events,
-                    event_callback,
-                    focus_handle: focus_handles.get(&id),
+                    event_callback: ctx.event_callback,
+                    focus_handle: ctx.focus_handles.get(&id),
                     style: element.style.as_ref(),
                     children: custom_children,
+                    selection,
+                    selectable: inherited.selectable,
+                    selection_wash: inherited.selection_wash,
                 };
 
-                instance.render(ctx, window, cx)
+                instance.render(render_ctx, window, cx)
             } else {
                 log::warn!("Unknown element type: {}", custom_type);
                 gpui::Empty.into_any_element()
             }
         }
-    }
+    };
+
+    ctx.inherited = parent_inherited;
+    built
 }
 
 pub(crate) fn build_div(
     element: &crate::retained_tree::RetainedElement,
-    tree: &RetainedTree,
-    event_callback: &Option<EventCallback>,
-    focus_handles: &HashMap<u64, gpui::FocusHandle>,
-    scroll_handles: &mut HashMap<u64, gpui::ScrollHandle>,
-    custom_registry: &mut CustomElementRegistry,
+    ctx: &mut BuildCtx,
     window: &mut gpui::Window,
     cx: &mut gpui::Context<GpuixView>,
 ) -> gpui::AnyElement {
@@ -754,24 +857,25 @@ pub(crate) fn build_div(
         // The handle persists across renders (stored in GpuixView::scroll_handles)
         // so GPUI maintains the scroll offset between frames.
         if needs_scroll_x || needs_scroll_y {
-            let handle = scroll_handles
+            let handle = ctx
+                .scroll_handles
                 .entry(element.id)
                 .or_insert_with(gpui::ScrollHandle::new);
             el = el.track_scroll(handle);
         } else {
             // Element is no longer scrollable — remove stale handle.
-            scroll_handles.remove(&element.id);
+            ctx.scroll_handles.remove(&element.id);
         }
     } else {
         // No style at all — remove stale handle if it existed.
-        scroll_handles.remove(&element.id);
+        ctx.scroll_handles.remove(&element.id);
     }
 
     // If a FocusHandle was pre-created for this element (by sync_focus_handles),
     // attach it via track_focus. This makes the element focusable — clicking it
     // or tabbing to it gives it keyboard focus. The handle persists across renders
     // because it's stored in GpuixView::focus_handles.
-    if let Some(handle) = focus_handles.get(&element.id) {
+    if let Some(handle) = ctx.focus_handles.get(&element.id) {
         el = el.track_focus(handle);
     }
 
@@ -781,7 +885,7 @@ pub(crate) fn build_div(
     // on any InteractiveElement.
     for event_type in &element.events {
         let id = element.id;
-        let callback = event_callback.clone();
+        let callback = ctx.event_callback.clone();
         match event_type.as_str() {
             // ── Click ────────────────────────────────────────────
             "click" => {
@@ -864,12 +968,12 @@ pub(crate) fn build_div(
                 // Wire on first encounter (mouseEnter sorts before mouseLeave).
                 if event_type.as_str() == "mouseEnter" || !has_enter {
                     let callback_enter = if has_enter {
-                        event_callback.clone()
+                        ctx.event_callback.clone()
                     } else {
                         None
                     };
                     let callback_leave = if has_leave {
-                        event_callback.clone()
+                        ctx.event_callback.clone()
                     } else {
                         None
                     };
@@ -964,101 +1068,68 @@ pub(crate) fn build_div(
         }
     }
 
-    // Text content
+    // Text content — selectable, same as a <text> leaf.
     if let Some(ref content) = element.content {
-        el = el.child(content.clone());
+        el = el.child(text_content(element.id, content, ctx));
     }
 
     // Children
-    for &child_id in &element.children {
-        el = el.child(build_element(
-            child_id,
-            tree,
-            event_callback,
-            focus_handles,
-            scroll_handles,
-            custom_registry,
-            window,
-            cx,
-        ));
+    let child_ids: Vec<u64> = element.children.clone();
+    for child_id in child_ids {
+        el = el.child(build_element(child_id, ctx, window, cx));
     }
 
     el.into_any_element()
 }
 
+/// A selectable text run owned by `element_id`. Runs are left to gpui so the
+/// text keeps inheriting colour, weight and family from ancestor styles.
+fn text_content(element_id: u64, content: &str, ctx: &BuildCtx) -> gpui::AnyElement {
+    if !ctx.inherited.selectable {
+        // Still logged: `getPaintedText()` promises every painted string, and a
+        // `userSelect: "none"` label is exactly the chrome tests want to assert.
+        return crate::text::chrome_text(gpui::SharedString::from(content.to_string()), None);
+    }
+    selectable_text(crate::text::SelectableText::new(
+        gpui::SharedString::from(content.to_string()),
+        None,
+        selection_key(element_id, 0),
+        ctx.selection.clone(),
+        ctx.inherited.selection_wash,
+    ))
+}
+
 pub(crate) fn build_text(
     element: &crate::retained_tree::RetainedElement,
-    tree: &RetainedTree,
-    event_callback: &Option<EventCallback>,
-    focus_handles: &HashMap<u64, gpui::FocusHandle>,
-    scroll_handles: &mut HashMap<u64, gpui::ScrollHandle>,
-    custom_registry: &mut CustomElementRegistry,
+    ctx: &mut BuildCtx,
     window: &mut gpui::Window,
     cx: &mut gpui::Context<GpuixView>,
 ) -> gpui::AnyElement {
     use gpui::prelude::*;
 
-    // Fast path: plain text leaf without style.
+    // Fast path: plain text leaf without style. It still goes through
+    // `text_content` so the glyphs land in the selection registry — the old
+    // raw-string return was the reason text was not selectable.
     if element.style.is_none() && element.children.is_empty() {
-        return element
-            .content
-            .clone()
-            .unwrap_or_default()
-            .into_any_element();
+        let content = element.content.clone().unwrap_or_default();
+        return text_content(element.id, &content, ctx);
     }
 
+    // The full style set, exactly as `<div>` gets it. `<text>` used to apply a
+    // text-only subset, so `padding`, `width` and every layout prop on a text
+    // node were silently dropped — a hole with no error and no warning.
     let mut el = gpui::div();
-
     if let Some(ref style) = element.style {
-        if let Some(hex) = style.color.as_ref().and_then(|c| parse_color_hex(c)) {
-            el = el.text_color(gpui::rgba(hex));
-        }
-        if let Some(size) = style.font_size {
-            el = el.text_size(gpui::px(size as f32));
-        }
-        if let Some(ref bg) = style.background_color.as_ref().or(style.background.as_ref()) {
-            if let Some(hex) = parse_color_hex(bg) {
-                el = el.bg(gpui::rgba(hex));
-            }
-        }
-        if let Some(ref family) = style.font_family {
-            el = el.font_family(family.clone());
-        }
-        if let Some(ref weight) = style.font_weight {
-            el = el.font_weight(parse_font_weight(weight));
-        }
-        match style.white_space.as_deref() {
-            Some("nowrap") => el = el.whitespace_nowrap(),
-            Some("normal") => el = el.whitespace_normal(),
-            _ => {}
-        }
-        match style.text_overflow.as_deref() {
-            Some("ellipsis") => el = el.text_ellipsis(),
-            Some("ellipsis-start") => el = el.text_ellipsis_start(),
-            _ => {}
-        }
-        if let Some(clamp) = style.line_clamp {
-            if clamp >= 1.0 {
-                el = el.line_clamp(clamp as usize);
-            }
-        }
+        el = apply_styles(el, style);
     }
 
     if let Some(ref content) = element.content {
-        el = el.child(content.clone());
+        el = el.child(text_content(element.id, content, ctx));
     }
 
-    for &child_id in &element.children {
-        el = el.child(build_element(
-            child_id,
-            tree,
-            event_callback,
-            focus_handles,
-            scroll_handles,
-            custom_registry,
-            window,
-            cx,
-        ));
+    let child_ids: Vec<u64> = element.children.clone();
+    for child_id in child_ids {
+        el = el.child(build_element(child_id, ctx, window, cx));
     }
 
     el.into_any_element()
@@ -1130,6 +1201,14 @@ pub(crate) fn apply_styles<E: gpui::Styled>(mut el: E, style: &StyleDesc) -> E {
     }
     if let Some(gap) = style.gap {
         el = el.gap(gpui::px(gap as f32));
+    }
+    // Per-axis gaps were in the style type and implemented nowhere. They come
+    // after `gap` so the axis value wins, matching CSS shorthand order.
+    if let Some(gap) = style.row_gap {
+        el = el.gap_y(gpui::px(gap as f32));
+    }
+    if let Some(gap) = style.column_gap {
+        el = el.gap_x(gpui::px(gap as f32));
     }
     if let Some(ref w) = style.width {
         el = apply_width(el, w);
@@ -1226,11 +1305,21 @@ pub(crate) fn apply_styles<E: gpui::Styled>(mut el: E, style: &StyleDesc) -> E {
             el = el.text_color(gpui::rgba(hex));
         }
     }
+    if let Some(size) = style.font_size {
+        el = el.text_size(gpui::px(size as f32));
+    }
     if let Some(ref family) = style.font_family {
         el = el.font_family(family.clone());
     }
     if let Some(ref weight) = style.font_weight {
         el = el.font_weight(parse_font_weight(weight));
+    }
+    // `textAlign` was in the style type but implemented nowhere.
+    match style.text_align.as_deref() {
+        Some("center") => el = el.text_center(),
+        Some("right") => el = el.text_right(),
+        Some("left") | Some("start") => el = el.text_left(),
+        _ => {}
     }
     match style.white_space.as_deref() {
         Some("nowrap") => el = el.whitespace_nowrap(),
@@ -1247,13 +1336,20 @@ pub(crate) fn apply_styles<E: gpui::Styled>(mut el: E, style: &StyleDesc) -> E {
             el = el.line_clamp(clamp as usize);
         }
     }
+    // `line_height` was accepted by the style type but never applied, so
+    // multi-line text always used gpui's default leading.
+    if let Some(line_height) = style.line_height {
+        if line_height > 0.0 {
+            el = el.line_height(gpui::px(line_height as f32));
+        }
+    }
     if let Some(radius) = style.border_radius {
         el = el.rounded(gpui::px(radius as f32));
     }
+    // `borderWidth: 0` must clear a border, not be ignored: an element that
+    // draws its own border needs a way for the caller to remove it.
     if let Some(width) = style.border_width {
-        if width > 0.0 {
-            el = el.border(gpui::px(width as f32));
-        }
+        el = el.border(gpui::px(width.max(0.0) as f32));
     }
     if let Some(ref color) = style.border_color {
         if let Some(hex) = parse_color_hex(color) {

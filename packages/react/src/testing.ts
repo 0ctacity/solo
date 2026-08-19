@@ -162,6 +162,17 @@ export class TestRenderer implements NativeRenderer {
    *  @param elementId - element to focus (must have onKeyDown/onKeyUp)
    *  @param keystrokes - space-separated keys, e.g. "a", "enter", "cmd-shift-p"
    */
+  /** Send keystrokes to whatever currently holds focus.
+   *
+   *  Unlike `nativeSimulateKeystrokes`, this focuses nothing first, which is
+   *  the only way to test that `autoFocus` (or a click) actually moved focus. */
+  simulateKeystrokes(keystrokes: string): void {
+    this.native.flush()
+    this.native.simulateKeystrokes(keystrokes)
+    this.dispatchNativeEvents()
+    this.native.flush()
+  }
+
   nativeSimulateKeystrokes(elementId: number, keystrokes: string): void {
     this.native.flush()
     this.native.focusElement(elementId)
@@ -337,6 +348,43 @@ export class TestRenderer implements NativeRenderer {
     const result = this.native.getScrollOffset(elementId)
     if (!result) return null
     return [result[0], result[1]]
+  }
+
+  // ── Selection API ───────────────────────────────────────────────
+
+  /** Drag-select from (x1,y1) to (x2,y2) and return the selected text.
+   *
+   *  Selection listeners are registered during **paint**, so the native helper
+   *  flushes between every step. Calling simulateMouseDown/Move/Up by hand
+   *  without those flushes selects nothing. */
+  dragSelect(x1: number, y1: number, x2: number, y2: number): string | null {
+    this.native.dragSelect(x1, y1, x2, y2)
+    return this.native.getSelectedText()
+  }
+
+  /** The current selection joined in document order, or null. */
+  getSelectedText(): string | null {
+    return this.native.getSelectedText()
+  }
+
+  /** Every string painted in the last frame, in paint order.
+   *
+   *  `getAllText()` only sees `<text>` nodes in the retained tree. Native
+   *  elements like `<code>` and `<diff>` paint their text inside GPUI, so this
+   *  is the only way to assert on what they rendered. */
+  getPaintedText(): string[] {
+    return this.native.getPaintedText()
+  }
+
+  /** Syntax-cache counters as `[hits, misses, documents]`. */
+  getSyntaxCacheStats(): [number, number, number] {
+    const [hits, misses, documents] = this.native.getSyntaxCacheStats()
+    return [hits, misses, documents]
+  }
+
+  clearSelection(): void {
+    this.native.clearSelection()
+    this.native.flush()
   }
 
   /** Capture a screenshot of the current rendered UI and save as PNG.
