@@ -88,7 +88,13 @@ gpuix/
 │   │   │   ├── lib.rs          # Module exports
 │   │   │   ├── renderer.rs     # GpuixRenderer, GpuixView, build_element()
 │   │   │   ├── element_tree.rs # ElementDesc, EventPayload types
-│   │   │   └── style.rs        # StyleDesc, color parsing
+│   │   │   ├── style.rs        # StyleDesc, color parsing
+│   │   │   ├── theme.rs        # Comet palette, oklch helpers, JS overrides
+│   │   │   ├── text/           # Selection: state, paint registry, TextRuns
+│   │   │   ├── syntax/         # Tree-sitter highlighting + bounded cache
+│   │   │   ├── markdown/       # pulldown-cmark parser + gpui renderer
+│   │   │   ├── diff/           # Unified-patch parser + row flattening
+│   │   │   └── custom_elements/# input, img, anchored, code, diff, markdown
 │   │   ├── examples/
 │   │   │   └── hello.rs        # Pure GPUI test (no JS)
 │   │   ├── Cargo.toml
@@ -114,6 +120,73 @@ gpuix/
 │
 └── AGENTS.md                   # This file
 ```
+
+## Text rendering: one funnel, no exceptions
+
+Every string GPUIX paints goes through `crate::text`:
+
+- `selectable_text(..)` for content — registers into the per-frame selection
+  registry and installs the window mouse and key listeners
+- `chrome_text(..)` for line numbers, language tags and file headers — painted
+  and logged for tests, but never part of a selection
+
+**Never call `div().child(some_string)` in a new element.** Doing so makes the
+text invisible to selection AND to `getPaintedText()`, so it cannot be tested
+except by screenshot.
+
+The registry is rebuilt during **paint**, not during build, because paint order
+is the only place document order is guaranteed: a `list()` decides at paint time
+which rows exist. `selection_frame_reset()` must stay the first child of the
+root, or stale entries from the previous frame leak into the next drag.
+
+## Layout numbers live in `Theme::metrics`, not in Rust constants
+
+Row heights, gutter widths, paddings, text sizes and the heading scale are all
+fields on `crate::theme::Metrics`, reachable from JS as `theme.metrics`.
+
+**Do not add a new `const` for anything that decides layout.** Put it on
+`Metrics`, give it a default, add it to `MetricsOverride`, `hash_into`, and the
+`GpuixMetrics` TypeScript interface. The whole point is that a design tweak is a
+React re-render, not a native rebuild.
+
+Two things stay constant, because they are paint geometry and cannot move a
+glyph: the table hairline, and the inline-code wash overhang.
+
+`<diff>` derives its virtualized height model from the metrics without
+measuring, so `DiffElement` re-runs `reset_with_uniform_height` whenever
+`Metrics::hash_into` changes. Forget that and the scrollbar drifts from the
+content.
+
+## Iterating on the Rust side
+
+There is no hot reload and there cannot be: `require()` of a `.node` calls
+`process.dlopen`, Node has no unload, and the event loop, GPU device, window and
+selection registry all live in thread-locals of the loaded library.
+
+Use `bun run dev` (see `scripts/dev.ts`). It watches `packages/native/src`,
+rebuilds, and re-renders the screenshot tests. **A Rust edit reaches fresh PNGs
+in about 4 seconds.** Prefer screenshot mode over `--app`: PNGs in
+`packages/react/screenshots/` can be read by an agent, a live window cannot.
+
+## Virtualization only works inside data-owning elements
+
+gpui's `list()` takes a `'static` render closure that runs during layout, long
+after `render()` returned, so it cannot borrow the renderer's `BuildCtx`. A
+generic `<list>` over React children is therefore **not possible** with the
+current architecture.
+
+`<diff>` virtualizes because it parses its patch into plain Rust and the closure
+captures an `Rc` of it. Any new element that needs virtualization must own its
+data the same way.
+
+## Ported code
+
+`text/`, `syntax/`, `markdown/`, `diff/`, `theme.rs`, `custom_elements/code.rs`
+and `custom_elements/diff.rs` are ported from
+[Comet](https://github.com/zeronsh/comet) (MIT). Each file names its original in
+its header, and `THIRD_PARTY_NOTICES.md` has the full table. When fixing a bug in
+one of them, read the Comet original first: it usually documents why the code is
+shaped that way.
 
 ## Auto-generated files (do NOT edit manually)
 
@@ -302,7 +375,12 @@ xcodebuild -downloadComponent MetalToolchain
 - [x] **Build native package standalone** - Resolve GPUI dependency conflicts
 - [x] **Generate TypeScript types** - Run napi build to create .d.ts files
 - [x] **Test full pipeline** - JS → native → GPUI → screen
+- [x] **Selectable text** - cross-element selection, clipboard, `userSelect`
+- [x] **Syntax highlighting** - Tree-sitter with a bounded document cache
+- [x] **`<code>`, `<diff>`, `<markdown>`** - native text components
 - [ ] **Re-render triggering** - Store Entity handle, call cx.notify() on tree update
+- [ ] **Background highlighting** - move Tree-sitter off the frame thread once
+      there is a way to request a repaint from a background task
 
 #### Medium Priority
 
@@ -325,7 +403,10 @@ xcodebuild -downloadComponent MetalToolchain
 ### Unit Tests
 
 ```bash
-# React reconciler + GPU-backed test renderer (71 tests)
+# Rust unit tests (selection, syntax, diff parser, markdown parser, theme)
+cd packages/native && cargo test --lib
+
+# React reconciler + GPU-backed test renderer
 cd packages/react && bun run test
 
 # Example app tests
@@ -334,6 +415,20 @@ cd examples && bun run test
 
 Use `bun run test`, not `bun test`. The suites are vitest, so `bun test` picks the
 wrong runner and fails on the `vitest` imports.
+
+### Asserting on native elements
+
+`getAllText()` reads the retained tree, so it only sees `<text>` nodes. `<code>`,
+`<diff>` and `<markdown>` paint inside gpui and are invisible to it. Use
+`renderer.getPaintedText()` (every string painted last frame, in paint order) and
+`renderer.dragSelect(x1, y1, x2, y2)` instead.
+
+`dragSelect` exists because selection listeners are registered during **paint**:
+calling `simulateMouseDown` / `Move` / `Up` by hand without a flush between each
+step silently selects nothing.
+
+Screenshots go to `packages/react/screenshots/` (gitignored), not `/tmp`, so they
+can be inspected after a run.
 
 ### Integration Test
 

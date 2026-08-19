@@ -5,7 +5,9 @@
   "scripts": {
     "counter": "tsx counter.tsx",
     "diff": "tsx diff.tsx",
-    "test": "vitest run"
+    "test": "vitest run",
+    "native-text": "tsx native-text.tsx",
+    "chat": "tsx chat.tsx"
   },
   "dependencies": {
     "@kmamal/sdl": "^0.11.12",

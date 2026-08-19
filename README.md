@@ -4,6 +4,32 @@ React bindings for [GPUI](https://github.com/zed-industries/zed/tree/main/crates
 
 Build native GPU-accelerated desktop apps with React and TypeScript. Your components render directly to the GPU via Metal/Vulkan — no Electron, no web views.
 
+![A ChatGPT-style app built with GPUIX](docs/images/chat-app.png)
+
+Everything above is GPUIX: the sidebar, the scrolling transcript, the composer,
+and the syntax-highlighted code block. Run it with
+`cd examples && bun run chat`.
+
+## Examples
+
+| Example | Run | What it shows |
+|---|---|---|
+| **chat** | `bun run chat` | A full ChatGPT-style app: sidebar, transcript, composer, `<markdown>`, `<code>`, `<diff>` |
+| **native-text** | `bun run native-text` | The three native text components with a tab switcher |
+| **counter** | `bun run counter` | The smallest possible app: state, events, hover |
+| **diff** | `bun run diff` | A diff viewer composed from `<div>` and `<text>` in JS, for comparison |
+
+All of them live in [`examples/`](./examples) and use hardcoded data.
+
+The chat example puts a virtualized `<diff>` and a GFM table inside an assistant
+turn, inside a scrolling transcript:
+
+![A diff and a markdown table inside a chat turn](docs/images/chat-diff.png)
+
+Markdown, code and a virtualized diff in one frame:
+
+![Markdown, code and diff rendered together](docs/images/showcase.png)
+
 ## Architecture
 
 GPUIX bridges React to GPUI using a **mutation-based protocol** over napi-rs FFI. React's reconciler sends individual DOM-like mutations (`createElement`, `appendChild`, `setStyle`, etc.) directly to Rust — no JSON tree serialization. Rust maintains a retained element tree that GPUI reads each frame.
@@ -234,15 +260,154 @@ renderer.scrollToItem(elementId, index)   // scroll child into view
 renderer.getScrollOffset(elementId)       // returns [x, y] or null
 ```
 
+## Text selection
+
+Every text GPUIX paints is **selectable and copyable**, including text inside
+`<code>`, `<diff>` and `<markdown>`. A drag that starts in a heading and ends
+inside a fenced code block selects everything between; Cmd+C copies it joined in
+document order.
+
+There is nothing to opt into. To opt *out* — toolbars, buttons, line-number
+gutters — set `userSelect: "none"`, which inherits like the CSS property:
+
+```tsx
+<div style={{ userSelect: 'none' }}>
+  <text>toolbar label, never selected</text>
+</div>
+```
+
+![Text selected across markdown blocks](docs/images/selection.png)
+
+Read the selection from the renderer:
+
+```tsx
+renderer.getSelectedText()   // joined text, or null
+renderer.clearSelection()
+```
+
+Selection works because each painted text element registers itself into a
+per-frame registry in **paint order**, which is document order. A drag anchored
+in one element resolves against that registry into per-element spans: partial in
+the anchor and head, whole for everything between.
+
+<details>
+<summary>Why not one big text element, like Zed?</summary>
+
+Zed's markdown selects continuously because its whole document is a single
+element over one text model. GPUIX renders a *tree* of text elements, so it
+rebuilds that continuity at paint time instead. The mechanism is ported from
+[Comet](https://github.com/zeronsh/comet) (MIT), which faced the same problem.
+</details>
+
+## Native text components
+
+Three elements render text with Tree-sitter syntax highlighting computed in
+Rust. Colours come from a theme prop, so a late-arriving highlight recolours runs
+without ever changing layout.
+
+### `<code>`
+
+A syntax-highlighted code block. One row per line at an exact line height, so the
+block's height is known before highlighting runs.
+
+```tsx
+<code
+  code={source}
+  language="typescript"        // or path="src/app.ts" to detect from extension
+  showLineNumbers
+  showHeader={false}
+/>
+```
+
+![A syntax-highlighted code block](docs/images/code.png)
+
+### `<diff>`
+
+A unified diff viewer, virtualized with GPUI's `list()`. Collapsing a file
+removes its rows rather than hiding them, so a collapsed 10k-line file costs one
+row.
+
+```tsx
+<diff
+  patch={unifiedPatch}
+  wordDiff                     // highlight only the tokens that changed
+  collapsedPaths={['pnpm-lock.yaml']}
+  onToggleFile={(e) => toggle(e.value)}
+  onLineClick={(e) => console.log(e.oldLine, e.newLine, e.value)}
+/>
+```
+
+![A unified diff with word-level highlights](docs/images/diff.png)
+
+### `<markdown>`
+
+GitHub-flavoured markdown: headings, lists, tables, block quotes, fenced code,
+strikethrough, task lists, and autolinked bare URLs.
+
+```tsx
+<markdown source={readme} onLinkClick={(e) => open(e.value)} />
+```
+
+![Markdown with headings, lists, a table and a code fence](docs/images/markdown.png)
+
+### Theming
+
+All three take the same optional `theme` prop. Every field layers on top of the
+built-in dark theme, so overriding one token leaves the rest alone.
+
+```tsx
+<code
+  code={source}
+  language="rust"
+  theme={{
+    appearance: 'dark',        // or 'light'
+    accent: '#7c86ff',
+    syntax: { keyword: '#f38ba8', string: '#a6e3a1' },
+  }}
+/>
+```
+
+**Layout numbers live in the theme too**, under `metrics`. Row heights, gutter
+widths, paddings and the heading scale are props, not Rust constants, so tuning
+the design is a React re-render and never a native rebuild.
+
+```tsx
+<diff
+  patch={patch}
+  theme={{
+    metrics: {
+      diffLineHeight: 26,
+      diffGutterWidth: 48,
+      mdHeadingSizes: [24, 19, 16, 14],
+    },
+  }}
+/>
+```
+
+`<diff>` virtualizes from these numbers without measuring, so changing
+`diffLineHeight` also re-sizes the scroll model.
+
+The same three components, retuned entirely from `metrics` with no rebuild:
+
+![The components with enlarged metrics](docs/images/metrics.png)
+
+Languages bundled: Rust, TypeScript, TSX, JavaScript, JSX, Python, Go, JSON,
+Bash, TOML, YAML, Markdown, HTML, CSS, C.
+
 ## Supported Elements
 
-| Element  | Description              |
-|----------|--------------------------|
-| `div`    | Container with flexbox layout |
-| `text`   | Text content             |
-| `img`    | Images (planned)         |
-| `svg`    | Vector graphics (planned) |
-| `canvas` | Custom drawing (planned) |
+| Element     | Description                                      |
+|-------------|--------------------------------------------------|
+| `div`       | Container with flexbox layout                    |
+| `text`      | Text content, selectable                         |
+| `code`      | Syntax-highlighted code block                    |
+| `diff`      | Virtualized unified diff viewer                  |
+| `markdown`  | GitHub-flavoured markdown                        |
+| `input`     | Controlled text input                            |
+| `img`       | Images                                           |
+| `anchored`  | Positioned overlay                               |
+| `svg`       | Vector graphics (planned)                        |
+| `canvas`    | Custom drawing (planned)                         |
 
 ## Supported Events
 
@@ -260,6 +425,9 @@ renderer.getScrollOffset(elementId)       // returns [x, y] or null
 | Focus | `onFocus` | — |
 | Blur | `onBlur` | — |
 | Scroll | `onScroll` | `deltaX`, `deltaY`, `precise`, `touchPhase`, `modifiers` |
+| Toggle file | `onToggleFile` | `value` (file path) — `<diff>` only |
+| Line click | `onLineClick` | `value`, `oldLine`, `newLine` — `<diff>` only |
+| Link click | `onLinkClick` | `value` (URL) — `<markdown>` only |
 
 Keyboard and focus events require the element to be focusable (has `onKeyDown`, `onKeyUp`, `onFocus`, or `onBlur` listeners). GPUI creates a `FocusHandle` automatically for these elements.
 
@@ -294,6 +462,8 @@ CSS-like styling via the `style` prop:
 
 **Text:** `fontSize`, `fontFamily`, `fontWeight`, `whiteSpace`, `textOverflow`, `lineClamp`
 
+**Selection:** `userSelect` (`"text"` | `"none"`), `selectionColor` — both inherit down the tree
+
 > **Note: `white-space: pre` is not supported.** GPUI's text system only has `normal` (wraps) and `nowrap` (single line). To preserve newlines like HTML `<pre>`, split your text on `\n` in React and render each line as a separate `<text>` element in a flex column:
 >
 > ```tsx
@@ -327,6 +497,73 @@ const events = renderer.drainNativeEvents()
 const screenshot = renderer.captureScreenshot('/tmp/test.png')
 const text = renderer.getAllText()
 ```
+
+### Testing native elements
+
+`getAllText()` only sees `<text>` nodes in the retained tree. `<code>`, `<diff>`
+and `<markdown>` paint their text inside GPUI, so use `getPaintedText()`, which
+returns every string painted in the last frame in paint order:
+
+```ts
+root.render(<code code={'a\nb'} language="ts" showHeader={false} />)
+expect(renderer.getPaintedText()).toEqual(['a', 'b'])
+```
+
+Selection has its own helper. Listeners are registered during **paint**, so
+`dragSelect` flushes between every step; calling `simulateMouseDown` / `Move` /
+`Up` by hand without those flushes selects nothing:
+
+```ts
+expect(renderer.dragSelect(20, 30, 900, 300)).toBe('first line\nsecond line')
+```
+
+Screenshots land in `packages/react/screenshots/` and `examples/screenshots/`,
+both gitignored, so they can be inspected after a run without adding a binary
+diff to every commit. The curated set the README links to lives in
+`docs/images/` and is regenerated with:
+
+```bash
+bun scripts/screenshots.ts
+```
+
+## Developing the Rust side
+
+There is **no hot reload for the native half**, and there cannot be: `require()`
+of a `.node` file calls `process.dlopen`, Node has no matching unload, and the
+live state (the winit event loop, the wgpu device, the open window, the
+selection registry) lives in thread-locals of the loaded library. A second load
+would get empty thread-locals and a dead window.
+
+The rebuild is fast enough that it does not matter. Measured on an M-series Mac
+after touching one file:
+
+| Step | Time |
+|---|---|
+| `cargo check --lib` | 1.5s |
+| `cargo build --lib` | 4.9s |
+| `bun run build:debug` (napi) | ~2s |
+| One vitest screenshot file | ~2s |
+
+`bun run dev` wires that into a loop: it watches `packages/native/src`,
+rebuilds, and re-renders the screenshot tests. **Rust edit to fresh PNGs is
+about 4 seconds.**
+
+```bash
+bun run dev                      # rebuild, re-render the showcase screenshots
+bun scripts/dev.ts --shots diff  # only tests matching "diff"
+bun scripts/dev.ts --app native-text   # rebuild, restart an example app
+```
+
+Screenshot mode is the better default. Open
+`packages/react/screenshots/showcase.png` in Preview.app, which reloads on
+write, and unlike a live window the PNG can also be read by an agent.
+
+Two things avoid the rebuild entirely:
+
+- **Content** already lives in props. Change `patch` or `source` and the next
+  frame shows it.
+- **Design numbers** live in `theme.metrics`. Tuning a row height or heading
+  scale is a React re-render.
 
 The test renderer uses `VisualTestAppContext` with a `TestDispatcher` for deterministic scheduling. Event simulation goes through GPUI's coordinate-based hit testing and dispatch — not synthetic JS events.
 
