@@ -24,11 +24,11 @@ futures = "0.3"
 
 # GPUI and related crates from Zed at the "GPUI on the web" commit
 # This commit adds Application::with_platform() and makes Platform trait public
-gpui = { git = "https://github.com/zed-industries/zed", rev = "14f37ed5024bbccff2200797d1d9bf69aee01d66" }
-gpui_wgpu = { git = "https://github.com/zed-industries/zed", rev = "14f37ed5024bbccff2200797d1d9bf69aee01d66" }
+gpui = { git = "https://github.com/zed-industries/zed", rev = "d5dc01f2b54e0ae11215e76a0811743b3fc86e2f" }
+gpui_wgpu = { git = "https://github.com/zed-industries/zed", rev = "d5dc01f2b54e0ae11215e76a0811743b3fc86e2f" }
 
 # wgpu for pre-creating Metal-capable instance (gpui_wgpu defaults to VULKAN|GL only)
-wgpu = "28.0"
+wgpu = "29.0"
 
 # winit for native window creation with pump_events() support (non-blocking)
 winit = "0.30"
@@ -43,7 +43,7 @@ objc2 = "0.5"
 objc2-foundation = { version = "0.2", features = ["NSThread"] }
 objc2-app-kit = { version = "0.2", features = ["NSApplication", "NSRunningApplication", "NSWindow", "NSResponder"] }
 # gpui_macos for real Metal rendering in visual test renderer (VisualTestAppContext)
-gpui_macos = { git = "https://github.com/zed-industries/zed", rev = "14f37ed5024bbccff2200797d1d9bf69aee01d66" }
+gpui_macos = { git = "https://github.com/zed-industries/zed", rev = "d5dc01f2b54e0ae11215e76a0811743b3fc86e2f" }
 
 # Windows: windows crate for HWND type required by Platform::get_raw_handle()
 [target.'cfg(target_os = "windows")'.dependencies]
@@ -58,6 +58,11 @@ test-support = ["gpui/test-support", "gpui_macos/test-support", "gpui_macos/font
 
 [build-dependencies]
 napi-build = "2"
+
+# gpui_platform gives the examples an OS-agnostic Application constructor;
+# gpui::Application::new() no longer exists, a Platform must be supplied.
+[dev-dependencies]
+gpui_platform = { git = "https://github.com/zed-industries/zed", rev = "d5dc01f2b54e0ae11215e76a0811743b3fc86e2f" }
 
 [[example]]
 name = "hello"

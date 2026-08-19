@@ -31,10 +31,13 @@ use crate::style::StyleDesc;
 
 /// Bundles VisualTestAppContext + window handle + view entity.
 /// Stored in thread_local because VisualTestAppContext is !Send (Rc<AppCell>).
+/// Field order is load-bearing: Rust drops fields in declaration order, and
+/// gpui panics at app teardown if an `Entity` handle outlives its `App`.
+/// `view` must therefore be declared before `cx`.
 struct VisualTestState {
-    cx: gpui::VisualTestAppContext,
-    window: gpui::AnyWindowHandle,
     view: gpui::Entity<GpuixView>,
+    window: gpui::AnyWindowHandle,
+    cx: gpui::VisualTestAppContext,
 }
 
 thread_local! {

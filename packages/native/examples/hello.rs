@@ -4,8 +4,7 @@
 //! Run with: cargo run -p gpuix --example hello
 
 use gpui::{
-    div, prelude::*, px, rgb, rgba, size, App, Application, Bounds, Context, Hsla, Window,
-    WindowBounds, WindowOptions,
+    div, prelude::*, px, rgb, size, App, Bounds, Context, Hsla, Window, WindowBounds, WindowOptions,
 };
 
 struct HelloWorld {
@@ -41,20 +40,19 @@ impl HelloWorld {
     }
 
     fn cycle_box_color(&mut self, index: usize) {
-        let colors = [
+        let colors: [Hsla; 6] = [
             gpui::red(),
             gpui::green(),
             gpui::blue(),
             gpui::yellow(),
-            rgb(0xcba6f7), // purple
-            rgb(0xf38ba8), // pink
+            rgb(0xcba6f7).into(), // purple
+            rgb(0xf38ba8).into(), // pink
         ];
         let current = &mut self.boxes[index];
         // Find current color index and cycle to next
         for (i, c) in colors.iter().enumerate() {
-            let c_hsla: Hsla = (*c).into();
-            if (current.h - c_hsla.h).abs() < 0.01 {
-                *current = colors[(i + 1) % colors.len()].into();
+            if (current.h - c.h).abs() < 0.01 {
+                *current = colors[(i + 1) % colors.len()];
                 return;
             }
         }
@@ -166,7 +164,7 @@ impl Render for HelloWorld {
 }
 
 fn main() {
-    Application::new().run(|cx: &mut App| {
+    gpui_platform::application().run(|cx: &mut App| {
         let bounds = Bounds::centered(None, size(px(600.), px(450.)), cx);
 
         cx.open_window(

@@ -79,6 +79,11 @@ pub(crate) fn to_element_id(id: f64) -> Result<u64> {
 // the JS main thread, storing the platform in a thread_local is safe.
 thread_local! {
     static NODE_PLATFORM: RefCell<Option<Rc<NodePlatform>>> = const { RefCell::new(None) };
+    /// Keeps the gpui `App` alive. `NodePlatform::run()` returns immediately
+    /// instead of blocking on an OS run loop, so without this handle the `App`
+    /// would be dropped as soon as `init()` returns and every later
+    /// `window.update()` would fail with "app was released".
+    static GPUI_APP: RefCell<Option<gpui::ApplicationHandle>> = const { RefCell::new(None) };
     static GPUI_WINDOW: RefCell<Option<gpui::AnyWindowHandle>> = const { RefCell::new(None) };
     /// Shared scroll handles — GpuixView writes here during render(),
     /// napi methods read from here for programmatic scroll control.
@@ -148,7 +153,7 @@ impl GpuixRenderer {
         });
 
         let app = gpui::Application::with_platform(platform);
-        app.run(move |cx: &mut gpui::App| {
+        let app_handle = app.run_embedded(move |cx: &mut gpui::App| {
             let bounds = gpui::Bounds::centered(
                 None,
                 gpui::size(gpui::px(width as f32), gpui::px(height as f32)),
@@ -180,6 +185,10 @@ impl GpuixRenderer {
             });
 
             cx.activate(true);
+        });
+
+        GPUI_APP.with(|a| {
+            *a.borrow_mut() = Some(app_handle);
         });
 
         *self.initialized.lock().unwrap() = true;
@@ -914,6 +923,7 @@ pub(crate) fn build_div(
                             gpui::TouchPhase::Started => "started".to_string(),
                             gpui::TouchPhase::Moved => "moved".to_string(),
                             gpui::TouchPhase::Ended => "ended".to_string(),
+                            gpui::TouchPhase::Cancelled => "cancelled".to_string(),
                         });
                     });
                 });

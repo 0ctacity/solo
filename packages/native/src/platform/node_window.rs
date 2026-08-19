@@ -14,7 +14,7 @@ use gpui::{
     ResizeEdge, Scene, Size, WindowAppearance, WindowBackgroundAppearance, WindowBounds,
     WindowControlArea, WindowControls, WindowDecorations, WindowParams,
 };
-use gpui_wgpu::{WgpuContext, WgpuRenderer, WgpuSurfaceConfig};
+use gpui_wgpu::{GpuContext, WgpuContext, WgpuRenderer, WgpuSurfaceConfig};
 use raw_window_handle::{HasDisplayHandle, HasWindowHandle};
 use std::cell::{Cell, RefCell};
 use std::rc::Rc;
@@ -78,6 +78,14 @@ pub struct NodeWindowCallbacks {
 /// and the external tick handler can access callbacks/state.
 pub struct NodeWindowState {
     pub renderer: RefCell<WgpuRenderer>,
+    /// The winit window. It MUST outlive `renderer`, whose wgpu surface was
+    /// created from this window's raw handle via `create_surface_unsafe`.
+    /// `NodePlatform` also holds an `Rc<NodeWindowState>`, so keeping the
+    /// window on `NodeWindow` instead would let the surface outlive it.
+    /// Rust drops fields in declaration order, so this must stay below
+    /// `renderer`. Held in an `Arc` because `WgpuRenderer::new` requires a
+    /// `Clone + Send + Sync` handle it keeps as the wgpu instance display.
+    winit_window: Arc<winit::window::Window>,
     pub callbacks: RefCell<NodeWindowCallbacks>,
     pub bounds: RefCell<Bounds<Pixels>>,
     pub scale_factor: Cell<f32>,
@@ -95,10 +103,8 @@ pub struct NodeWindowState {
 }
 
 pub struct NodeWindow {
-    /// The winit window — MUST stay alive for WgpuRenderer surface validity
-    #[allow(dead_code)]
-    winit_window: winit::window::Window,
-    /// Shared state accessed by both PlatformWindow methods and external tick
+    /// Shared state accessed by both PlatformWindow methods and external tick.
+    /// Owns the winit window, so it stays alive as long as the renderer does.
     state: Rc<NodeWindowState>,
     display: Rc<dyn PlatformDisplay>,
     #[allow(dead_code)]
@@ -107,12 +113,12 @@ pub struct NodeWindow {
 
 impl NodeWindow {
     /// Create a new NodeWindow from an existing winit window.
-    /// The winit_window is moved into this struct to keep it alive.
+    /// The winit_window is moved into the shared NodeWindowState to keep it alive.
     pub fn new(
         handle: AnyWindowHandle,
         _params: WindowParams,
-        winit_window: winit::window::Window,
-        wgpu_context: &mut Option<WgpuContext>,
+        winit_window: Arc<winit::window::Window>,
+        wgpu_context: GpuContext,
     ) -> anyhow::Result<(Self, Rc<NodeWindowState>)> {
         let scale_factor = winit_window.scale_factor() as f32;
         let inner_size = winit_window.inner_size();
@@ -125,17 +131,19 @@ impl NodeWindow {
         let renderer_config = WgpuSurfaceConfig {
             size: device_size,
             transparent: false,
+            preferred_present_mode: None,
         };
 
         // Pre-create wgpu context with Metal backend if not already created.
         // gpui_wgpu's WgpuContext::instance() hardcodes VULKAN|GL (no Metal),
         // because it was designed for Linux/WASM. On macOS we need Metal.
-        if wgpu_context.is_none() {
-            let instance = wgpu::Instance::new(&wgpu::InstanceDescriptor {
+        if wgpu_context.borrow().is_none() {
+            let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
                 backends: wgpu::Backends::all(),
                 flags: wgpu::InstanceFlags::default(),
                 backend_options: wgpu::BackendOptions::default(),
                 memory_budget_thresholds: wgpu::MemoryBudgetThresholds::default(),
+                display: Some(Box::new(winit_window.clone())),
             });
 
             let window_handle = winit_window
@@ -146,7 +154,7 @@ impl NodeWindow {
                 .map_err(|e| anyhow::anyhow!("Failed to get display handle: {e}"))?;
 
             let target = wgpu::SurfaceTargetUnsafe::RawHandle {
-                raw_display_handle: display_handle.as_raw(),
+                raw_display_handle: Some(display_handle.as_raw()),
                 raw_window_handle: window_handle.as_raw(),
             };
 
@@ -156,13 +164,19 @@ impl NodeWindow {
                     .map_err(|e| anyhow::anyhow!("Failed to create surface: {e}"))?
             };
 
-            let context = WgpuContext::new(instance, &surface)?;
-            *wgpu_context = Some(context);
+            let context = WgpuContext::new(instance, &surface, None)?;
+            *wgpu_context.borrow_mut() = Some(context);
         }
 
         // Create wgpu renderer from the winit window.
-        // SAFETY: winit_window is stored in self and lives as long as NodeWindow.
-        let renderer = WgpuRenderer::new(wgpu_context, &winit_window, renderer_config)?;
+        // SAFETY: winit_window is moved into NodeWindowState below, declared
+        // after `renderer`, so the window outlives the surface built from it.
+        let renderer = WgpuRenderer::new(
+            Rc::clone(&wgpu_context),
+            &winit_window,
+            renderer_config,
+            None,
+        )?;
 
         let logical_width = inner_size.width as f32 / scale_factor;
         let logical_height = inner_size.height as f32 / scale_factor;
@@ -180,6 +194,7 @@ impl NodeWindow {
 
         let state = Rc::new(NodeWindowState {
             renderer: RefCell::new(renderer),
+            winit_window,
             callbacks: RefCell::new(NodeWindowCallbacks::default()),
             bounds: RefCell::new(bounds),
             scale_factor: Cell::new(scale_factor),
@@ -199,7 +214,6 @@ impl NodeWindow {
         let state_clone = state.clone();
 
         let window = Self {
-            winit_window,
             state,
             display,
             handle,
@@ -215,7 +229,7 @@ impl raw_window_handle::HasWindowHandle for NodeWindow {
     fn window_handle(
         &self,
     ) -> Result<raw_window_handle::WindowHandle<'_>, raw_window_handle::HandleError> {
-        self.winit_window.window_handle()
+        self.state.winit_window.window_handle()
     }
 }
 
@@ -223,7 +237,7 @@ impl raw_window_handle::HasDisplayHandle for NodeWindow {
     fn display_handle(
         &self,
     ) -> Result<raw_window_handle::DisplayHandle<'_>, raw_window_handle::HandleError> {
-        self.winit_window.display_handle()
+        self.state.winit_window.display_handle()
     }
 }
 
@@ -320,7 +334,7 @@ impl PlatformWindow for NodeWindow {
 
     fn set_title(&mut self, title: &str) {
         *self.state.title.borrow_mut() = title.to_owned();
-        self.winit_window.set_title(title);
+        self.state.winit_window.set_title(title);
     }
 
     fn set_background_appearance(&self, _background: WindowBackgroundAppearance) {}

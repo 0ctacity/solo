@@ -33,12 +33,12 @@ impl AnchorCorner {
         }
     }
 
-    fn as_gpui(self) -> gpui::Corner {
+    fn as_gpui(self) -> gpui::Anchor {
         match self {
-            Self::TopLeft => gpui::Corner::TopLeft,
-            Self::TopRight => gpui::Corner::TopRight,
-            Self::BottomLeft => gpui::Corner::BottomLeft,
-            Self::BottomRight => gpui::Corner::BottomRight,
+            Self::TopLeft => gpui::Anchor::TopLeft,
+            Self::TopRight => gpui::Anchor::TopRight,
+            Self::BottomLeft => gpui::Anchor::BottomLeft,
+            Self::BottomRight => gpui::Anchor::BottomRight,
         }
     }
 

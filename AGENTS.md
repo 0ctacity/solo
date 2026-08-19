@@ -248,12 +248,37 @@ cargo run --example hello --release
 
 ### Standalone Build
 
-Standalone builds now work by pinning GPUI and macOS text dependencies:
+Standalone builds work by pinning GPUI and macOS text dependencies:
 
-- `gpui` pinned to commit `83ca31055cf3e56aa8a704ac49e1686434f4e640`
+- `gpui`, `gpui_wgpu`, `gpui_macos` pinned to zed commit `d5dc01f2b54e0ae11215e76a0811743b3fc86e2f`
 - `core-text = 21.0.0`, `core-graphics = 0.24.0` for macOS
 
 These avoid the core-graphics 0.24 vs 0.25 conflict between `core-text` and Zed's `font-kit` fork.
+
+### Rust toolchain
+
+`rust-toolchain.toml` pins the same channel as zed's own `rust-toolchain.toml` for the
+pinned gpui revision. When you bump the gpui revision, read zed's `rust-toolchain.toml`
+at that commit and update ours to match, otherwise gpui will not compile.
+
+### Metal toolchain (macOS)
+
+`gpui_apple` compiles `shaders.metal` in its build script. Xcode 26 no longer ships the
+Metal compiler by default, so a fresh machine fails with
+`cannot execute tool 'metal' due to missing Metal Toolchain`. Install it once:
+
+```bash
+xcodebuild -downloadComponent MetalToolchain
+```
+
+### Bumping the gpui revision
+
+1. Pick the new zed commit and replace all `rev = "..."` values in `packages/native/Cargo.toml`.
+2. `cargo update -p gpui -p gpui_wgpu -p gpui_macos`
+3. Match `rust-toolchain.toml` to zed's `rust-toolchain.toml` at that commit.
+4. Check `cargo tree -i wgpu`. If two `wgpu` versions appear, bump our direct `wgpu`
+   dependency to the version `gpui_wgpu` uses; a duplicate wgpu breaks surface creation.
+5. `cargo check --all-targets`, then `bun run build`, then run the test suites.
 
 ## Current Status
 
@@ -295,31 +320,20 @@ These avoid the core-graphics 0.24 vs 0.25 conflict between `core-text` and Zed'
 - [ ] **DevTools** - React DevTools integration
 - [ ] **Animations** - Interpolated style transitions
 
-## Current Blockers
-
-### napi-rs in Non-Node Context
-
-The Rust example can't link because napi symbols aren't available outside Node.js:
-
-```
-Undefined symbols: _napi_call_function, _napi_create_string_utf8, ...
-```
-
-**Solution**: Examples should either:
-- Be pure GPUI (like hello.rs)
-- Run via Node.js with tsx and the built .node binary
-
 ## Testing
 
-### Unit Tests (TODO)
+### Unit Tests
 
 ```bash
-# Test React reconciler
-cd packages/react && bun test
+# React reconciler + GPU-backed test renderer (71 tests)
+cd packages/react && bun run test
 
-# Test Rust element building
-cd packages/native && cargo test
+# Example app tests
+cd examples && bun run test
 ```
+
+Use `bun run test`, not `bun test`. The suites are vitest, so `bun test` picks the
+wrong runner and fails on the `vitest` imports.
 
 ### Integration Test
 

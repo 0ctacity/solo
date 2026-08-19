@@ -14,9 +14,10 @@ use gpui::{
     PlatformKeyboardLayout, PlatformKeyboardMapper, PlatformTextSystem, PlatformWindow, Task,
     ThermalState, WindowAppearance, WindowParams,
 };
-use gpui_wgpu::WgpuContext;
+use gpui_wgpu::GpuContext;
 use std::{
     cell::RefCell,
+    ffi::OsString,
     path::{Path, PathBuf},
     rc::Rc,
     sync::Arc,
@@ -53,7 +54,7 @@ pub struct NodePlatform {
     active_window: RefCell<Option<AnyWindowHandle>>,
     active_display: Rc<dyn PlatformDisplay>,
     callbacks: RefCell<NodePlatformCallbacks>,
-    wgpu_context: RefCell<Option<WgpuContext>>,
+    wgpu_context: GpuContext,
     /// winit event loop — stored here for pump_app_events() in tick()
     event_loop: RefCell<Option<winit::event_loop::EventLoop<()>>>,
     /// Shared window state — allows tick() to access callbacks and dispatch events
@@ -81,7 +82,7 @@ impl NodePlatform {
             active_window: RefCell::new(None),
             active_display,
             callbacks: RefCell::new(NodePlatformCallbacks::default()),
-            wgpu_context: RefCell::new(None),
+            wgpu_context: Rc::new(RefCell::new(None)),
             event_loop: RefCell::new(None),
             window_state: RefCell::new(None),
         }
@@ -221,7 +222,7 @@ impl NodePlatform {
                             winit::event::TouchPhase::Started => TouchPhase::Started,
                             winit::event::TouchPhase::Moved => TouchPhase::Moved,
                             winit::event::TouchPhase::Ended => TouchPhase::Ended,
-                            winit::event::TouchPhase::Cancelled => TouchPhase::Ended,
+                            winit::event::TouchPhase::Cancelled => TouchPhase::Cancelled,
                         };
 
                         let input = PlatformInput::ScrollWheel(ScrollWheelEvent {
@@ -427,7 +428,7 @@ impl Platform for NodePlatform {
         }
     }
 
-    fn restart(&self, _binary_path: Option<PathBuf>) {}
+    fn restart(&self, _binary_path: Option<PathBuf>, _arguments: Vec<OsString>) {}
 
     fn activate(&self, _ignoring_other_apps: bool) {}
 
@@ -560,8 +561,8 @@ impl Platform for NodePlatform {
         let (window, window_state) = NodeWindow::new(
             handle,
             params,
-            winit_window,
-            &mut self.wgpu_context.borrow_mut(),
+            Arc::new(winit_window),
+            Rc::clone(&self.wgpu_context),
         )?;
         eprintln!("[GPUIX-RUST] open_window: NodeWindow created successfully");
 
@@ -639,6 +640,10 @@ impl Platform for NodePlatform {
         self.callbacks.borrow_mut().reopen = Some(callback);
     }
 
+    fn on_system_wake(&self, _callback: Box<dyn FnMut()>) {
+        // No-op in Node.js — we have no OS power-management notifications.
+    }
+
     fn set_menus(&self, _menus: Vec<Menu>, _keymap: &Keymap) {}
 
     fn set_dock_menu(&self, _menu: Vec<MenuItem>, _keymap: &Keymap) {}
@@ -667,6 +672,14 @@ impl Platform for NodePlatform {
 
     fn set_cursor_style(&self, _style: CursorStyle) {
         // No-op in Node.js — cursor is managed by the OS/winit
+    }
+
+    fn hide_cursor_until_mouse_moves(&self) {
+        // No-op in Node.js — cursor is managed by the OS/winit
+    }
+
+    fn is_cursor_visible(&self) -> bool {
+        true
     }
 
     fn should_auto_hide_scrollbars(&self) -> bool {

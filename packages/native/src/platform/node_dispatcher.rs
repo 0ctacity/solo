@@ -7,7 +7,7 @@
 /// (those are gated to windows/linux/wasm), so we use crossbeam or std channels.
 ///
 /// Reference: gpui_web/src/dispatcher.rs (333 lines)
-use gpui::{PlatformDispatcher, Priority, RunnableVariant, ThreadTaskTimings};
+use gpui::{PlatformDispatcher, Priority, RunnableVariant};
 use parking_lot::Mutex;
 use std::collections::BinaryHeap;
 use std::sync::Arc;
@@ -71,9 +71,7 @@ impl NodeDispatcher {
                             };
                             match runnable {
                                 Ok(runnable) => {
-                                    if !runnable.metadata().is_closed() {
-                                        runnable.run();
-                                    }
+                                    runnable.run();
                                 }
                                 Err(_) => {
                                     log::info!(
@@ -106,9 +104,7 @@ impl NodeDispatcher {
             queue.drain(..).collect()
         };
         for runnable in runnables {
-            if !runnable.metadata().is_closed() {
-                runnable.run();
-            }
+            runnable.run();
         }
 
         // 2. Drain delayed runnables whose time has passed
@@ -123,9 +119,7 @@ impl NodeDispatcher {
             };
             match ready {
                 Some(entry) => {
-                    if !entry.runnable.metadata().is_closed() {
-                        entry.runnable.run();
-                    }
+                    entry.runnable.run();
                 }
                 None => break,
             }
@@ -134,19 +128,6 @@ impl NodeDispatcher {
 }
 
 impl PlatformDispatcher for NodeDispatcher {
-    fn get_all_timings(&self) -> Vec<ThreadTaskTimings> {
-        Vec::new()
-    }
-
-    fn get_current_thread_timings(&self) -> ThreadTaskTimings {
-        ThreadTaskTimings {
-            thread_name: None,
-            thread_id: std::thread::current().id(),
-            timings: Vec::new(),
-            total_pushed: 0,
-        }
-    }
-
     fn is_main_thread(&self) -> bool {
         std::thread::current().id() == self.main_thread_id
     }

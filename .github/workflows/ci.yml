@@ -58,10 +58,24 @@ jobs:
       - name: Setup bun
         uses: oven-sh/setup-bun@v2
 
+      # Reads the channel from rust-toolchain.toml, which must match zed's
+      # pin for the gpui revision in packages/native/Cargo.toml.
       - name: Install Rust
-        uses: dtolnay/rust-toolchain@stable
+        uses: actions-rust-lang/setup-rust-toolchain@v1
         with:
-          targets: ${{ matrix.settings.target }}
+          target: ${{ matrix.settings.target }}
+          # this workflow caches cargo explicitly in the next step
+          cache: false
+          # the action defaults to RUSTFLAGS="-D warnings"; keep lint policy
+          # in the crate instead of letting CI deny every warning
+          rustflags: ""
+
+      # gpui_apple compiles shaders with `metal`, which Xcode 26 no longer
+      # ships by default. Without this the build fails with
+      # "cannot execute tool 'metal' due to missing Metal Toolchain".
+      - name: Install Metal toolchain
+        if: contains(matrix.settings.target, 'apple-darwin')
+        run: xcodebuild -downloadComponent MetalToolchain
 
       - name: Cache cargo
         uses: actions/cache@v4
