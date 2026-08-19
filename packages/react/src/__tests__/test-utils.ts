@@ -1,6 +1,7 @@
 /// Test utilities shared across GPUIX test files.
 
 import fs from "fs"
+import { expect } from "vitest"
 
 export const isCI = !!process.env.CI
 
