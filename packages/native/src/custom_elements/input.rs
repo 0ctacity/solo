@@ -62,16 +62,17 @@ impl CustomElement for InputElement {
             .px(gpui::px(8.0))
             .py(gpui::px(4.0))
             .min_h(gpui::px(28.0))
-            .border(gpui::px(1.0))
-            .border_color(gpui::rgba(0x555555ff))
-            .bg(gpui::rgba(0x1e1e2eff))
-            .rounded(gpui::px(4.0))
-            .text_color(if is_empty {
-                gpui::rgba(0x888888ff)
-            } else {
-                gpui::rgba(0xe0e0e0ff)
-            })
-            .child(display_text);
+            // Deliberately unstyled: no background, no border, no radius. This
+            // is a primitive, and a hardcoded look cannot be removed by a
+            // caller, so it fights every real design. Apps style the wrapper.
+            // Only the placeholder dims, because that is behaviour, not theme.
+            .when(is_empty, |el| el.text_color(gpui::rgba(0x8f8f8fff)))
+            // Routed through the text funnel, not `.child(String)`: otherwise the
+            // value and placeholder are invisible to both text selection and
+            // `getPaintedText()`, so an input cannot be asserted on in a test.
+            // The value is chrome, not content, because a drag through a form
+            // must not pick up field text.
+            .child(ctx.chrome_text(display_text, None));
 
         // Apply React style prop on top of defaults for custom element parity.
         if let Some(style) = ctx.style {

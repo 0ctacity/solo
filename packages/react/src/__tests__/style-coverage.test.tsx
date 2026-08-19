@@ -149,4 +149,34 @@ describe("style props reach the renderer", () => {
       </div>
     )
   })
+
+  it("focuses an element with autoFocus so it receives keys", () => {
+    // `autoFocus` was declared in Props and dropped by the reconciler, so an
+    // <input> was dead until clicked.
+    function Typed({ auto }: { auto: boolean }) {
+      const [text, setText] = React.useState("")
+      return (
+        <div style={{ display: "flex", flexDirection: "column", padding: 20 }}>
+          <input
+            value={text}
+            placeholder="type"
+            autoFocus={auto}
+            onKeyDown={(event) => {
+              if (event.keyChar) setText((t) => t + event.keyChar)
+            }}
+          />
+        </div>
+      )
+    }
+
+    const focused = createTestRoot()
+    focused.render(<Typed auto />)
+    focused.renderer.simulateKeystrokes("h i")
+    expect(focused.renderer.getPaintedText()).toContain("hi")
+
+    const unfocused = createTestRoot()
+    unfocused.render(<Typed auto={false} />)
+    unfocused.renderer.simulateKeystrokes("h i")
+    expect(unfocused.renderer.getPaintedText()).toContain("type")
+  })
 })

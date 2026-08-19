@@ -115,19 +115,14 @@ function sendStyle(id: number, props: Props): void {
 // ── Custom prop forwarding ───────────────────────────────────────────
 
 // Props that are handled by the reconciler directly (not forwarded as custom props).
-const RESERVED_PROPS = new Set([
-  "style",
-  "className",
-  "children",
-  "key",
-  "ref",
-  "tabIndex",
-  "tabStop",
-  "autoFocus",
-])
+const RESERVED_PROPS = new Set(["style", "className", "children", "key", "ref"])
 
 // Built-in element types that don't use custom props.
 const BUILT_IN_TYPES = new Set(["div", "text"])
+
+// Props that reach Rust on EVERY element type, including div and text.
+// Custom props are otherwise skipped for built-ins.
+const UNIVERSAL_PROPS = new Set(["autoFocus"])
 
 function isReservedProp(name: string): boolean {
   return RESERVED_PROPS.has(name) || name in EVENT_PROPS
@@ -155,10 +150,11 @@ function serializeCustomProp(
 
 /** Send all custom props to Rust for non-built-in element types. */
 function syncCustomProps(id: number, type: string, props: Props): void {
-  if (BUILT_IN_TYPES.has(type)) return
+  const builtIn = BUILT_IN_TYPES.has(type)
   const r = getRenderer()
   for (const [key, value] of Object.entries(props)) {
     if (isReservedProp(key)) continue
+    if (builtIn && !UNIVERSAL_PROPS.has(key)) continue
     r.setCustomProp(id, key, serializeCustomProp(type, key, value))
   }
 }
@@ -170,11 +166,12 @@ function diffCustomProps(
   oldProps: Props,
   newProps: Props
 ): void {
-  if (BUILT_IN_TYPES.has(type)) return
+  const builtIn = BUILT_IN_TYPES.has(type)
   const r = getRenderer()
   // Updated or added props
   for (const [key, value] of Object.entries(newProps)) {
     if (isReservedProp(key)) continue
+    if (builtIn && !UNIVERSAL_PROPS.has(key)) continue
     if (oldProps[key] !== value) {
       r.setCustomProp(id, key, serializeCustomProp(type, key, value))
     }
@@ -182,6 +179,7 @@ function diffCustomProps(
   // Removed props
   for (const key of Object.keys(oldProps)) {
     if (isReservedProp(key)) continue
+    if (builtIn && !UNIVERSAL_PROPS.has(key)) continue
     if (!(key in newProps)) {
       r.setCustomProp(id, key, JSON.stringify(null))
     }

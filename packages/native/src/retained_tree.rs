@@ -21,6 +21,9 @@ pub struct RetainedElement {
     /// Props for custom elements (input, editor, diff, etc.).
     /// Keyed by prop name, values are JSON. Ignored for "div" and "text".
     pub custom_props: HashMap<String, serde_json::Value>,
+    /// Take keyboard focus the first time this element gets a focus handle.
+    /// Without it an `<input>` is dead until the user clicks it.
+    pub auto_focus: bool,
 }
 
 impl RetainedElement {
@@ -33,6 +36,7 @@ impl RetainedElement {
             events: HashSet::new(),
             children: Vec::new(),
             parent: None,
+            auto_focus: false,
             custom_props: HashMap::new(),
         }
     }
@@ -151,6 +155,12 @@ impl RetainedTree {
     /// Set a custom prop on an element (for non-div/text elements).
     pub fn set_custom_prop(&mut self, id: u64, key: String, value: serde_json::Value) {
         if let Some(element) = self.elements.get_mut(&id) {
+            // `autoFocus` applies to every element type, so it is lifted out of
+            // the custom-prop map that only custom elements read.
+            if key == "autoFocus" {
+                element.auto_focus = value.as_bool().unwrap_or(false);
+                return;
+            }
             if value.is_null() {
                 element.custom_props.remove(&key);
             } else {

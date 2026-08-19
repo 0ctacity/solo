@@ -211,7 +211,7 @@ export type Props = Record<string, unknown> & {
   /** Fires when user clicks OUTSIDE this element. Use for "click outside to close". */
   onMouseDownOutside?: (event: EventPayload) => void
 
-  // ── Keyboard events (require tabIndex or autoFocus for focus) ──
+  // ── Keyboard events (need focus: autoFocus, or a click on the element) ──
   onKeyDown?: (event: EventPayload) => void
   onKeyUp?: (event: EventPayload) => void
 
@@ -223,8 +223,8 @@ export type Props = Record<string, unknown> & {
   onScroll?: (event: EventPayload) => void
 
   // ── Focus props ────────────────────────────────────────────────
-  tabIndex?: number
-  tabStop?: boolean
+  /** Take keyboard focus when the element first mounts. Required for `<input>`:
+   *  without it, or a click, the field never receives key events. */
   autoFocus?: boolean
 }
 
