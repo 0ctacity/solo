@@ -145,7 +145,7 @@ npx tsx counter.tsx
 
 ```tsx
 import React, { useState } from 'react'
-import { createRoot, createRenderer, flushSync } from '@gpuix/react'
+import { createRoot, createRenderer, flushSync, startFrameLoop } from '@gpuix/react'
 
 function App() {
   const [count, setCount] = useState(0)
@@ -174,12 +174,17 @@ const root = createRoot(renderer)
 flushSync(() => root.render(<App />))
 
 // Drive the frame loop
-function loop() {
-  renderer.tick()
-  setImmediate(loop)
-}
-loop()
+startFrameLoop(renderer)
 ```
+
+`startFrameLoop` calls `renderer.tick()` at a fixed rate (~125fps by default), which
+pumps the OS event loop and asks GPUI for a frame. Pass `{ frameMs }` to change the
+rate, and call `.stop()` on the returned handle to end the loop.
+
+> [!IMPORTANT]
+> Never drive `tick()` from a `setImmediate` loop. That spins at tens of thousands of
+> ticks per second and burns **73% CPU on a completely idle app**, versus **1%** when
+> paced.
 
 ## Scrolling
 

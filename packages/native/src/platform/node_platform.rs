@@ -105,12 +105,13 @@ impl NodePlatform {
 
         static TICK_COUNT: AtomicU64 = AtomicU64::new(0);
         let n = TICK_COUNT.fetch_add(1, AtOrd::Relaxed);
-        // Always log force_render=true ticks (re-render events), plus periodic status
-        if force_render || n < 3 || n % 5000 == 0 {
-            eprintln!("[GPUIX-RUST] tick() #{n} force_render={force_render} has_event_loop={} has_window_state={}",
-                self.event_loop.borrow().is_some(),
-                self.window_state.borrow().is_some());
-        }
+        // tick() runs at frame rate, so this must never be an unconditional
+        // eprintln!: that is a syscall plus a stderr lock on the hot path.
+        log::trace!(
+            "tick() #{n} force_render={force_render} has_event_loop={} has_window_state={}",
+            self.event_loop.borrow().is_some(),
+            self.window_state.borrow().is_some()
+        );
 
         // Collect events from winit via pump_app_events with a proper handler.
         // After run_app_on_demand, the event loop is in "on demand" mode and
@@ -379,11 +380,18 @@ impl NodePlatform {
                 }
             }
 
-            // Trigger frame render — force_render=true when JS sent a new tree
+            // Trigger frame render — force_render=true when JS sent a new tree.
+            //
+            // require_presentation MUST stay false. gpui's own platforms pass
+            // `Default::default()` for routine frames (MacPlatform does this from
+            // its CVDisplayLink `step`); `true` is reserved for compositor damage
+            // events such as X11 expose. Setting it here disabled every frame
+            // throttle in gpui (window.rs `min_frame_interval`) and forced
+            // `window.present()` on every single tick even when nothing was dirty.
             let mut cbs = state.callbacks.borrow_mut();
             if let Some(ref mut callback) = cbs.request_frame {
                 callback(RequestFrameOptions {
-                    require_presentation: true,
+                    require_presentation: false,
                     force_render,
                 });
             }

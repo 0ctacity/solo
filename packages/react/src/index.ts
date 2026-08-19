@@ -1,9 +1,9 @@
 // GPUIX React - React bindings for GPUI
 export { createRoot, flushSync } from "./reconciler/index.js"
-export { createRenderer } from "./reconciler/renderer.js"
+export { createRenderer, startFrameLoop } from "./reconciler/renderer.js"
 export { GpuixContext, useGpuix, useGpuixRequired } from "./hooks/use-gpuix.js"
 export { useWindowSize } from "./hooks/use-window-size.js"
-export type { Root } from "./reconciler/renderer.js"
+export type { Root, FrameLoop } from "./reconciler/renderer.js"
 export type { WindowSize } from "./hooks/use-window-size.js"
 
 // Re-export types

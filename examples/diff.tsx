@@ -19,7 +19,7 @@
  */
 
 import React, { useState } from "react"
-import { createRoot, createRenderer, flushSync } from "@gpuix/react"
+import { createRoot, createRenderer, flushSync, startFrameLoop } from "@gpuix/react"
 import { diffWords } from "diff"
 import {
   createHighlighter,
@@ -908,11 +908,7 @@ async function main() {
 
   console.log("[GPUIX] Diff viewer running")
 
-  function loop() {
-    renderer.tick()
-    setImmediate(loop)
-  }
-  loop()
+  startFrameLoop(renderer)
 }
 
 // Guard: only run main() when this file is the entry point.

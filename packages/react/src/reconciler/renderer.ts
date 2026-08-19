@@ -31,6 +31,53 @@ export interface Root {
   unmount: () => void
 }
 
+/** ~125fps. Above any common display refresh rate, so frames are never the
+ *  bottleneck, while still leaving the Node event loop almost entirely idle. */
+const DEFAULT_FRAME_MS = 8
+
+export interface FrameLoop {
+  stop: () => void
+}
+
+/**
+ * Drive GPUI frames at a fixed rate.
+ *
+ * `renderer.tick()` pumps the OS event loop and asks GPUI for a frame, so it
+ * must be called repeatedly. Do NOT call it from a `setImmediate` loop: that
+ * spins the CPU at tens of thousands of ticks per second (measured: 73% CPU on
+ * an idle app, versus 1.5% when paced).
+ *
+ * Pacing lives in JS rather than blocking inside `tick()` on purpose. Node owns
+ * the event loop here, so a blocking tick would stall every timer, promise and
+ * socket in the process.
+ *
+ * Each frame is scheduled only after the previous one finishes, so a slow frame
+ * delays the next one instead of letting timers pile up.
+ */
+export function startFrameLoop(
+  renderer: Pick<GpuixRenderer, "tick">,
+  options: { frameMs?: number } = {}
+): FrameLoop {
+  const frameMs = options.frameMs ?? DEFAULT_FRAME_MS
+  let timer: ReturnType<typeof setTimeout> | null = null
+  let stopped = false
+
+  const loop = (): void => {
+    if (stopped) return
+    renderer.tick()
+    timer = setTimeout(loop, frameMs)
+  }
+  loop()
+
+  return {
+    stop: (): void => {
+      stopped = true
+      if (timer !== null) clearTimeout(timer)
+      timer = null
+    },
+  }
+}
+
 /**
  * Create a root for rendering React to GPUI (or a TestRenderer for tests).
  * Mutations go directly to the renderer — no JSON tree serialization.

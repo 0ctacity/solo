@@ -7,7 +7,7 @@
  */
 
 import React, { useState } from 'react'
-import { createRoot, createRenderer, flushSync } from '@gpuix/react'
+import { createRoot, createRenderer, flushSync, startFrameLoop } from '@gpuix/react'
 
 function Counter() {
   const [count, setCount] = useState(0)
@@ -146,11 +146,7 @@ async function main() {
 
   // Drive the frame loop — Node.js event loop stays alive,
   // React state updates work, events flow back from GPUI
-  function loop() {
-    renderer.tick()
-    setImmediate(loop)
-  }
-  loop()
+  startFrameLoop(renderer)
 }
 
 main().catch(console.error)
