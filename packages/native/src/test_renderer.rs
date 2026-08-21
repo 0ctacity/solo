@@ -8,9 +8,8 @@
 /// fully rendered by Metal. This enables capture_screenshot() for visual
 /// test validation.
 ///
-/// VisualTestAppContext is !Send — stored in thread_local.
-/// All napi calls happen on the JS main thread (same safety pattern as
-/// NodePlatform in renderer.rs).
+/// VisualTestAppContext is !Send, so it is stored in thread-local state.
+/// All napi calls happen on the JS main thread.
 use std::cell::RefCell;
 use std::rc::Rc;
 use std::sync::{Arc, Mutex};
@@ -140,7 +139,7 @@ impl TestGpuixRenderer {
         // Convert typed WindowHandle<GpuixView> to AnyWindowHandle for simulation methods.
         let window: gpui::AnyWindowHandle = window_handle.into();
 
-        // Store !Send types in thread_local (same pattern as NodePlatform).
+        // Store !Send types on the JS main thread.
         TEST_STATE.with(|cell| {
             *cell.borrow_mut() = Some(VisualTestState { cx, window, view });
         });

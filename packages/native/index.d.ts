@@ -3,7 +3,7 @@
 /** The main GPUI renderer exposed to Node.js. */
 export declare class GpuixRenderer {
   constructor(eventCallback?: (((err: Error | null, arg: EventPayload) => any)) | undefined | null)
-  /** Initialize the GPUI application with a non-blocking NodePlatform. */
+  /** Initialize GPUI with AppKit embedded in Node's main thread. */
   init(options?: WindowOptions | undefined | null): void
   createElement(id: number, elementType: string): void
   /**

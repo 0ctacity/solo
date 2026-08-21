@@ -154,6 +154,9 @@ xcodebuild -downloadComponent MetalToolchain
 # Install dependencies
 bun install
 
+# Check out the pinned GPUI fork
+git submodule update --init --recursive
+
 # Build native package
 cd packages/native
 bun run build
@@ -204,8 +207,9 @@ startFrameLoop(renderer)
 ```
 
 `startFrameLoop` calls `renderer.tick()` at a fixed rate (~125fps by default), which
-pumps the OS event loop and asks GPUI for a frame. Pass `{ frameMs }` to change the
-rate, and call `.stop()` on the returned handle to end the loop.
+pumps AppKit without blocking Node. Rendering, input, scrolling, text, IME, clipboard,
+and window management still use GPUI's native macOS platform. Pass `{ frameMs }` to
+change the rate, and call `.stop()` on the returned handle to end the loop.
 
 > [!IMPORTANT]
 > Never drive `tick()` from a `setImmediate` loop. That spins at tens of thousands of
@@ -530,7 +534,7 @@ bun scripts/screenshots.ts
 
 There is **no hot reload for the native half**, and there cannot be: `require()`
 of a `.node` file calls `process.dlopen`, Node has no matching unload, and the
-live state (the winit event loop, the wgpu device, the open window, the
+live state (GPUI's embedded `MacPlatform`, Metal device, open window, and
 selection registry) lives in thread-locals of the loaded library. A second load
 would get empty thread-locals and a dead window.
 

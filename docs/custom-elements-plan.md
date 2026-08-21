@@ -540,6 +540,6 @@ packages/native/src/
 ## Open Questions
 
 - **Theme bridging:** How to let React apps configure the Zed theme. Options: pass a theme JSON from JS, or define a minimal "GPUIX theme" that maps to Zed's ThemeColors.
-- **Keyboard input:** The Editor uses GPUI's `EntityInputHandler` for IME. Need to verify this works through the NodePlatform — the platform must support the text input protocol.
+- **Keyboard input:** The Editor uses GPUI's `EntityInputHandler` through the native macOS text input protocol.
 - **Focus integration:** When a custom element is focused, the React reconciler's focus system and the GPUI focus system need to agree. The Editor manages its own `FocusHandle` internally.
 - **Sizing:** Editor in `Full` mode wants to fill available space. Need to make sure the parent div's layout gives it proper bounds via flexbox.

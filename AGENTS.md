@@ -309,30 +309,22 @@ pub struct EventPayload {
 
 ## Building
 
-### Development (in zed workspace)
-
-The native package depends on GPUI which has complex dependencies. For now, develop inside the zed workspace:
-
-```bash
-# In zed repo
-cd crates/gpuix
-cargo run --example hello --release
-```
-
 ### Standalone Build
 
-Standalone builds work by pinning GPUI and macOS text dependencies:
+The `zed/` submodule tracks the `gpuix` branch of `remorses/zed`. Cargo uses path
+dependencies from that submodule so the native addon and the embedded platform
+always compile from the same source:
 
-- `gpui`, `gpui_wgpu`, `gpui_macos` pinned to zed commit `d5dc01f2b54e0ae11215e76a0811743b3fc86e2f`
+- `gpui`, `gpui_platform`, and `gpui_macos` come from `zed/crates/`
+- `gpui_macos::MacPlatform::new_embedded()` runs the native platform without blocking Node
 - `core-text = 21.0.0`, `core-graphics = 0.24.0` for macOS
 
 These avoid the core-graphics 0.24 vs 0.25 conflict between `core-text` and Zed's `font-kit` fork.
 
 ### Rust toolchain
 
-`rust-toolchain.toml` pins the same channel as zed's own `rust-toolchain.toml` for the
-pinned gpui revision. When you bump the gpui revision, read zed's `rust-toolchain.toml`
-at that commit and update ours to match, otherwise gpui will not compile.
+`rust-toolchain.toml` pins the same channel as `zed/rust-toolchain.toml`. When the
+submodule moves, update ours to match or GPUI may not compile.
 
 ### Metal toolchain (macOS)
 
@@ -346,12 +338,11 @@ xcodebuild -downloadComponent MetalToolchain
 
 ### Bumping the gpui revision
 
-1. Pick the new zed commit and replace all `rev = "..."` values in `packages/native/Cargo.toml`.
-2. `cargo update -p gpui -p gpui_wgpu -p gpui_macos`
-3. Match `rust-toolchain.toml` to zed's `rust-toolchain.toml` at that commit.
-4. Check `cargo tree -i wgpu`. If two `wgpu` versions appear, bump our direct `wgpu`
-   dependency to the version `gpui_wgpu` uses; a duplicate wgpu breaks surface creation.
-5. `cargo check --all-targets`, then `bun run build`, then run the test suites.
+1. Update the `gpuix` branch in `remorses/zed` from upstream Zed.
+2. Rebase the two embedded `gpui_macos` commits without rewriting published history.
+3. Fast-forward the `zed/` submodule to the updated `gpuix` branch.
+4. Match `rust-toolchain.toml` to `zed/rust-toolchain.toml`.
+5. Run `cargo check --all-targets`, `bun run build`, and the test suites.
 
 ## Current Status
 

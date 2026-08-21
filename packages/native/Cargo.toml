@@ -17,22 +17,11 @@ anyhow = "1"
 log = "0.4"
 env_logger = "0.11"
 parking_lot = "0.12"
-pollster = "0.4"
-raw-window-handle = "0.6"
-uuid = { version = "1", features = ["v4"] }
 futures = "0.3"
 
-# GPUI and related crates from Zed at the "GPUI on the web" commit
-# This commit adds Application::with_platform() and makes Platform trait public
-gpui = { git = "https://github.com/zed-industries/zed", rev = "d5dc01f2b54e0ae11215e76a0811743b3fc86e2f" }
-gpui_wgpu = { git = "https://github.com/zed-industries/zed", rev = "d5dc01f2b54e0ae11215e76a0811743b3fc86e2f" }
-
-# wgpu for pre-creating Metal-capable instance (gpui_wgpu defaults to VULKAN|GL only)
-wgpu = "29.0"
-
-# winit for native window creation with pump_events() support (non-blocking)
-winit = "0.30"
-arboard = "3"
+# Use the embedded-platform fork checked out in the zed submodule.
+gpui = { path = "../../zed/crates/gpui", default-features = false, features = ["font-kit"] }
+gpui_platform = { path = "../../zed/crates/gpui_platform", default-features = false, features = ["font-kit"] }
 thiserror = "2"
 tree-sitter = "0.26.11"
 tree-sitter-highlight = "0.26.11"
@@ -56,16 +45,8 @@ pulldown-cmark = { version = "0.12", default-features = false }
 [target.'cfg(target_os = "macos")'.dependencies]
 core-text = "=21.0.0"
 core-graphics = "=0.24.0"
-# objc2 for NSApplication activation (bring window to foreground from Node.js)
-objc2 = "0.5"
-objc2-foundation = { version = "0.2", features = ["NSThread"] }
-objc2-app-kit = { version = "0.2", features = ["NSApplication", "NSRunningApplication", "NSWindow", "NSResponder"] }
-# gpui_macos for real Metal rendering in visual test renderer (VisualTestAppContext)
-gpui_macos = { git = "https://github.com/zed-industries/zed", rev = "d5dc01f2b54e0ae11215e76a0811743b3fc86e2f" }
-
-# Windows: windows crate for HWND type required by Platform::get_raw_handle()
-[target.'cfg(target_os = "windows")'.dependencies]
-windows = { version = "0.61", features = ["Win32_Foundation"] }
+# Production uses MacPlatform; tests use its real Metal renderer.
+gpui_macos = { path = "../../zed/crates/gpui_macos", default-features = false, features = ["font-kit"] }
 
 [features]
 # test-support is default so published binaries include TestGpuixRenderer,
@@ -76,11 +57,6 @@ test-support = ["gpui/test-support", "gpui_macos/test-support", "gpui_macos/font
 
 [build-dependencies]
 napi-build = "2"
-
-# gpui_platform gives the examples an OS-agnostic Application constructor;
-# gpui::Application::new() no longer exists, a Platform must be supplied.
-[dev-dependencies]
-gpui_platform = { git = "https://github.com/zed-industries/zed", rev = "d5dc01f2b54e0ae11215e76a0811743b3fc86e2f" }
 
 [[example]]
 name = "hello"

@@ -10,9 +10,9 @@
 ///   renderer.createElement(1, "div")     // mutations from React reconciler
 ///   renderer.appendChild(0, 1)
 ///   renderer.commitMutations()           // signal batch complete
-///   setImmediate(function loop() {       // drive the frame loop
+///   setTimeout(function loop() {         // drive the AppKit event loop
 ///     renderer.tick()
-///     setImmediate(loop)
+///     setTimeout(loop, 8)
 ///   })
 use gpui::AppContext as _;
 use napi::bindgen_prelude::*;
@@ -21,12 +21,10 @@ use napi_derive::napi;
 use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
 use std::rc::Rc;
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 
 use crate::custom_elements::{CustomElementRegistry, CustomRenderContext};
 use crate::element_tree::EventPayload;
-use crate::platform::NodePlatform;
 use crate::retained_tree::RetainedTree;
 use crate::style::{parse_color_hex, StyleDesc};
 use crate::text::{selectable_text, selection_frame_reset, selection_key, SharedSelection};
@@ -75,18 +73,13 @@ pub(crate) fn to_element_id(id: f64) -> Result<u64> {
     Ok(id as u64)
 }
 
-// Thread-local storage for the NodePlatform reference.
-// NodePlatform contains RefCell fields (making it !Send/!Sync), but napi-rs
-// requires GpuixRenderer to be Send. Since all napi methods are called from
-// the JS main thread, storing the platform in a thread_local is safe.
 thread_local! {
-    static NODE_PLATFORM: RefCell<Option<Rc<NodePlatform>>> = const { RefCell::new(None) };
-    /// Keeps the gpui `App` alive. `NodePlatform::run()` returns immediately
-    /// instead of blocking on an OS run loop, so without this handle the `App`
-    /// would be dropped as soon as `init()` returns and every later
-    /// `window.update()` would fail with "app was released".
+    #[cfg(target_os = "macos")]
+    static MAC_PLATFORM: RefCell<Option<Rc<gpui_macos::MacPlatform>>> = const { RefCell::new(None) };
+    #[cfg(target_os = "macos")]
     static GPUI_APP: RefCell<Option<gpui::ApplicationHandle>> = const { RefCell::new(None) };
-    static GPUI_WINDOW: RefCell<Option<gpui::AnyWindowHandle>> = const { RefCell::new(None) };
+    #[cfg(target_os = "macos")]
+    static GPUI_WINDOW: RefCell<Option<gpui::WindowHandle<GpuixView>>> = const { RefCell::new(None) };
     /// Shared scroll handles — GpuixView writes here during render(),
     /// napi methods read from here for programmatic scroll control.
     /// ScrollHandle is Rc<RefCell<...>> so its methods (set_offset, offset,
@@ -98,6 +91,35 @@ thread_local! {
     static SCROLL_HANDLES: RefCell<HashMap<u64, gpui::ScrollHandle>> = RefCell::new(HashMap::new());
 }
 
+#[cfg(target_os = "macos")]
+fn update_window(
+    update: impl FnOnce(&mut GpuixView, &mut gpui::Window, &mut gpui::Context<GpuixView>),
+) -> Result<()> {
+    let window = GPUI_WINDOW
+        .with(|window| *window.borrow())
+        .ok_or_else(|| Error::from_reason("GPUI window is not initialized"))?;
+
+    GPUI_APP.with(|app| {
+        let app = app.borrow();
+        let app = app
+            .as_ref()
+            .ok_or_else(|| Error::from_reason("GPUI application is not initialized"))?;
+        app.update(|cx| {
+            window
+                .update(cx, update)
+                .map_err(|error| Error::from_reason(error.to_string()))
+        })
+    })
+}
+
+#[cfg(target_os = "macos")]
+fn invalidate_window() -> Result<()> {
+    update_window(|_view, window, cx| {
+        cx.notify();
+        window.refresh();
+    })
+}
+
 /// The main GPUI renderer exposed to Node.js.
 #[napi]
 pub struct GpuixRenderer {
@@ -106,7 +128,6 @@ pub struct GpuixRenderer {
     event_callback: Option<Arc<ThreadsafeFunction<EventPayload>>>,
     tree: Arc<Mutex<RetainedTree>>,
     initialized: Arc<Mutex<bool>>,
-    needs_redraw: Arc<AtomicBool>,
     /// Shared with GpuixView so napi methods can read the live selection
     /// without an App context. `Rc` + `RefCell` because paint closures run on
     /// the JS main thread where no `&mut GpuixView` is available.
@@ -122,14 +143,27 @@ impl GpuixRenderer {
             event_callback: event_callback.map(Arc::new),
             tree: Arc::new(Mutex::new(RetainedTree::new())),
             initialized: Arc::new(Mutex::new(false)),
-            needs_redraw: Arc::new(AtomicBool::new(true)),
             selection: SharedSelection::default(),
         }
     }
 
-    /// Initialize the GPUI application with a non-blocking NodePlatform.
+    /// Initialize GPUI with AppKit embedded in Node's main thread.
     #[napi]
     pub fn init(&self, options: Option<WindowOptions>) -> Result<()> {
+        #[cfg(not(target_os = "macos"))]
+        {
+            let _ = options;
+            return Err(Error::from_reason(
+                "The production GPUIX renderer currently supports only macOS",
+            ));
+        }
+
+        #[cfg(target_os = "macos")]
+        self.init_macos(options)
+    }
+
+    #[cfg(target_os = "macos")]
+    fn init_macos(&self, options: Option<WindowOptions>) -> Result<()> {
         let options = options.unwrap_or_default();
 
         {
@@ -143,8 +177,8 @@ impl GpuixRenderer {
         let height = options.height.unwrap_or(600.0);
         let title = options.title.clone().unwrap_or_else(|| "GPUIX".to_string());
 
-        let platform = Rc::new(NodePlatform::new());
-        NODE_PLATFORM.with(|p| {
+        let platform = Rc::new(gpui_macos::MacPlatform::new_embedded());
+        MAC_PLATFORM.with(|p| {
             *p.borrow_mut() = Some(platform.clone());
         });
 
@@ -188,7 +222,7 @@ impl GpuixRenderer {
                 .unwrap();
 
             GPUI_WINDOW.with(|w| {
-                *w.borrow_mut() = Some(window_handle.into());
+                *w.borrow_mut() = Some(window_handle);
             });
 
             cx.activate(true);
@@ -199,8 +233,6 @@ impl GpuixRenderer {
         });
 
         *self.initialized.lock().unwrap() = true;
-        eprintln!("[GPUIX-RUST] init() complete — window created, non-blocking");
-
         Ok(())
     }
 
@@ -312,8 +344,13 @@ impl GpuixRenderer {
     /// Signal that a batch of mutations is complete. Triggers re-render.
     #[napi]
     pub fn commit_mutations(&self) -> Result<()> {
-        self.needs_redraw.store(true, Ordering::SeqCst);
-        Ok(())
+        #[cfg(target_os = "macos")]
+        return invalidate_window();
+
+        #[cfg(not(target_os = "macos"))]
+        Err(Error::from_reason(
+            "The production GPUIX renderer currently supports only macOS",
+        ))
     }
 
     /// Apply a batch of mutations in a single FFI call.
@@ -341,7 +378,9 @@ impl GpuixRenderer {
             .map_err(|e| Error::from_reason(format!("Failed to parse batch: {}", e)))?;
         let mut tree = self.tree.lock().unwrap();
         let destroyed = apply_batch_to_tree(&mut tree, &ops)?;
-        self.needs_redraw.store(true, Ordering::SeqCst);
+        drop(tree);
+        #[cfg(target_os = "macos")]
+        invalidate_window()?;
         Ok(destroyed)
     }
 
@@ -356,15 +395,20 @@ impl GpuixRenderer {
             ));
         }
 
-        let force_render = self.needs_redraw.swap(false, Ordering::SeqCst);
-
-        NODE_PLATFORM.with(|p| {
+        #[cfg(target_os = "macos")]
+        MAC_PLATFORM.with(|p| {
             if let Some(ref platform) = *p.borrow() {
-                platform.tick(force_render);
+                platform.pump_events();
             }
         });
 
-        Ok(())
+        #[cfg(target_os = "macos")]
+        return Ok(());
+
+        #[cfg(not(target_os = "macos"))]
+        Err(Error::from_reason(
+            "The production GPUIX renderer currently supports only macOS",
+        ))
     }
 
     #[napi]
@@ -381,8 +425,18 @@ impl GpuixRenderer {
     }
 
     #[napi]
-    pub fn set_window_title(&self, _title: String) -> Result<()> {
-        Ok(())
+    pub fn set_window_title(&self, title: String) -> Result<()> {
+        #[cfg(target_os = "macos")]
+        return update_window(move |view, window, cx| {
+            view.window_title = title;
+            cx.notify();
+            window.refresh();
+        });
+
+        #[cfg(not(target_os = "macos"))]
+        Err(Error::from_reason(
+            "The production GPUIX renderer currently supports only macOS",
+        ))
     }
 
     #[napi]
@@ -407,7 +461,10 @@ impl GpuixRenderer {
     #[napi]
     pub fn clear_selection(&self) -> Result<()> {
         self.selection.lock().clear();
-        self.needs_redraw.store(true, Ordering::SeqCst);
+        #[cfg(target_os = "macos")]
+        return invalidate_window();
+
+        #[cfg(not(target_os = "macos"))]
         Ok(())
     }
 

@@ -127,7 +127,7 @@ async function main() {
     console.log('GPUI Event:', event.elementId, event.eventType)
   })
 
-  // Initialize GPUI with NodePlatform (non-blocking — returns immediately)
+  // Initialize GPUI with the embedded native macOS platform.
   renderer.init({
     title: 'GPUIX Counter',
     width: 800,
