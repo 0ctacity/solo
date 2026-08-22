@@ -1069,7 +1069,7 @@ impl GpuixView {
 
         // Clean up handles for elements that no longer exist.
         self.focus_handles
-            .retain(|id, _| tree.elements.contains_key(id));
+            .retain(|id, _| tree.elements.get(id).is_some_and(&needs_focus));
     }
 }
 
