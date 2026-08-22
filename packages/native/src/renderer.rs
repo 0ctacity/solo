@@ -1138,6 +1138,8 @@ pub(crate) struct GpuixView {
     /// Created lazily for elements with overflow: "scroll" (or per-axis scroll).
     /// Handles persist across renders so GPUI maintains scroll offset state.
     pub(crate) scroll_handles: HashMap<u64, gpui::ScrollHandle>,
+    /// Native animation clocks keyed by retained element ID.
+    pub(crate) motion_states: HashMap<u64, crate::motion::MotionState>,
     /// Live text selection, shared with the paint closures and the napi methods.
     pub(crate) selection: SharedSelection,
     /// Persistent measurement and scroll state for React-backed virtual lists.
@@ -1159,6 +1161,7 @@ impl GpuixView {
             focus_subscriptions: HashMap::new(),
             custom_registry: CustomElementRegistry::with_defaults(),
             scroll_handles: HashMap::new(),
+            motion_states: HashMap::new(),
             selection,
             virtual_lists: HashMap::new(),
         }
@@ -1195,6 +1198,8 @@ impl GpuixView {
         }
 
         let callback = self.event_callback.clone();
+        let now = std::time::Instant::now();
+        let mut motion_active = false;
         let mut build_ctx = BuildCtx {
             tree: &tree,
             event_callback: &callback,
@@ -1202,10 +1207,16 @@ impl GpuixView {
             scroll_handles: &mut self.scroll_handles,
             custom_registry: &mut self.custom_registry,
             virtual_lists: &mut self.virtual_lists,
+            motion_states: &mut self.motion_states,
+            now,
+            motion_active: &mut motion_active,
             selection: self.selection.clone(),
             inherited,
         };
         let child = build_element(expected_child_id, &mut build_ctx, window, cx);
+        if motion_active {
+            window.request_animation_frame();
+        }
         let Some(focus_handle) = row_focus_handle else {
             return child;
         };
@@ -1295,6 +1306,9 @@ pub(crate) struct BuildCtx<'a> {
     pub scroll_handles: &'a mut HashMap<u64, gpui::ScrollHandle>,
     pub custom_registry: &'a mut CustomElementRegistry,
     virtual_lists: &'a mut HashMap<u64, VirtualListEntry>,
+    pub motion_states: &'a mut HashMap<u64, crate::motion::MotionState>,
+    pub now: std::time::Instant,
+    pub motion_active: &'a mut bool,
     pub selection: SharedSelection,
     /// Inherited text state, resolved the way CSS inherits it. The renderer's
     /// own theme only seeds the root selection wash; custom elements resolve
@@ -1636,10 +1650,14 @@ impl gpui::Render for GpuixView {
             .retain(|id, _| tree.elements.contains_key(id));
         self.virtual_lists
             .retain(|id, _| tree.elements.contains_key(id));
+        self.motion_states
+            .retain(|id, _| tree.elements.contains_key(id));
 
         // Build the element tree. custom_registry, focus_handles, and scroll_handles
         // are different fields of self, so Rust allows borrowing all simultaneously.
         let theme = Theme::dark();
+        let now = std::time::Instant::now();
+        let mut motion_active = false;
         let result = match tree.root_id {
             Some(root_id) => {
                 let mut ctx = BuildCtx {
@@ -1649,6 +1667,9 @@ impl gpui::Render for GpuixView {
                     scroll_handles: &mut self.scroll_handles,
                     custom_registry: &mut self.custom_registry,
                     virtual_lists: &mut self.virtual_lists,
+                    motion_states: &mut self.motion_states,
+                    now,
+                    motion_active: &mut motion_active,
                     selection: self.selection.clone(),
                     inherited: Inherited::root(&theme),
                 };
@@ -1689,6 +1710,10 @@ impl gpui::Render for GpuixView {
             }
         });
 
+        if motion_active {
+            window.request_animation_frame();
+        }
+
         result
     }
 }
@@ -1707,19 +1732,48 @@ pub(crate) fn build_element(
         return gpui::Empty.into_any_element();
     };
 
+    let animated_style = if let Some(source) = element.custom_props.get("motion") {
+        let state = match ctx.motion_states.entry(id) {
+            std::collections::hash_map::Entry::Occupied(entry) => entry.into_mut(),
+            std::collections::hash_map::Entry::Vacant(entry) => {
+                match crate::motion::MotionState::new(source, ctx.now) {
+                    Ok(state) => entry.insert(state),
+                    Err(error) => {
+                        log::warn!("Invalid motion description for element {id}: {error}");
+                        entry.insert(crate::motion::MotionState::invalid(source, ctx.now))
+                    }
+                }
+            }
+        };
+        if let Err(error) = state.sync(source, ctx.now) {
+            log::warn!("Invalid motion update for element {id}: {error}");
+        }
+        state.is_valid().then(|| {
+            let frame = state.frame(ctx.now);
+            *ctx.motion_active |= frame.active;
+            let mut resolved = element.style.clone().unwrap_or_default();
+            frame.style.apply_to(&mut resolved);
+            resolved
+        })
+    } else {
+        ctx.motion_states.remove(&id);
+        None
+    };
+    let style = animated_style.as_ref().or(element.style.as_ref());
+
     // Inheritable style resolves once here so both built-ins and custom
     // elements see the same cascade.
     let parent_inherited = ctx.inherited;
-    ctx.inherited = parent_inherited.descend(element.style.as_ref());
+    ctx.inherited = parent_inherited.descend(style);
 
     let built = match element.element_type.as_str() {
         "div" => {
             ctx.custom_registry.destroy(id);
-            build_div(element, ctx, window, cx)
+            build_div(element, style, ctx, window, cx)
         }
         "text" => {
             ctx.custom_registry.destroy(id);
-            build_text(element, ctx, window, cx)
+            build_text(element, style, ctx, window, cx)
         }
         "virtual-list" => {
             ctx.custom_registry.destroy(id);
@@ -1785,7 +1839,7 @@ pub(crate) fn build_element(
                     events: &filtered_events,
                     event_callback: ctx.event_callback,
                     focus_handle: ctx.focus_handles.get(&id),
-                    style: element.style.as_ref(),
+                    style,
                     children: custom_children,
                     selection,
                     selectable: inherited.selectable,
@@ -1925,6 +1979,7 @@ fn virtual_row_ancestor(tree: &RetainedTree, list_id: u64, element_id: u64) -> O
 
 pub(crate) fn build_div(
     element: &crate::retained_tree::RetainedElement,
+    style: Option<&StyleDesc>,
     ctx: &mut BuildCtx,
     window: &mut gpui::Window,
     cx: &mut gpui::Context<GpuixView>,
@@ -1934,7 +1989,7 @@ pub(crate) fn build_div(
     let element_id_str = format!("__gpuix_{}", element.id);
     let mut el = gpui::div().id(gpui::SharedString::from(element_id_str));
 
-    if let Some(ref style) = element.style {
+    if let Some(style) = style {
         el = apply_styles(el, style);
 
         // ── Pseudo-selector styles (hover / active) ──────────────────
@@ -1974,7 +2029,7 @@ pub(crate) fn build_div(
     // wide child fills the parent instead of overflowing. Zed's code-block path:
     // flex + min_w_0 on the scroller, flex_none on the child.
     let mut overflow_x_only = false;
-    if let Some(ref style) = element.style {
+    if let Some(style) = style {
         // Resolve each axis: axis-specific overrides shorthand.
         let resolved_x = style.overflow_x.as_deref().or(style.overflow.as_deref());
         let resolved_y = style.overflow_y.as_deref().or(style.overflow.as_deref());
@@ -2256,6 +2311,7 @@ fn text_content(element_id: u64, content: &str, ctx: &BuildCtx) -> gpui::AnyElem
 
 pub(crate) fn build_text(
     element: &crate::retained_tree::RetainedElement,
+    style: Option<&StyleDesc>,
     ctx: &mut BuildCtx,
     window: &mut gpui::Window,
     cx: &mut gpui::Context<GpuixView>,
@@ -2265,7 +2321,7 @@ pub(crate) fn build_text(
     // Fast path: plain text leaf without style. It still goes through
     // `text_content` so the glyphs land in the selection registry — the old
     // raw-string return was the reason text was not selectable.
-    if element.style.is_none() && element.children.is_empty() {
+    if style.is_none() && element.children.is_empty() {
         let content = element.content.clone().unwrap_or_default();
         return text_content(element.id, &content, ctx);
     }
@@ -2274,7 +2330,7 @@ pub(crate) fn build_text(
     // text-only subset, so `padding`, `width` and every layout prop on a text
     // node were silently dropped — a hole with no error and no warning.
     let mut el = gpui::div();
-    if let Some(ref style) = element.style {
+    if let Some(style) = style {
         el = apply_styles(el, style);
     }
 

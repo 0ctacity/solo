@@ -2,6 +2,39 @@ import type { EventPayload } from "@gpuix/native"
 
 export type DimensionValue = number | string
 
+export interface MotionStyle {
+  width?: number
+  height?: number
+  opacity?: number
+  top?: number
+  right?: number
+  bottom?: number
+  left?: number
+  borderRadius?: number
+}
+
+export type MotionEase =
+  | "linear"
+  | "ease"
+  | "easeIn"
+  | "easeOut"
+  | "easeInOut"
+  | [number, number, number, number]
+
+export interface MotionTransition {
+  /** Duration in seconds. */
+  duration?: number
+  /** Delay in seconds. */
+  delay?: number
+  ease?: MotionEase
+}
+
+export interface MotionProps {
+  initial?: MotionStyle | false
+  animate: MotionStyle
+  transition?: MotionTransition
+}
+
 export interface StyleDesc {
   display?: string
   visibility?: string
@@ -248,6 +281,8 @@ export interface Props {
   autoFocus?: boolean
   /** Native GPUI tab order. Use 0 for normal keyboard focus. */
   tabIndex?: number
+  /** Internal native animation description used by motion components. */
+  motion?: MotionProps
 }
 
 // Props for native text editor elements.

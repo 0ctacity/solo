@@ -10,6 +10,7 @@ import fs from "fs"
 import { describe, it, expect, beforeEach } from "vitest"
 import React from "react"
 import { createTestRoot, hasNativeTestRenderer } from "../testing"
+import { motion } from "../index"
 import { bufferSimilarity, isCI } from "./test-utils"
 
 const describeNative = hasNativeTestRenderer ? describe : describe.skip
@@ -1711,5 +1712,51 @@ describeNative("style properties", () => {
       expect(fs.existsSync(path)).toBe(true)
       expect(fs.statSync(path).size).toBeGreaterThan(0)
     })
+  })
+})
+
+describeNative("motion", () => {
+  it("serializes a motion target without changing the host element type", () => {
+    const { render, renderer } = createTestRoot()
+
+    render(
+      <motion.div
+        initial={{ width: 0, opacity: 0 }}
+        animate={{ width: 260, opacity: 1 }}
+        transition={{ duration: 0.2, ease: "easeOut" }}
+      >
+        <text>Sidebar</text>
+      </motion.div>
+    )
+
+    expect(renderer.findByType("div")).toHaveLength(1)
+    expect(renderer.findByType("div")[0]?.customProps?.motion).toMatchInlineSnapshot(`
+      {
+        "animate": {
+          "opacity": 1,
+          "width": 260,
+        },
+        "initial": {
+          "opacity": 0,
+          "width": 0,
+        },
+        "transition": {
+          "duration": 0.2,
+          "ease": "easeOut",
+        },
+      }
+    `)
+  })
+
+  it("renders the normal element when an internal motion payload is invalid", () => {
+    const { render, renderer } = createTestRoot()
+
+    render(
+      <div motion={{ animate: { width: "invalid" } }} style={{ width: 120 }}>
+        <text>Visible fallback</text>
+      </div>
+    )
+
+    expect(renderer.getPaintedText()).toContain("Visible fallback")
   })
 })

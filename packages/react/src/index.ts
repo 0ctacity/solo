@@ -53,11 +53,21 @@ export type {
   TooltipProviderProps,
   TooltipTriggerProps,
 } from "./components/tooltip.js"
+export { motion } from "./components/index.js"
 export type { Root, FrameLoop, RenderOptions } from "./reconciler/renderer.js"
 export type { WindowSize } from "./hooks/use-window-size.js"
 
 // Re-export types
-export type { StyleDesc, NativeRenderer, DebugFrameOverlayMode } from "./types/host.js"
+export type { MotionDivProps } from "./components/index.js"
+export type {
+  DebugFrameOverlayMode,
+  MotionEase,
+  MotionProps,
+  MotionStyle,
+  MotionTransition,
+  NativeRenderer,
+  StyleDesc,
+} from "./types/host.js"
 export { resetIdCounter } from "./reconciler/host-config.js"
 export { handleGpuixEvent } from "./reconciler/event-registry.js"
 
