@@ -220,8 +220,9 @@ const SAFE_MDX_STRESS = `# React-composed Markdown
 This message uses **safe-mdx**, *styled spans*, ~~deleted text~~, an
 \`inline code value\`, and [a link](https://github.com/holocron-hq/safe-mdx).
 
-> The parser runs in TypeScript. Every Markdown node becomes a normal React
-> component, then GPUIX renders the resulting \`div\`, \`text\`, and \`code\` tree.
+> The parser runs in TypeScript. Every Markdown node becomes a normal React component.
+>
+> GPUIX renders the resulting \`div\`, \`text\`, and \`code\` tree.
 
 - nested **inline formatting** inside a list
 - a second item with a long sentence that must wrap without leaving the transcript column
@@ -667,7 +668,9 @@ const SAFE_MDX_COMPONENTS = {
   blockquote: ({ children }: MdxChildren) => (
     <div style={{ display: 'flex', flexDirection: 'row', gap: 12, width: '100%' }}>
       <div style={{ width: 3, flexShrink: 0, backgroundColor: CHAT_THEME.accent }} />
-      <div style={{ display: 'flex', flexDirection: 'column', flexGrow: 1, color: C.muted }}>
+      <div
+        style={{ display: 'flex', flexDirection: 'column', flexGrow: 1, gap: 6, color: C.muted }}
+      >
         {children}
       </div>
     </div>
@@ -675,9 +678,14 @@ const SAFE_MDX_COMPONENTS = {
   hr: () => <div style={{ height: 1, width: '100%', backgroundColor: C.border }} />,
   ul: MdxBlock,
   ol: MdxBlock,
-  li: ({ children }: MdxChildren) => (
+  li: ({
+    children,
+    'data-checked': checked,
+  }: MdxChildren & { 'data-checked'?: boolean }) => (
     <div style={{ display: 'flex', flexDirection: 'row', gap: 9, width: '100%' }}>
-      <text style={{ fontSize: 15, lineHeight: 26, color: C.muted }}>•</text>
+      <text style={{ fontSize: 15, lineHeight: 26, color: C.muted }}>
+        {checked === undefined ? '•' : checked ? '✓' : '○'}
+      </text>
       <div style={{ display: 'flex', flexDirection: 'column', flexGrow: 1 }}>{children}</div>
     </div>
   ),
@@ -938,6 +946,7 @@ function Composer({
         flexDirection: 'column',
         alignItems: 'center',
         flexShrink: 0,
+        paddingTop: 12,
         paddingBottom: 16,
         paddingLeft: 12,
         paddingRight: 12,
