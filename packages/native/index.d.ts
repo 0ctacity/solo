@@ -83,6 +83,19 @@ export declare class GpuixRenderer {
    * Returns [x, y] or null if the element has no scroll handle.
    */
   getScrollOffset(elementId: number): Array<number> | null
+  getAutomationTree(): string
+  getElementBounds(id: number): Array<number> | null
+  getAllText(): Array<string>
+  getPaintedText(): Array<string>
+  simulateClick(x: number, y: number, button?: number | undefined | null): void
+  simulateMouseDown(x: number, y: number, button?: number | undefined | null): void
+  simulateMouseUp(x: number, y: number, button?: number | undefined | null): void
+  simulateMouseMove(x: number, y: number, pressedButton?: number | undefined | null): void
+  clockPause(): number
+  clockSet(nowMs: number): number
+  clockFastForward(deltaMs: number): number
+  clockResume(): number
+  captureScreenshot(path: string): void
 }
 
 /**
@@ -265,6 +278,14 @@ export declare class TestGpuixRenderer {
   getText(id: number): string | null
   /** Get the full tree as JSON for snapshot testing. */
   getTreeJson(): string
+  /** Tree JSON with last-paint bounds. Used by the automation locators. */
+  getAutomationTree(): string
+  /** Last painted bounds for an element, or null if it was not painted. */
+  getElementBounds(id: number): Array<number> | null
+  clockPause(): number
+  clockSet(nowMs: number): number
+  clockFastForward(deltaMs: number): number
+  clockResume(): number
   /** Get the root element ID, or null if no root is set. */
   getRootId(): number | null
 }

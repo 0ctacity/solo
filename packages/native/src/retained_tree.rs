@@ -26,6 +26,8 @@ pub struct RetainedElement {
     pub auto_focus: bool,
     /// Last mutation applied to this element or one of its descendants.
     pub subtree_revision: u64,
+    /// Stable locator id from the React `testId` prop.
+    pub test_id: Option<String>,
 }
 
 impl RetainedElement {
@@ -40,6 +42,7 @@ impl RetainedElement {
             parent: None,
             auto_focus: false,
             subtree_revision: revision,
+            test_id: None,
             custom_props: HashMap::new(),
         }
     }
@@ -210,6 +213,10 @@ impl RetainedTree {
                 element.auto_focus = value.as_bool().unwrap_or(false);
                 return;
             }
+            if key == "testId" {
+                element.test_id = value.as_str().map(str::to_string);
+                return;
+            }
             if value.is_null() {
                 changed = element.custom_props.remove(&key).is_some();
             } else {
@@ -228,4 +235,101 @@ impl RetainedTree {
     pub fn get_custom_prop(&self, id: u64, key: &str) -> Option<&serde_json::Value> {
         self.elements.get(&id)?.custom_props.get(key)
     }
+
+    pub fn to_json(
+        &self,
+        bounds: &std::collections::HashMap<u64, crate::automation::ElementBounds>,
+    ) -> serde_json::Value {
+        match self.root_id {
+            Some(root_id) => element_to_json(root_id, self, bounds),
+            None => serde_json::Value::Null,
+        }
+    }
+}
+
+fn element_to_json(
+    id: u64,
+    tree: &RetainedTree,
+    bounds: &std::collections::HashMap<u64, crate::automation::ElementBounds>,
+) -> serde_json::Value {
+    let Some(element) = tree.elements.get(&id) else {
+        return serde_json::Value::Null;
+    };
+
+    let mut obj = serde_json::Map::new();
+    obj.insert(
+        "type".to_string(),
+        serde_json::Value::String(element.element_type.clone()),
+    );
+    obj.insert("id".to_string(), serde_json::json!(element.id));
+
+    if let Some(ref test_id) = element.test_id {
+        obj.insert(
+            "testId".to_string(),
+            serde_json::Value::String(test_id.clone()),
+        );
+    }
+
+    if let Some(ref content) = element.content {
+        obj.insert(
+            "text".to_string(),
+            serde_json::Value::String(content.clone()),
+        );
+    }
+
+    if let Some(rect) = bounds.get(&id) {
+        obj.insert(
+            "bounds".to_string(),
+            serde_json::json!({
+                "x": rect.x,
+                "y": rect.y,
+                "width": rect.width,
+                "height": rect.height,
+            }),
+        );
+    }
+
+    if let Some(ref style) = element.style {
+        if let Ok(style_json) = serde_json::to_value(style) {
+            if let serde_json::Value::Object(ref map) = style_json {
+                let filtered: serde_json::Map<String, serde_json::Value> = map
+                    .iter()
+                    .filter(|(_, v)| !v.is_null())
+                    .map(|(k, v)| (k.clone(), v.clone()))
+                    .collect();
+                if !filtered.is_empty() {
+                    obj.insert("style".to_string(), serde_json::Value::Object(filtered));
+                }
+            }
+        }
+    }
+
+    if !element.events.is_empty() {
+        let mut events: Vec<String> = element.events.iter().cloned().collect();
+        events.sort();
+        obj.insert("events".to_string(), serde_json::json!(events));
+    }
+
+    if !element.custom_props.is_empty() {
+        let custom: serde_json::Map<String, serde_json::Value> = element
+            .custom_props
+            .iter()
+            .map(|(k, v)| (k.clone(), v.clone()))
+            .collect();
+        obj.insert("customProps".to_string(), serde_json::Value::Object(custom));
+    }
+
+    if !element.children.is_empty() {
+        let children: Vec<serde_json::Value> = element
+            .children
+            .iter()
+            .map(|&cid| element_to_json(cid, tree, bounds))
+            .filter(|v| !v.is_null())
+            .collect();
+        if !children.is_empty() {
+            obj.insert("children".to_string(), serde_json::Value::Array(children));
+        }
+    }
+
+    serde_json::Value::Object(obj)
 }

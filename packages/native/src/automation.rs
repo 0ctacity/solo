@@ -1,0 +1,268 @@
+//! Shared automation host: paint bounds and a controllable motion clock.
+//!
+//! Record bounds during **paint**, not prepaint. The frame reset canvas
+//! clears the map in paint, and GPUI prepaint runs for the whole tree
+//! before any paint. A prepaint recorder would be wiped by the reset.
+//!
+//! TestGpuixRenderer and GpuixRenderer both use this so locators, screenshots,
+//! and clock control do not fork between headless tests and a live window.
+
+use std::cell::RefCell;
+use std::collections::HashMap;
+use std::sync::{Arc, Mutex};
+use std::time::{Duration, Instant};
+
+use gpui::{
+    canvas, point, px, App, Bounds, InputEvent, IntoElement, Modifiers, MouseButton, MouseDownEvent,
+    MouseMoveEvent, MouseUpEvent, Pixels, Styled, Window,
+};
+
+#[derive(Clone, Copy, Debug)]
+pub struct ElementBounds {
+    pub x: f64,
+    pub y: f64,
+    pub width: f64,
+    pub height: f64,
+}
+
+impl ElementBounds {
+    fn from_gpui(bounds: Bounds<Pixels>) -> Self {
+        Self {
+            x: f64::from(f32::from(bounds.origin.x)),
+            y: f64::from(f32::from(bounds.origin.y)),
+            width: f64::from(f32::from(bounds.size.width)),
+            height: f64::from(f32::from(bounds.size.height)),
+        }
+    }
+
+}
+
+thread_local! {
+    static BOUNDS: RefCell<HashMap<u64, ElementBounds>> = RefCell::new(HashMap::new());
+}
+
+/// Zero-size canvas. Paint it with the selection reset, before any content.
+pub fn bounds_frame_reset() -> impl IntoElement {
+    canvas(
+        |_, _, _| (),
+        move |_, _, _, _| {
+            BOUNDS.with(|cell| cell.borrow_mut().clear());
+        },
+    )
+    .absolute()
+    .w(px(0.0))
+    .h(px(0.0))
+}
+
+pub fn record_bounds(id: u64, bounds: Bounds<Pixels>) {
+    BOUNDS.with(|cell| {
+        cell.borrow_mut().insert(id, ElementBounds::from_gpui(bounds));
+    });
+}
+
+pub fn get_bounds(id: u64) -> Option<ElementBounds> {
+    BOUNDS.with(|cell| cell.borrow().get(&id).copied())
+}
+
+pub fn all_bounds() -> HashMap<u64, ElementBounds> {
+    BOUNDS.with(|cell| cell.borrow().clone())
+}
+
+pub fn bounds_tracker(id: u64) -> impl IntoElement {
+    canvas(
+        |bounds, _, _| bounds,
+        move |bounds, _, _, _| {
+            record_bounds(id, bounds);
+        },
+    )
+    .absolute()
+    .size_full()
+}
+
+enum ClockMode {
+    Live,
+    Frozen { now: Instant },
+}
+
+struct ClockInner {
+    origin: Instant,
+    mode: ClockMode,
+}
+
+#[derive(Clone)]
+pub struct AutomationClock {
+    inner: Arc<Mutex<ClockInner>>,
+}
+
+impl Default for AutomationClock {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl AutomationClock {
+    pub fn new() -> Self {
+        Self {
+            inner: Arc::new(Mutex::new(ClockInner {
+                origin: Instant::now(),
+                mode: ClockMode::Live,
+            })),
+        }
+    }
+
+    pub fn now(&self) -> Instant {
+        let inner = self.inner.lock().unwrap();
+        match inner.mode {
+            ClockMode::Live => Instant::now(),
+            ClockMode::Frozen { now } => now,
+        }
+    }
+
+    #[allow(dead_code)]
+    pub fn now_ms(&self) -> f64 {
+        let inner = self.inner.lock().unwrap();
+        current_instant(&inner)
+            .saturating_duration_since(inner.origin)
+            .as_secs_f64()
+            * 1000.0
+    }
+
+    pub fn pause(&self) -> f64 {
+        let mut inner = self.inner.lock().unwrap();
+        let now = current_instant(&inner);
+        inner.mode = ClockMode::Frozen { now };
+        now.saturating_duration_since(inner.origin).as_secs_f64() * 1000.0
+    }
+
+    pub fn set_ms(&self, now_ms: f64) -> f64 {
+        let mut inner = self.inner.lock().unwrap();
+        let now = inner.origin + duration_ms(now_ms);
+        inner.mode = ClockMode::Frozen { now };
+        now_ms
+    }
+
+    pub fn fast_forward_ms(&self, delta_ms: f64) -> f64 {
+        let mut inner = self.inner.lock().unwrap();
+        let now = current_instant(&inner) + duration_ms(delta_ms);
+        inner.mode = ClockMode::Frozen { now };
+        now.saturating_duration_since(inner.origin).as_secs_f64() * 1000.0
+    }
+
+    pub fn resume(&self) -> f64 {
+        let mut inner = self.inner.lock().unwrap();
+        let elapsed = current_instant(&inner).saturating_duration_since(inner.origin);
+        inner.origin = Instant::now() - elapsed;
+        inner.mode = ClockMode::Live;
+        elapsed.as_secs_f64() * 1000.0
+    }
+}
+
+fn current_instant(inner: &ClockInner) -> Instant {
+    match inner.mode {
+        ClockMode::Live => Instant::now(),
+        ClockMode::Frozen { now } => now,
+    }
+}
+
+fn duration_ms(ms: f64) -> Duration {
+    Duration::from_secs_f64((ms / 1000.0).max(0.0))
+}
+
+pub fn mouse_button(button: u32) -> MouseButton {
+    match button {
+        1 => MouseButton::Middle,
+        2 => MouseButton::Right,
+        _ => MouseButton::Left,
+    }
+}
+
+pub fn dispatch_click(window: &mut Window, cx: &mut App, x: f64, y: f64, button: u32) {
+    let position = point(px(x as f32), px(y as f32));
+    let button = mouse_button(button);
+    window.dispatch_event(
+        MouseDownEvent {
+            button,
+            position,
+            modifiers: Modifiers::default(),
+            click_count: 1,
+            first_mouse: false,
+        }
+        .to_platform_input(),
+        cx,
+    );
+    window.dispatch_event(
+        MouseUpEvent {
+            button,
+            position,
+            modifiers: Modifiers::default(),
+            click_count: 1,
+        }
+        .to_platform_input(),
+        cx,
+    );
+}
+
+pub fn dispatch_mouse_down(window: &mut Window, cx: &mut App, x: f64, y: f64, button: u32) {
+    window.dispatch_event(
+        MouseDownEvent {
+            button: mouse_button(button),
+            position: point(px(x as f32), px(y as f32)),
+            modifiers: Modifiers::default(),
+            click_count: 1,
+            first_mouse: false,
+        }
+        .to_platform_input(),
+        cx,
+    );
+}
+
+pub fn dispatch_mouse_up(window: &mut Window, cx: &mut App, x: f64, y: f64, button: u32) {
+    window.dispatch_event(
+        MouseUpEvent {
+            button: mouse_button(button),
+            position: point(px(x as f32), px(y as f32)),
+            modifiers: Modifiers::default(),
+            click_count: 1,
+        }
+        .to_platform_input(),
+        cx,
+    );
+}
+
+pub fn dispatch_mouse_move(
+    window: &mut Window,
+    cx: &mut App,
+    x: f64,
+    y: f64,
+    pressed_button: Option<u32>,
+) {
+    window.dispatch_event(
+        MouseMoveEvent {
+            position: point(px(x as f32), px(y as f32)),
+            pressed_button: pressed_button.map(mouse_button),
+            modifiers: Modifiers::default(),
+        }
+        .to_platform_input(),
+        cx,
+    );
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn frozen_clock_holds_and_fast_forwards() {
+        let clock = AutomationClock::new();
+        clock.set_ms(0.0);
+        assert!((clock.now_ms() - 0.0).abs() < 0.001);
+        clock.fast_forward_ms(150.0);
+        assert!((clock.now_ms() - 150.0).abs() < 0.001);
+        let later = clock.now();
+        clock.fast_forward_ms(150.0);
+        assert_eq!(
+            clock.now().saturating_duration_since(later),
+            Duration::from_millis(150)
+        );
+    }
+}

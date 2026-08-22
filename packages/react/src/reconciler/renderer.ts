@@ -10,11 +10,17 @@ import { clearEventHandlers, handleGpuixEvent } from "./event-registry.js"
 import { resetIdCounter, setNativeRenderer } from "./host-config.js"
 import { wrapWithBatching } from "./batch-renderer.js"
 import { GpuixContext } from "../hooks/use-gpuix.js"
+import {
+  InProcessBackend,
+  liveRendererAsTest,
+  serveAutomationStdio,
+  type LiveAutomationRenderer,
+} from "../automation/client.js"
 
 export function createRenderer(
   onEvent?: (event: import("@gpuix/native").EventPayload) => void
 ): GpuixRenderer {
-  return new GpuixRenderer((err, event) => {
+  const renderer = new GpuixRenderer((err, event) => {
     if (err) {
       console.error("[GPUIX] Native event error:", err)
       return
@@ -26,6 +32,15 @@ export function createRenderer(
       }
     }
   })
+  // A pipe means a controller owns stdin. A TTY is a human keyboard.
+  if (!process.stdin.isTTY) {
+    const init = renderer.init.bind(renderer)
+    renderer.init = (options) => {
+      init(options)
+      enableAutomation(renderer)
+    }
+  }
+  return renderer
 }
 
 export interface Root {
@@ -65,6 +80,10 @@ export interface FrameLoop {
  * `tick()` returning false means the last window closed. The loop stops and
  * `onTerminated` runs. `render()` uses that to exit the process.
  */
+export function enableAutomation(renderer: LiveAutomationRenderer): void {
+  serveAutomationStdio(new InProcessBackend(liveRendererAsTest(renderer)))
+}
+
 export function startFrameLoop(
   renderer: Pick<GpuixRenderer, "requiresTick" | "tick">,
   options: { frameMs?: number; onTerminated?: () => void } = {}

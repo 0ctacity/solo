@@ -1110,6 +1110,195 @@ impl GpuixRenderer {
         )))]
         Err(Error::from_reason("Unsupported operating system"))
     }
+
+    #[napi]
+    pub fn get_automation_tree(&self) -> Result<String> {
+        self.request_invalidate()?;
+        let tree = self.tree.lock().unwrap();
+        let json = tree.to_json(&crate::automation::all_bounds());
+        serde_json::to_string(&json)
+            .map_err(|e| Error::from_reason(format!("JSON serialization failed: {}", e)))
+    }
+
+    #[napi]
+    pub fn get_element_bounds(&self, id: f64) -> Result<Option<Vec<f64>>> {
+        let id = to_element_id(id)?;
+        Ok(crate::automation::get_bounds(id).map(|bounds| {
+            vec![bounds.x, bounds.y, bounds.width, bounds.height]
+        }))
+    }
+
+    #[napi]
+    pub fn get_all_text(&self) -> Vec<String> {
+        let tree = self.tree.lock().unwrap();
+        let mut texts = Vec::new();
+        if let Some(root_id) = tree.root_id {
+            collect_text(root_id, &tree, &mut texts);
+        }
+        texts
+    }
+
+    #[napi]
+    pub fn get_painted_text(&self) -> Vec<String> {
+        crate::text::painted_text()
+    }
+
+    #[napi]
+    pub fn simulate_click(&self, x: f64, y: f64, button: Option<u32>) -> Result<()> {
+        #[cfg(target_os = "macos")]
+        return update_window(move |_view, window, cx| {
+            crate::automation::dispatch_click(window, cx, x, y, button.unwrap_or(0));
+        });
+
+        #[cfg(not(target_os = "macos"))]
+        {
+            let _ = (x, y, button);
+            Err(Error::from_reason("simulateClick is only implemented on macOS"))
+        }
+    }
+
+    #[napi]
+    pub fn simulate_mouse_down(&self, x: f64, y: f64, button: Option<u32>) -> Result<()> {
+        #[cfg(target_os = "macos")]
+        return update_window(move |_view, window, cx| {
+            crate::automation::dispatch_mouse_down(window, cx, x, y, button.unwrap_or(0));
+        });
+
+        #[cfg(not(target_os = "macos"))]
+        {
+            let _ = (x, y, button);
+            Err(Error::from_reason("simulateMouseDown is only implemented on macOS"))
+        }
+    }
+
+    #[napi]
+    pub fn simulate_mouse_up(&self, x: f64, y: f64, button: Option<u32>) -> Result<()> {
+        #[cfg(target_os = "macos")]
+        return update_window(move |_view, window, cx| {
+            crate::automation::dispatch_mouse_up(window, cx, x, y, button.unwrap_or(0));
+        });
+
+        #[cfg(not(target_os = "macos"))]
+        {
+            let _ = (x, y, button);
+            Err(Error::from_reason("simulateMouseUp is only implemented on macOS"))
+        }
+    }
+
+    #[napi]
+    pub fn simulate_mouse_move(
+        &self,
+        x: f64,
+        y: f64,
+        pressed_button: Option<u32>,
+    ) -> Result<()> {
+        #[cfg(target_os = "macos")]
+        return update_window(move |_view, window, cx| {
+            crate::automation::dispatch_mouse_move(window, cx, x, y, pressed_button);
+        });
+
+        #[cfg(not(target_os = "macos"))]
+        {
+            let _ = (x, y, pressed_button);
+            Err(Error::from_reason("simulateMouseMove is only implemented on macOS"))
+        }
+    }
+
+    #[napi]
+    pub fn clock_pause(&self) -> Result<f64> {
+        #[cfg(target_os = "macos")]
+        return update_window(move |view, _window, cx| {
+            let now_ms = view.clock.pause();
+            cx.notify();
+            now_ms
+        });
+
+        #[cfg(not(target_os = "macos"))]
+        Err(Error::from_reason("clockPause is only implemented on macOS"))
+    }
+
+    #[napi]
+    pub fn clock_set(&self, now_ms: f64) -> Result<f64> {
+        #[cfg(target_os = "macos")]
+        return update_window(move |view, _window, cx| {
+            let now_ms = view.clock.set_ms(now_ms);
+            cx.notify();
+            now_ms
+        });
+
+        #[cfg(not(target_os = "macos"))]
+        {
+            let _ = now_ms;
+            Err(Error::from_reason("clockSet is only implemented on macOS"))
+        }
+    }
+
+    #[napi]
+    pub fn clock_fast_forward(&self, delta_ms: f64) -> Result<f64> {
+        #[cfg(target_os = "macos")]
+        return update_window(move |view, _window, cx| {
+            let now_ms = view.clock.fast_forward_ms(delta_ms);
+            cx.notify();
+            now_ms
+        });
+
+        #[cfg(not(target_os = "macos"))]
+        {
+            let _ = delta_ms;
+            Err(Error::from_reason(
+                "clockFastForward is only implemented on macOS",
+            ))
+        }
+    }
+
+    #[napi]
+    pub fn clock_resume(&self) -> Result<f64> {
+        #[cfg(target_os = "macos")]
+        return update_window(move |view, _window, cx| {
+            let now_ms = view.clock.resume();
+            cx.notify();
+            now_ms
+        });
+
+        #[cfg(not(target_os = "macos"))]
+        Err(Error::from_reason("clockResume is only implemented on macOS"))
+    }
+
+    #[napi]
+    pub fn capture_screenshot(&self, path: String) -> Result<()> {
+        #[cfg(all(target_os = "macos", feature = "test-support"))]
+        {
+            let image = update_window(move |_view, window, cx| {
+                cx.notify();
+                window.refresh();
+                window.render_to_image()
+            })?
+            .map_err(|e| Error::from_reason(format!("Screenshot capture failed: {}", e)))?;
+            image
+                .save(&path)
+                .map_err(|e| Error::from_reason(format!("Failed to save screenshot: {}", e)))?;
+            Ok(())
+        }
+
+        #[cfg(not(all(target_os = "macos", feature = "test-support")))]
+        {
+            let _ = path;
+            Err(Error::from_reason(
+                "captureScreenshot needs the test-support build on macOS",
+            ))
+        }
+    }
+}
+
+fn collect_text(id: u64, tree: &RetainedTree, texts: &mut Vec<String>) {
+    if let Some(element) = tree.elements.get(&id) {
+        if let Some(ref content) = element.content {
+            texts.push(content.clone());
+        }
+        for &child_id in &element.children {
+            collect_text(child_id, tree, texts);
+        }
+    }
 }
 
 #[cfg(any(target_os = "windows", target_os = "linux", target_os = "freebsd"))]
@@ -1144,6 +1333,8 @@ pub(crate) struct GpuixView {
     pub(crate) selection: SharedSelection,
     /// Persistent measurement and scroll state for React-backed virtual lists.
     virtual_lists: HashMap<u64, VirtualListEntry>,
+    /// Motion / review clock. Live wall time unless automation freezes it.
+    pub(crate) clock: crate::automation::AutomationClock,
 }
 
 impl GpuixView {
@@ -1164,6 +1355,7 @@ impl GpuixView {
             motion_states: HashMap::new(),
             selection,
             virtual_lists: HashMap::new(),
+            clock: crate::automation::AutomationClock::new(),
         }
     }
 
@@ -1198,7 +1390,7 @@ impl GpuixView {
         }
 
         let callback = self.event_callback.clone();
-        let now = std::time::Instant::now();
+        let now = self.clock.now();
         let mut motion_active = false;
         let mut build_ctx = BuildCtx {
             tree: &tree,
@@ -1656,7 +1848,7 @@ impl gpui::Render for GpuixView {
         // Build the element tree. custom_registry, focus_handles, and scroll_handles
         // are different fields of self, so Rust allows borrowing all simultaneously.
         let theme = Theme::dark();
-        let now = std::time::Instant::now();
+        let now = self.clock.now();
         let mut motion_active = false;
         let result = match tree.root_id {
             Some(root_id) => {
@@ -1689,6 +1881,7 @@ impl gpui::Render for GpuixView {
                 .on_action(|_: &FocusNext, window, cx| window.focus_next(cx))
                 .on_action(|_: &FocusPrevious, window, cx| window.focus_prev(cx))
                 .child(selection_frame_reset(self.selection.clone()))
+                .child(crate::automation::bounds_frame_reset())
                 .child(result)
                 .into_any_element()
         };
@@ -2072,6 +2265,11 @@ pub(crate) fn build_div(
     // attach it via track_focus. This makes the element focusable — clicking it
     // or tabbing to it gives it keyboard focus. The handle persists across renders
     // because it's stored in GpuixView::focus_handles.
+    if style.and_then(|style| style.position.as_deref()).is_none() {
+        el = el.relative();
+    }
+    el = el.child(crate::automation::bounds_tracker(element.id));
+
     if let Some(handle) = ctx.focus_handles.get(&element.id) {
         el = el.track_focus(handle);
     }
@@ -2323,7 +2521,11 @@ pub(crate) fn build_text(
     // raw-string return was the reason text was not selectable.
     if style.is_none() && element.children.is_empty() {
         let content = element.content.clone().unwrap_or_default();
-        return text_content(element.id, &content, ctx);
+        return gpui::div()
+            .relative()
+            .child(crate::automation::bounds_tracker(element.id))
+            .child(text_content(element.id, &content, ctx))
+            .into_any_element();
     }
 
     // The full style set, exactly as `<div>` gets it. `<text>` used to apply a
@@ -2333,6 +2535,10 @@ pub(crate) fn build_text(
     if let Some(style) = style {
         el = apply_styles(el, style);
     }
+    if style.and_then(|style| style.position.as_deref()).is_none() {
+        el = el.relative();
+    }
+    el = el.child(crate::automation::bounds_tracker(element.id));
 
     if let Some(ref content) = element.content {
         el = el.child(text_content(element.id, content, ctx));

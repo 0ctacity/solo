@@ -737,12 +737,101 @@ impl TestGpuixRenderer {
     #[napi]
     pub fn get_tree_json(&self) -> Result<String> {
         let tree = self.tree.lock().unwrap();
-        let json = match tree.root_id {
-            Some(root_id) => Self::element_to_json(root_id, &tree),
-            None => serde_json::Value::Null,
-        };
+        let json = tree.to_json(&std::collections::HashMap::new());
         serde_json::to_string_pretty(&json)
             .map_err(|e| Error::from_reason(format!("JSON serialization failed: {}", e)))
+    }
+
+    /// Tree JSON with last-paint bounds. Used by the automation locators.
+    #[napi]
+    pub fn get_automation_tree(&self) -> Result<String> {
+        self.flush()?;
+        let tree = self.tree.lock().unwrap();
+        let json = tree.to_json(&crate::automation::all_bounds());
+        serde_json::to_string(&json)
+            .map_err(|e| Error::from_reason(format!("JSON serialization failed: {}", e)))
+    }
+
+    /// Last painted bounds for an element, or null if it was not painted.
+    #[napi]
+    pub fn get_element_bounds(&self, id: f64) -> Result<Option<Vec<f64>>> {
+        let id = to_element_id(id)?;
+        self.flush()?;
+        Ok(crate::automation::get_bounds(id).map(|bounds| {
+            vec![bounds.x, bounds.y, bounds.width, bounds.height]
+        }))
+    }
+
+    #[napi]
+    pub fn clock_pause(&self) -> Result<f64> {
+        with_test_state(|cx, window, view| {
+            let view = view.clone();
+            let now_ms = cx
+                .update_window(window, |_, _window, app| {
+                    view.update(app, |view, cx| {
+                        let now_ms = view.clock.pause();
+                        cx.notify();
+                        now_ms
+                    })
+                })
+                .map_err(|e| Error::from_reason(e.to_string()))?;
+            cx.run_until_parked();
+            Ok(now_ms)
+        })
+    }
+
+    #[napi]
+    pub fn clock_set(&self, now_ms: f64) -> Result<f64> {
+        with_test_state(|cx, window, view| {
+            let view = view.clone();
+            let now_ms = cx
+                .update_window(window, |_, _window, app| {
+                    view.update(app, |view, cx| {
+                        let now_ms = view.clock.set_ms(now_ms);
+                        cx.notify();
+                        now_ms
+                    })
+                })
+                .map_err(|e| Error::from_reason(e.to_string()))?;
+            cx.run_until_parked();
+            Ok(now_ms)
+        })
+    }
+
+    #[napi]
+    pub fn clock_fast_forward(&self, delta_ms: f64) -> Result<f64> {
+        with_test_state(|cx, window, view| {
+            let view = view.clone();
+            let now_ms = cx
+                .update_window(window, |_, _window, app| {
+                    view.update(app, |view, cx| {
+                        let now_ms = view.clock.fast_forward_ms(delta_ms);
+                        cx.notify();
+                        now_ms
+                    })
+                })
+                .map_err(|e| Error::from_reason(e.to_string()))?;
+            cx.run_until_parked();
+            Ok(now_ms)
+        })
+    }
+
+    #[napi]
+    pub fn clock_resume(&self) -> Result<f64> {
+        with_test_state(|cx, window, view| {
+            let view = view.clone();
+            let now_ms = cx
+                .update_window(window, |_, _window, app| {
+                    view.update(app, |view, cx| {
+                        let now_ms = view.clock.resume();
+                        cx.notify();
+                        now_ms
+                    })
+                })
+                .map_err(|e| Error::from_reason(e.to_string()))?;
+            cx.run_until_parked();
+            Ok(now_ms)
+        })
     }
 
     /// Get the root element ID, or null if no root is set.
@@ -762,70 +851,5 @@ impl TestGpuixRenderer {
                 Self::collect_text(child_id, tree, texts);
             }
         }
-    }
-
-    fn element_to_json(id: u64, tree: &RetainedTree) -> serde_json::Value {
-        let Some(element) = tree.elements.get(&id) else {
-            return serde_json::Value::Null;
-        };
-
-        let mut obj = serde_json::Map::new();
-        obj.insert(
-            "type".to_string(),
-            serde_json::Value::String(element.element_type.clone()),
-        );
-        obj.insert("id".to_string(), serde_json::json!(element.id));
-
-        if let Some(ref content) = element.content {
-            obj.insert(
-                "text".to_string(),
-                serde_json::Value::String(content.clone()),
-            );
-        }
-
-        if let Some(ref style) = element.style {
-            if let Ok(style_json) = serde_json::to_value(style) {
-                // Only include non-null style fields.
-                if let serde_json::Value::Object(ref map) = style_json {
-                    let filtered: serde_json::Map<String, serde_json::Value> = map
-                        .iter()
-                        .filter(|(_, v)| !v.is_null())
-                        .map(|(k, v)| (k.clone(), v.clone()))
-                        .collect();
-                    if !filtered.is_empty() {
-                        obj.insert("style".to_string(), serde_json::Value::Object(filtered));
-                    }
-                }
-            }
-        }
-
-        if !element.events.is_empty() {
-            let mut events: Vec<String> = element.events.iter().cloned().collect();
-            events.sort();
-            obj.insert("events".to_string(), serde_json::json!(events));
-        }
-
-        if !element.custom_props.is_empty() {
-            let custom: serde_json::Map<String, serde_json::Value> = element
-                .custom_props
-                .iter()
-                .map(|(k, v)| (k.clone(), v.clone()))
-                .collect();
-            obj.insert("customProps".to_string(), serde_json::Value::Object(custom));
-        }
-
-        if !element.children.is_empty() {
-            let children: Vec<serde_json::Value> = element
-                .children
-                .iter()
-                .map(|&cid| Self::element_to_json(cid, tree))
-                .filter(|v| !v.is_null())
-                .collect();
-            if !children.is_empty() {
-                obj.insert("children".to_string(), serde_json::Value::Array(children));
-            }
-        }
-
-        serde_json::Value::Object(obj)
     }
 }

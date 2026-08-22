@@ -36,6 +36,12 @@ interface NativeTestRendererApi extends NativeRenderer {
   simulateMouseDown(x: number, y: number, button: number): void
   simulateMouseUp(x: number, y: number, button: number): void
   getTreeJson(): string
+  getAutomationTree(): string
+  getElementBounds(elementId: number): number[] | null
+  clockPause(): number
+  clockSet(nowMs: number): number
+  clockFastForward(deltaMs: number): number
+  clockResume(): number
   getRootId(): number | null
   getAllText(): string[]
   scrollTo(elementId: number, x: number, y: number): void
@@ -359,6 +365,36 @@ export class TestRenderer implements NativeRenderer {
   /** Print the tree structure for debugging. Only includes non-empty fields. */
   toJSON(): unknown {
     return JSON.parse(this.native.getTreeJson())
+  }
+
+  getAutomationTree(): string {
+    return this.native.getAutomationTree()
+  }
+
+  getElementBounds(elementId: number): number[] | null {
+    return this.native.getElementBounds(elementId)
+  }
+
+  clockPause(): number {
+    return this.native.clockPause()
+  }
+
+  clockSet(nowMs: number): number {
+    return this.native.clockSet(nowMs)
+  }
+
+  clockFastForward(deltaMs: number): number {
+    return this.native.clockFastForward(deltaMs)
+  }
+
+  clockResume(): number {
+    return this.native.clockResume()
+  }
+
+  focusElement(elementId: number): void {
+    this.native.flush()
+    this.native.focusElement(elementId)
+    this.dispatchNativeEvents()
   }
 
   // ── Scroll API ──────────────────────────────────────────────────

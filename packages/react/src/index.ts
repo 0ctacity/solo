@@ -1,6 +1,12 @@
 // GPUIX React - React bindings for GPUI
 export { createRoot, flushSync } from "./reconciler/index.js"
-export { createRenderer, render, resetRender, startFrameLoop } from "./reconciler/renderer.js"
+export {
+  createRenderer,
+  enableAutomation,
+  render,
+  resetRender,
+  startFrameLoop,
+} from "./reconciler/renderer.js"
 export { GpuixContext, useGpuix, useGpuixRequired } from "./hooks/use-gpuix.js"
 export { useWindowSize } from "./hooks/use-window-size.js"
 export {
@@ -73,6 +79,7 @@ export { handleGpuixEvent } from "./reconciler/event-registry.js"
 
 // Testing utilities
 export { TestRenderer, createTestRoot, hasNativeTestRenderer } from "./testing.js"
+export { connectTest, launch } from "./automation/index.js"
 export type { TestRoot, TestElement } from "./testing.js"
 export type {
   EventPayload,

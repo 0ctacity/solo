@@ -281,6 +281,8 @@ export interface Props {
   autoFocus?: boolean
   /** Native GPUI tab order. Use 0 for normal keyboard focus. */
   tabIndex?: number
+  /** Stable locator id for automation. */
+  testId?: string
   /** Internal native animation description used by motion components. */
   motion?: MotionProps
 }

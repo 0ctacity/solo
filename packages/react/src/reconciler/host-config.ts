@@ -127,7 +127,7 @@ const BUILT_IN_TYPES = new Set(["div", "text"])
 
 // Props that reach Rust on EVERY element type, including div and text.
 // Custom props are otherwise skipped for built-ins.
-const UNIVERSAL_PROPS = new Set(["autoFocus", "tabIndex", "motion"])
+const UNIVERSAL_PROPS = new Set(["autoFocus", "tabIndex", "motion", "testId"])
 
 function isReservedProp(name: string): boolean {
   return RESERVED_PROPS.has(name) || EVENT_PROP_NAMES.has(name)

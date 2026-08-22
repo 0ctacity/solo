@@ -39,6 +39,11 @@
       "types": "./dist/components/tooltip.d.ts",
       "import": "./dist/components/tooltip.js",
       "default": "./dist/components/tooltip.js"
+    },
+    "./automation": {
+      "types": "./dist/automation/index.d.ts",
+      "import": "./dist/automation/index.js",
+      "default": "./dist/automation/index.js"
     }
   },
   "files": [
@@ -65,7 +70,9 @@
   },
   "dependencies": {
     "@gpuix/native": "workspace:^",
-    "react-reconciler": "^0.31.0"
+    "eventsource-parser": "^4.1.0",
+    "react-reconciler": "^0.31.0",
+    "zod": "^4.4.3"
   },
   "peerDependencies": {
     "react": "^18.0.0 || ^19.0.0"
