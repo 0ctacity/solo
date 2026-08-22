@@ -12,12 +12,8 @@
 //! />
 //! ```
 //!
-//! **Virtualization** is the reason this element owns its data instead of
-//! composing `<div>`s from JS. gpui's `list()` takes a `'static` render closure
-//! that runs during layout, long after `render()` returned, so it cannot borrow
-//! anything from the renderer. Because the patch is parsed into plain Rust here,
-//! the closure can capture an `Rc` of it and build only the rows the viewport
-//! actually shows. A JS-composed diff has to build every row every frame.
+//! This element owns parsed diff data so its `gpui::list()` closure can capture
+//! an `Rc` and build only visible rows without retaining a React node per line.
 
 use std::collections::HashSet;
 use std::rc::Rc;

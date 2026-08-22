@@ -2,7 +2,7 @@ use serde::{Deserialize, Deserializer, Serialize};
 
 /// Font weight value — accepts both CSS strings ("bold", "700") and numbers (700).
 /// JS style objects commonly use both `fontWeight: "bold"` and `fontWeight: 700`.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum FontWeightValue {
     Num(f64),
@@ -10,7 +10,7 @@ pub enum FontWeightValue {
 }
 
 /// A dimension value that can be a number (pixels) or a string (percentage, auto, etc.)
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, PartialEq, Serialize)]
 #[serde(untagged)]
 pub enum DimensionValue {
     Pixels(f64),
@@ -89,7 +89,7 @@ impl<'de> Deserialize<'de> for DimensionValue {
 
 /// Style description that can be serialized from JS
 /// Note: This is only used for JSON deserialization, not direct napi binding
-#[derive(Debug, Clone, Default, Deserialize, Serialize)]
+#[derive(Debug, Clone, Default, PartialEq, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct StyleDesc {
     // Display

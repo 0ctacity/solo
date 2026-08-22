@@ -168,16 +168,16 @@ rebuilds, and re-renders the screenshot tests. **A Rust edit reaches fresh PNGs
 in about 4 seconds.** Prefer screenshot mode over `--app`: PNGs in
 `packages/react/screenshots/` can be read by an agent, a live window cannot.
 
-## Virtualization only works inside data-owning elements
+## Virtualized React children re-enter through `cx.processor`
 
-gpui's `list()` takes a `'static` render closure that runs during layout, long
-after `render()` returned, so it cannot borrow the renderer's `BuildCtx`. A
-generic `<list>` over React children is therefore **not possible** with the
-current architecture.
+`<virtual-list>` does not build its retained children during `GpuixView::render`.
+Its `gpui::list()` callback uses `cx.processor` to re-enter the `GpuixView`
+entity after the root render has returned, creates a fresh `BuildCtx`, and builds
+only the rows GPUI requests. Never capture the root render's tree guard or
+`BuildCtx` in that callback.
 
-`<diff>` virtualizes because it parses its patch into plain Rust and the closure
-captures an `Rc` of it. Any new element that needs virtualization must own its
-data the same way.
+`<diff>` still owns its parsed Rust data because one native diff node is much
+cheaper than retaining one React node per line.
 
 ## Ported code
 

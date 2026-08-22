@@ -395,9 +395,11 @@ impl TestGpuixRenderer {
 
             cx.update_window(window, |_, window, app| {
                 view.update(app, |view, cx| {
+                    view.reveal_virtual_list_ancestor(id);
                     if let Some(handle) = view.focus_handles.get(&id) {
                         handle.focus(window, cx);
                     }
+                    cx.notify();
                 });
             })
             .map_err(|e| Error::from_reason(e.to_string()))?;
@@ -528,6 +530,9 @@ impl TestGpuixRenderer {
             let view = view.clone();
             cx.update_window(window, |_, _window, app| {
                 view.update(app, |view, _cx| {
+                    if view.set_virtual_list_offset(id, x as f32, y as f32) {
+                        return;
+                    }
                     if let Some(handle) = view.scroll_handles.get(&id) {
                         handle.set_offset(gpui::point(gpui::px(x as f32), gpui::px(y as f32)));
                     }
@@ -548,6 +553,9 @@ impl TestGpuixRenderer {
             let view = view.clone();
             cx.update_window(window, |_, _window, app| {
                 view.update(app, |view, _cx| {
+                    if view.scroll_virtual_list_to_item(id, index) {
+                        return;
+                    }
                     if let Some(handle) = view.scroll_handles.get(&id) {
                         handle.scroll_to_item(index);
                     }
@@ -568,6 +576,9 @@ impl TestGpuixRenderer {
             let result = cx
                 .update_window(window, |_, _window, app| {
                     view.update(app, |view, _cx| {
+                        if let Some(offset) = view.virtual_list_offset(id) {
+                            return Some(offset.to_vec());
+                        }
                         view.scroll_handles.get(&id).map(|handle| {
                             let offset = handle.offset();
                             vec![

@@ -1,0 +1,201 @@
+/// The native <virtual-list>: lazy rows, programmatic scrolling, and chat tail following.
+
+import React from "react"
+import { describe, expect, it } from "vitest"
+import { createTestRoot } from "../testing.js"
+
+function Rows({ count }: { count: number }) {
+  return Array.from({ length: count }, (_, index) => (
+    <div
+      key={index}
+      style={{
+        display: "flex",
+        height: 40,
+        flexShrink: 0,
+        alignItems: "center",
+      }}
+    >
+      <text>{`row-${index}`}</text>
+    </div>
+  ))
+}
+
+function FocusableRows({ inputIndex = 0 }: { inputIndex?: number }) {
+  const [value, setValue] = React.useState("")
+  return (
+    <virtual-list
+      overdraw={0}
+      estimatedItemHeight={40}
+      style={{ width: 400, height: 160 }}
+    >
+      {Array.from({ length: 30 }, (_, index) => (
+        <div key={index} style={{ height: 40, flexShrink: 0 }}>
+          {index === inputIndex ? (
+            <input
+              autoFocus
+              placeholder="focused-input"
+              value={value}
+              onChange={(event) => setValue(event.value ?? "")}
+            />
+          ) : (
+            <text>{`row-${index}`}</text>
+          )}
+        </div>
+      ))}
+    </virtual-list>
+  )
+}
+
+function DynamicFocusableRows({ enabled }: { enabled: boolean }) {
+  const [value, setValue] = React.useState("")
+  return (
+    <virtual-list
+      overdraw={0}
+      estimatedItemHeight={40}
+      style={{ width: 400, height: 160 }}
+    >
+      {Array.from({ length: 30 }, (_, index) => (
+        <div key={index} style={{ height: 40, flexShrink: 0 }}>
+          {index === 0 && enabled ? (
+            <input
+              autoFocus
+              value={value}
+              onChange={(event) => setValue(event.value ?? "")}
+            />
+          ) : (
+            <text>{`row-${index}`}</text>
+          )}
+        </div>
+      ))}
+    </virtual-list>
+  )
+}
+
+describe("<virtual-list>", () => {
+  it("builds and paints only rows near the viewport", () => {
+    const { render, renderer } = createTestRoot()
+    render(
+      <virtual-list
+        overdraw={0}
+        estimatedItemHeight={40}
+        style={{ width: 400, height: 160 }}
+      >
+        <Rows count={100} />
+      </virtual-list>
+    )
+
+    expect(renderer.getAllText()).toHaveLength(100)
+
+    const painted = renderer.getPaintedText()
+    expect(painted).toContain("row-0")
+    expect(painted).not.toContain("row-99")
+    expect(painted.length).toBeLessThan(10)
+  })
+
+  it("builds a distant row when it is scrolled into view", () => {
+    const { render, renderer } = createTestRoot()
+    render(
+      <virtual-list
+        overdraw={0}
+        estimatedItemHeight={40}
+        style={{ width: 400, height: 160 }}
+      >
+        <Rows count={100} />
+      </virtual-list>
+    )
+
+    const list = renderer.findByType("virtual-list")[0]
+    expect(list.children).toHaveLength(100)
+    renderer.scrollToItem(list.id, 99)
+    expect(renderer.getScrollOffset(list.id)?.[1]).toBeLessThan(-100)
+
+    const painted = renderer.getPaintedText()
+    expect(painted).toContain("row-99")
+    expect(painted).not.toContain("row-0")
+  })
+
+  it("lazily builds custom elements inside rows", () => {
+    const { render, renderer } = createTestRoot()
+    render(
+      <virtual-list
+        overdraw={0}
+        estimatedItemHeight={80}
+        style={{ width: 400, height: 160 }}
+      >
+        {Array.from({ length: 30 }, (_, index) => (
+          <div key={index} style={{ minHeight: 80, flexShrink: 0 }}>
+            {index === 20 ? <markdown source="# Lazy markdown" /> : <text>{`row-${index}`}</text>}
+          </div>
+        ))}
+      </virtual-list>
+    )
+
+    expect(renderer.findByType("markdown")).toHaveLength(1)
+    expect(renderer.getPaintedText()).not.toContain("Lazy markdown")
+
+    const list = renderer.findByType("virtual-list")[0]
+    renderer.scrollToItem(list.id, 20)
+    expect(renderer.getPaintedText()).toContain("Lazy markdown")
+  })
+
+  it("keeps a focused row active when it scrolls offscreen", () => {
+    const { render, renderer } = createTestRoot()
+    render(<FocusableRows />)
+
+    const input = renderer.findByType("input")[0]
+    renderer.simulateKeystrokes("a")
+    expect(renderer.getElement(input.id)?.customProps?.value).toBe("a")
+
+    const list = renderer.findByType("virtual-list")[0]
+    renderer.scrollToItem(list.id, 29)
+    renderer.simulateKeystrokes("b")
+    expect(renderer.getElement(input.id)?.customProps?.value).toBe("ab")
+  })
+
+  it("reveals an initially focused offscreen row", () => {
+    const { render, renderer } = createTestRoot()
+    render(<FocusableRows inputIndex={20} />)
+
+    expect(renderer.getPaintedText()).toContain("focused-input")
+
+    const input = renderer.findByType("input")[0]
+    renderer.simulateKeystrokes("a")
+    expect(renderer.getElement(input.id)?.customProps?.value).toBe("a")
+  })
+
+  it("updates focus retention when an existing row becomes focusable", () => {
+    const { render, renderer } = createTestRoot()
+    render(<DynamicFocusableRows enabled={false} />)
+    render(<DynamicFocusableRows enabled />)
+
+    const input = renderer.findByType("input")[0]
+    const list = renderer.findByType("virtual-list")[0]
+    renderer.scrollToItem(list.id, 29)
+    renderer.simulateKeystrokes("a")
+
+    expect(renderer.getElement(input.id)?.customProps?.value).toBe("a")
+  })
+
+  it("follows appended chat rows while tail following is active", () => {
+    const { render, renderer } = createTestRoot()
+    const transcript = (count: number) => (
+      <virtual-list
+        alignment="bottom"
+        followTail
+        overdraw={0}
+        estimatedItemHeight={40}
+        style={{ width: 400, height: 160 }}
+      >
+        <Rows count={count} />
+      </virtual-list>
+    )
+
+    render(transcript(20))
+    expect(renderer.getPaintedText()).toContain("row-19")
+    expect(renderer.getPaintedText()).not.toContain("row-0")
+
+    render(transcript(21))
+    expect(renderer.getPaintedText()).toContain("row-20")
+    expect(renderer.getPaintedText()).not.toContain("row-0")
+  })
+})

@@ -1,8 +1,8 @@
 /// Retained element tree — the Rust-side source of truth for the UI.
 ///
 /// React's reconciler sends mutations (create, append, remove, etc.) via napi.
-/// This tree stores those mutations. On each GPUI frame, GpuixView::render()
-/// walks this tree to build ephemeral GPUI elements.
+/// This tree stores those mutations. GpuixView builds ephemeral GPUI elements
+/// from it, while virtual lists defer offscreen subtrees until layout requests them.
 ///
 /// All IDs are u64 — JS generates them with an incrementing counter,
 /// passes them as numbers across napi (no string allocation).
@@ -24,10 +24,12 @@ pub struct RetainedElement {
     /// Take keyboard focus the first time this element gets a focus handle.
     /// Without it an `<input>` is dead until the user clicks it.
     pub auto_focus: bool,
+    /// Last mutation applied to this element or one of its descendants.
+    pub subtree_revision: u64,
 }
 
 impl RetainedElement {
-    pub fn new(id: u64, element_type: String) -> Self {
+    pub fn new(id: u64, element_type: String, revision: u64) -> Self {
         Self {
             id,
             element_type,
@@ -37,6 +39,7 @@ impl RetainedElement {
             children: Vec::new(),
             parent: None,
             auto_focus: false,
+            subtree_revision: revision,
             custom_props: HashMap::new(),
         }
     }
@@ -46,6 +49,7 @@ pub struct RetainedTree {
     pub elements: HashMap<u64, RetainedElement>,
     /// The root element ID set by appendChildToContainer.
     pub root_id: Option<u64>,
+    next_revision: u64,
 }
 
 impl RetainedTree {
@@ -53,12 +57,32 @@ impl RetainedTree {
         Self {
             elements: HashMap::new(),
             root_id: None,
+            next_revision: 1,
         }
     }
 
     pub fn create_element(&mut self, id: u64, element_type: String) {
+        let revision = self.take_revision();
         self.elements
-            .insert(id, RetainedElement::new(id, element_type));
+            .insert(id, RetainedElement::new(id, element_type, revision));
+    }
+
+    fn take_revision(&mut self) -> u64 {
+        let revision = self.next_revision;
+        self.next_revision = self.next_revision.wrapping_add(1).max(1);
+        revision
+    }
+
+    fn mark_changed(&mut self, id: u64) {
+        let revision = self.take_revision();
+        let mut current = Some(id);
+        while let Some(current_id) = current {
+            let Some(element) = self.elements.get_mut(&current_id) else {
+                break;
+            };
+            element.subtree_revision = revision;
+            current = element.parent;
+        }
     }
 
     /// Recursively destroy an element and all its children.
@@ -83,7 +107,8 @@ impl RetainedTree {
 
     pub fn append_child(&mut self, parent_id: u64, child_id: u64) {
         // Remove from old parent if any
-        if let Some(old_parent_id) = self.elements.get(&child_id).and_then(|e| e.parent) {
+        let old_parent_id = self.elements.get(&child_id).and_then(|e| e.parent);
+        if let Some(old_parent_id) = old_parent_id {
             if let Some(old_parent) = self.elements.get_mut(&old_parent_id) {
                 old_parent.children.retain(|c| *c != child_id);
             }
@@ -96,6 +121,10 @@ impl RetainedTree {
         if let Some(parent) = self.elements.get_mut(&parent_id) {
             parent.children.push(child_id);
         }
+        if let Some(old_parent_id) = old_parent_id {
+            self.mark_changed(old_parent_id);
+        }
+        self.mark_changed(parent_id);
     }
 
     pub fn remove_child(&mut self, parent_id: u64, child_id: u64) {
@@ -105,11 +134,13 @@ impl RetainedTree {
         if let Some(child) = self.elements.get_mut(&child_id) {
             child.parent = None;
         }
+        self.mark_changed(parent_id);
     }
 
     pub fn insert_before(&mut self, parent_id: u64, child_id: u64, before_id: u64) {
         // Remove from old parent if any
-        if let Some(old_parent_id) = self.elements.get(&child_id).and_then(|e| e.parent) {
+        let old_parent_id = self.elements.get(&child_id).and_then(|e| e.parent);
+        if let Some(old_parent_id) = old_parent_id {
             if let Some(old_parent) = self.elements.get_mut(&old_parent_id) {
                 old_parent.children.retain(|c| *c != child_id);
             }
@@ -127,18 +158,35 @@ impl RetainedTree {
                 .unwrap_or(parent.children.len());
             parent.children.insert(pos, child_id);
         }
+        if let Some(old_parent_id) = old_parent_id {
+            self.mark_changed(old_parent_id);
+        }
+        self.mark_changed(parent_id);
     }
 
     pub fn set_style(&mut self, id: u64, style: StyleDesc) {
+        let mut changed = false;
         if let Some(element) = self.elements.get_mut(&id) {
-            // StyleDesc with all None fields = no style (cleared)
-            element.style = Some(style);
+            if element.style.as_ref() != Some(&style) {
+                element.style = Some(style);
+                changed = true;
+            }
+        }
+        if changed {
+            self.mark_changed(id);
         }
     }
 
     pub fn set_text(&mut self, id: u64, content: String) {
+        let mut changed = false;
         if let Some(element) = self.elements.get_mut(&id) {
-            element.content = Some(content);
+            if element.content.as_ref() != Some(&content) {
+                element.content = Some(content);
+                changed = true;
+            }
+        }
+        if changed {
+            self.mark_changed(id);
         }
     }
 
@@ -154,6 +202,7 @@ impl RetainedTree {
 
     /// Set a custom prop on an element (for non-div/text elements).
     pub fn set_custom_prop(&mut self, id: u64, key: String, value: serde_json::Value) {
+        let mut changed = false;
         if let Some(element) = self.elements.get_mut(&id) {
             // `autoFocus` applies to every element type, so it is lifted out of
             // the custom-prop map that only custom elements read.
@@ -162,10 +211,16 @@ impl RetainedTree {
                 return;
             }
             if value.is_null() {
-                element.custom_props.remove(&key);
+                changed = element.custom_props.remove(&key).is_some();
             } else {
-                element.custom_props.insert(key, value);
+                if element.custom_props.get(&key) != Some(&value) {
+                    element.custom_props.insert(key, value);
+                    changed = true;
+                }
             }
+        }
+        if changed {
+            self.mark_changed(id);
         }
     }
 

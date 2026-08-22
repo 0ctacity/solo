@@ -22,7 +22,6 @@ use napi::threadsafe_function::{ThreadsafeFunction, ThreadsafeFunctionCallMode};
 use napi_derive::napi;
 use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
-#[cfg(target_os = "macos")]
 use std::rc::Rc;
 #[cfg(any(target_os = "windows", target_os = "linux", target_os = "freebsd"))]
 use std::sync::mpsc::{sync_channel, RecvTimeoutError, SyncSender};
@@ -103,6 +102,7 @@ thread_local! {
     /// the last one to render wins. Acceptable for now (single-window only).
     /// TODO: Scope by renderer/window ID when multi-window support is added.
     static SCROLL_HANDLES: RefCell<HashMap<u64, gpui::ScrollHandle>> = RefCell::new(HashMap::new());
+    static VIRTUAL_LIST_STATES: RefCell<HashMap<u64, gpui::ListState>> = RefCell::new(HashMap::new());
 }
 
 #[cfg(target_os = "macos")]
@@ -181,38 +181,74 @@ async fn run_ui_commands(
                 window.refresh();
             }),
             UiCommand::ScrollTo { id, x, y } => {
-                SCROLL_HANDLES.with(|cell| {
-                    if let Some(handle) = cell.borrow().get(&id) {
-                        handle.set_offset(gpui::point(gpui::px(x), gpui::px(y)));
-                    }
-                });
+                if !VIRTUAL_LIST_STATES.with(|cell| {
+                    let states = cell.borrow();
+                    let Some(state) = states.get(&id) else {
+                        return false;
+                    };
+                    state.set_offset_from_scrollbar(gpui::point(gpui::px(x), gpui::px(y)));
+                    true
+                }) {
+                    SCROLL_HANDLES.with(|cell| {
+                        if let Some(handle) = cell.borrow().get(&id) {
+                            handle.set_offset(gpui::point(gpui::px(x), gpui::px(y)));
+                        }
+                    });
+                }
                 refresh_ui_window(window, cx)
             }
             UiCommand::ScrollToItem { id, index } => {
-                SCROLL_HANDLES.with(|cell| {
-                    if let Some(handle) = cell.borrow().get(&id) {
-                        handle.scroll_to_item(index);
-                    }
-                });
+                if !VIRTUAL_LIST_STATES.with(|cell| {
+                    let states = cell.borrow();
+                    let Some(state) = states.get(&id) else {
+                        return false;
+                    };
+                    state.scroll_to(gpui::ListOffset {
+                        item_ix: index,
+                        offset_in_item: gpui::px(0.0),
+                    });
+                    true
+                }) {
+                    SCROLL_HANDLES.with(|cell| {
+                        if let Some(handle) = cell.borrow().get(&id) {
+                            handle.scroll_to_item(index);
+                        }
+                    });
+                }
                 refresh_ui_window(window, cx)
             }
             UiCommand::GetScrollOffset { id, response } => {
-                let offset = SCROLL_HANDLES.with(|cell| {
-                    cell.borrow().get(&id).map(|handle| {
-                        let offset = handle.offset();
-                        [
-                            f64::from(f32::from(offset.x)),
-                            f64::from(f32::from(offset.y)),
-                        ]
+                let offset = VIRTUAL_LIST_STATES
+                    .with(|cell| {
+                        cell.borrow().get(&id).map(|state| {
+                            let offset = state.scroll_px_offset_for_scrollbar();
+                            [
+                                f64::from(f32::from(offset.x)),
+                                f64::from(f32::from(offset.y)),
+                            ]
+                        })
                     })
-                });
+                    .or_else(|| {
+                        SCROLL_HANDLES.with(|cell| {
+                            cell.borrow().get(&id).map(|handle| {
+                                let offset = handle.offset();
+                                [
+                                    f64::from(f32::from(offset.x)),
+                                    f64::from(f32::from(offset.y)),
+                                ]
+                            })
+                        })
+                    });
                 response.send(offset).ok();
                 Ok(())
             }
             UiCommand::FocusElement(id) => window.update(cx, move |view, window, cx| {
+                view.reveal_virtual_list_ancestor(id);
                 if let Some(handle) = view.focus_handles.get(&id) {
                     handle.focus(window, cx);
                 }
+                cx.notify();
+                window.refresh();
             }),
             UiCommand::Blur => window.update(cx, |_view, window, _cx| window.blur()),
         };
@@ -726,9 +762,12 @@ impl GpuixRenderer {
         let id = to_element_id(element_id)?;
         #[cfg(target_os = "macos")]
         return update_window(move |view, window, cx| {
+            view.reveal_virtual_list_ancestor(id);
             if let Some(handle) = view.focus_handles.get(&id) {
                 handle.focus(window, cx);
             }
+            cx.notify();
+            window.refresh();
         });
 
         #[cfg(any(target_os = "windows", target_os = "linux", target_os = "freebsd"))]
@@ -776,8 +815,7 @@ impl GpuixRenderer {
     }
 
     // ── Scroll API ───────────────────────────────────────────────────
-    // ScrollHandle is Rc<RefCell<...>> — its methods work without an App context.
-    // GpuixView syncs handles to the SCROLL_HANDLES thread_local on each render.
+    // GpuixView syncs scroll handles and virtual list states to thread-local maps.
 
     /// Set the scroll offset of a scrollable element.
     /// x and y are negative pixel values (scroll down = more negative y).
@@ -785,12 +823,21 @@ impl GpuixRenderer {
     pub fn scroll_to(&self, element_id: f64, x: f64, y: f64) -> Result<()> {
         let id = to_element_id(element_id)?;
         #[cfg(target_os = "macos")]
-        SCROLL_HANDLES.with(|cell| {
-            let handles = cell.borrow();
-            if let Some(handle) = handles.get(&id) {
-                handle.set_offset(gpui::point(gpui::px(x as f32), gpui::px(y as f32)));
-            }
-        });
+        if !VIRTUAL_LIST_STATES.with(|cell| {
+            let states = cell.borrow();
+            let Some(state) = states.get(&id) else {
+                return false;
+            };
+            state.set_offset_from_scrollbar(gpui::point(gpui::px(x as f32), gpui::px(y as f32)));
+            true
+        }) {
+            SCROLL_HANDLES.with(|cell| {
+                let handles = cell.borrow();
+                if let Some(handle) = handles.get(&id) {
+                    handle.set_offset(gpui::point(gpui::px(x as f32), gpui::px(y as f32)));
+                }
+            });
+        }
         #[cfg(target_os = "macos")]
         return invalidate_window();
 
@@ -816,12 +863,24 @@ impl GpuixRenderer {
         let id = to_element_id(element_id)?;
         let index = index as usize;
         #[cfg(target_os = "macos")]
-        SCROLL_HANDLES.with(|cell| {
-            let handles = cell.borrow();
-            if let Some(handle) = handles.get(&id) {
-                handle.scroll_to_item(index);
-            }
-        });
+        if !VIRTUAL_LIST_STATES.with(|cell| {
+            let states = cell.borrow();
+            let Some(state) = states.get(&id) else {
+                return false;
+            };
+            state.scroll_to(gpui::ListOffset {
+                item_ix: index,
+                offset_in_item: gpui::px(0.0),
+            });
+            true
+        }) {
+            SCROLL_HANDLES.with(|cell| {
+                let handles = cell.borrow();
+                if let Some(handle) = handles.get(&id) {
+                    handle.scroll_to_item(index);
+                }
+            });
+        }
         #[cfg(target_os = "macos")]
         return invalidate_window();
 
@@ -843,16 +902,28 @@ impl GpuixRenderer {
     pub fn get_scroll_offset(&self, element_id: f64) -> Result<Option<Vec<f64>>> {
         let id = to_element_id(element_id)?;
         #[cfg(target_os = "macos")]
-        return Ok(SCROLL_HANDLES.with(|cell| {
-            let handles = cell.borrow();
-            handles.get(&id).map(|handle| {
-                let offset = handle.offset();
-                vec![
-                    f64::from(f32::from(offset.x)),
-                    f64::from(f32::from(offset.y)),
-                ]
+        return Ok(VIRTUAL_LIST_STATES
+            .with(|cell| {
+                cell.borrow().get(&id).map(|state| {
+                    let offset = state.scroll_px_offset_for_scrollbar();
+                    vec![
+                        f64::from(f32::from(offset.x)),
+                        f64::from(f32::from(offset.y)),
+                    ]
+                })
             })
-        }));
+            .or_else(|| {
+                SCROLL_HANDLES.with(|cell| {
+                    let handles = cell.borrow();
+                    handles.get(&id).map(|handle| {
+                        let offset = handle.offset();
+                        vec![
+                            f64::from(f32::from(offset.x)),
+                            f64::from(f32::from(offset.y)),
+                        ]
+                    })
+                })
+            }));
 
         #[cfg(any(target_os = "windows", target_os = "linux", target_os = "freebsd"))]
         {
@@ -907,6 +978,8 @@ pub(crate) struct GpuixView {
     pub(crate) scroll_handles: HashMap<u64, gpui::ScrollHandle>,
     /// Live text selection, shared with the paint closures and the napi methods.
     pub(crate) selection: SharedSelection,
+    /// Persistent measurement and scroll state for React-backed virtual lists.
+    virtual_lists: HashMap<u64, VirtualListEntry>,
 }
 
 impl GpuixView {
@@ -925,7 +998,126 @@ impl GpuixView {
             custom_registry: CustomElementRegistry::with_defaults(),
             scroll_handles: HashMap::new(),
             selection,
+            virtual_lists: HashMap::new(),
         }
+    }
+
+    fn build_virtual_child(
+        &mut self,
+        list_id: u64,
+        index: usize,
+        expected_child_id: u64,
+        inherited: Inherited,
+        window: &mut gpui::Window,
+        cx: &mut gpui::Context<Self>,
+    ) -> gpui::AnyElement {
+        use gpui::prelude::*;
+
+        let row_focus_handle = self.virtual_lists.get_mut(&list_id).and_then(|entry| {
+            entry.seen_rows.insert(expected_child_id);
+            (entry.child_ids.get(index) == Some(&expected_child_id))
+                .then(|| entry.row_focus_handles.get(index).cloned())
+                .flatten()
+                .flatten()
+        });
+
+        let tree_arc = self.tree.clone();
+        let tree = tree_arc.lock().unwrap();
+        let child_matches = tree
+            .elements
+            .get(&list_id)
+            .and_then(|list| list.children.get(index))
+            == Some(&expected_child_id);
+        if !child_matches {
+            return gpui::Empty.into_any_element();
+        }
+
+        let callback = self.event_callback.clone();
+        let mut build_ctx = BuildCtx {
+            tree: &tree,
+            event_callback: &callback,
+            focus_handles: &self.focus_handles,
+            scroll_handles: &mut self.scroll_handles,
+            custom_registry: &mut self.custom_registry,
+            virtual_lists: &mut self.virtual_lists,
+            selection: self.selection.clone(),
+            inherited,
+        };
+        let child = build_element(expected_child_id, &mut build_ctx, window, cx);
+        let Some(focus_handle) = row_focus_handle else {
+            return child;
+        };
+        gpui::div()
+            .id(gpui::SharedString::from(format!(
+                "__gpuix_virtual_row_{}_{}",
+                list_id, expected_child_id
+            )))
+            .w_full()
+            .track_focus(&focus_handle)
+            .child(child)
+            .into_any_element()
+    }
+
+    pub(crate) fn scroll_virtual_list_to_item(&self, id: u64, index: usize) -> bool {
+        let Some(entry) = self.virtual_lists.get(&id) else {
+            return false;
+        };
+        entry.state.scroll_to(gpui::ListOffset {
+            item_ix: index,
+            offset_in_item: gpui::px(0.0),
+        });
+        true
+    }
+
+    pub(crate) fn set_virtual_list_offset(&self, id: u64, x: f32, y: f32) -> bool {
+        let Some(entry) = self.virtual_lists.get(&id) else {
+            return false;
+        };
+        entry
+            .state
+            .set_offset_from_scrollbar(gpui::point(gpui::px(x), gpui::px(y)));
+        true
+    }
+
+    pub(crate) fn virtual_list_offset(&self, id: u64) -> Option<[f64; 2]> {
+        let offset = self
+            .virtual_lists
+            .get(&id)?
+            .state
+            .scroll_px_offset_for_scrollbar();
+        Some([
+            f64::from(f32::from(offset.x)),
+            f64::from(f32::from(offset.y)),
+        ])
+    }
+
+    pub(crate) fn reveal_virtual_list_ancestor(&self, id: u64) -> bool {
+        let tree_arc = self.tree.clone();
+        let tree = tree_arc.lock().unwrap();
+        let mut current = id;
+        let location = loop {
+            let Some(parent_id) = tree
+                .elements
+                .get(&current)
+                .and_then(|element| element.parent)
+            else {
+                break None;
+            };
+            if self.virtual_lists.contains_key(&parent_id) {
+                let index = tree
+                    .elements
+                    .get(&parent_id)
+                    .and_then(|parent| parent.children.iter().position(|child| *child == current));
+                break index.map(|index| (parent_id, index));
+            }
+            current = parent_id;
+        };
+        drop(tree);
+
+        let Some((list_id, index)) = location else {
+            return false;
+        };
+        self.scroll_virtual_list_to_item(list_id, index)
     }
 }
 
@@ -940,6 +1132,7 @@ pub(crate) struct BuildCtx<'a> {
     pub focus_handles: &'a HashMap<u64, gpui::FocusHandle>,
     pub scroll_handles: &'a mut HashMap<u64, gpui::ScrollHandle>,
     pub custom_registry: &'a mut CustomElementRegistry,
+    virtual_lists: &'a mut HashMap<u64, VirtualListEntry>,
     pub selection: SharedSelection,
     /// Inherited text state, resolved the way CSS inherits it. The renderer's
     /// own theme only seeds the root selection wash; custom elements resolve
@@ -985,6 +1178,184 @@ impl Inherited {
     }
 }
 
+#[derive(Clone, Copy, PartialEq)]
+struct VirtualListConfig {
+    alignment: gpui::ListAlignment,
+    follow_tail: bool,
+    overdraw: f32,
+    estimated_item_height: Option<f32>,
+}
+
+impl VirtualListConfig {
+    fn from_element(element: &crate::retained_tree::RetainedElement) -> Self {
+        let prop = |key: &str| element.custom_props.get(key);
+        let alignment = match prop("alignment").and_then(serde_json::Value::as_str) {
+            Some("bottom") => gpui::ListAlignment::Bottom,
+            _ => gpui::ListAlignment::Top,
+        };
+        let follow_tail = prop("followTail")
+            .and_then(serde_json::Value::as_bool)
+            .unwrap_or(false);
+        let overdraw = prop("overdraw")
+            .and_then(serde_json::Value::as_f64)
+            .unwrap_or(512.0)
+            .max(0.0) as f32;
+        let estimated_item_height = prop("estimatedItemHeight")
+            .and_then(serde_json::Value::as_f64)
+            .filter(|height| *height > 0.0)
+            .map(|height| height as f32);
+        Self {
+            alignment,
+            follow_tail,
+            overdraw,
+            estimated_item_height,
+        }
+    }
+
+    fn make_state(self, focus_handles: &[Option<gpui::FocusHandle>]) -> gpui::ListState {
+        let item_count = focus_handles.len();
+        let mut state = gpui::ListState::new(item_count, self.alignment, gpui::px(self.overdraw));
+        state.splice_focusable(0..item_count, focus_handles.iter().cloned());
+        if let Some(height) = self.estimated_item_height {
+            state = state.with_uniform_item_height(gpui::px(height));
+        }
+        if self.follow_tail {
+            state.set_follow_mode(gpui::FollowMode::Tail);
+        }
+        state
+    }
+}
+
+struct VirtualListEntry {
+    state: gpui::ListState,
+    config: VirtualListConfig,
+    child_ids: Vec<u64>,
+    child_revisions: Vec<u64>,
+    row_focus_handles: Vec<Option<gpui::FocusHandle>>,
+    seen_rows: HashSet<u64>,
+}
+
+impl VirtualListEntry {
+    fn new(
+        config: VirtualListConfig,
+        child_ids: Vec<u64>,
+        child_revisions: Vec<u64>,
+        row_focus_handles: Vec<Option<gpui::FocusHandle>>,
+    ) -> Self {
+        Self {
+            state: config.make_state(&row_focus_handles),
+            config,
+            child_ids,
+            child_revisions,
+            row_focus_handles,
+            seen_rows: HashSet::new(),
+        }
+    }
+
+    fn sync(
+        &mut self,
+        config: VirtualListConfig,
+        child_ids: Vec<u64>,
+        child_revisions: Vec<u64>,
+        focusable_rows: &HashSet<u64>,
+        cx: &mut gpui::Context<GpuixView>,
+    ) {
+        let old_rows: HashMap<u64, (u64, Option<gpui::FocusHandle>)> = self
+            .child_ids
+            .iter()
+            .copied()
+            .zip(self.child_revisions.iter().copied())
+            .zip(self.row_focus_handles.iter().cloned())
+            .map(|((id, revision), focus_handle)| (id, (revision, focus_handle)))
+            .collect();
+        let row_focus_handles: Vec<Option<gpui::FocusHandle>> = child_ids
+            .iter()
+            .map(|id| {
+                focusable_rows.contains(id).then(|| {
+                    old_rows
+                        .get(id)
+                        .and_then(|(_, focus_handle)| focus_handle.clone())
+                        .unwrap_or_else(|| cx.focus_handle())
+                })
+            })
+            .collect();
+        if self.config != config {
+            let scroll_top = self.state.logical_scroll_top();
+            let should_follow =
+                config.follow_tail && (!self.config.follow_tail || self.state.is_following_tail());
+            let mut replacement = Self::new(config, child_ids, child_revisions, row_focus_handles);
+            replacement.seen_rows = std::mem::take(&mut self.seen_rows);
+            replacement
+                .seen_rows
+                .retain(|id| replacement.child_ids.contains(id));
+            if !should_follow {
+                replacement.state.scroll_to(scroll_top);
+            }
+            *self = replacement;
+            return;
+        }
+
+        if self.child_ids != child_ids {
+            let prefix = self
+                .child_ids
+                .iter()
+                .zip(&child_ids)
+                .take_while(|(old, new)| old == new)
+                .count();
+            let suffix = self.child_ids[prefix..]
+                .iter()
+                .rev()
+                .zip(child_ids[prefix..].iter().rev())
+                .take_while(|(old, new)| old == new)
+                .count();
+            self.state.splice_focusable(
+                prefix..self.child_ids.len().saturating_sub(suffix),
+                row_focus_handles[prefix..row_focus_handles.len().saturating_sub(suffix)]
+                    .iter()
+                    .cloned(),
+            );
+            if let Some(height) = config.estimated_item_height {
+                self.state = self
+                    .state
+                    .clone()
+                    .with_uniform_item_height(gpui::px(height));
+            }
+        }
+
+        for (index, (&id, focus_handle)) in child_ids.iter().zip(&row_focus_handles).enumerate() {
+            let focusability_changed = old_rows
+                .get(&id)
+                .is_some_and(|(_, old_handle)| old_handle.is_some() != focus_handle.is_some());
+            if focusability_changed {
+                self.state
+                    .splice_focusable(index..index + 1, std::iter::once(focus_handle.clone()));
+            }
+        }
+
+        let mut changed_start = None;
+        for (index, (&id, &revision)) in child_ids.iter().zip(&child_revisions).enumerate() {
+            let changed = old_rows
+                .get(&id)
+                .is_some_and(|(old_revision, _)| *old_revision != revision);
+            match (changed_start, changed) {
+                (None, true) => changed_start = Some(index),
+                (Some(start), false) => {
+                    self.state.remeasure_items(start..index);
+                    changed_start = None;
+                }
+                _ => {}
+            }
+        }
+        if let Some(start) = changed_start {
+            self.state.remeasure_items(start..child_ids.len());
+        }
+
+        self.child_ids = child_ids;
+        self.child_revisions = child_revisions;
+        self.row_focus_handles = row_focus_handles;
+    }
+}
+
 impl GpuixView {
     /// Sync focus handles with the current element tree.
     /// Creates handles for new focusable elements, subscribes on_focus/on_blur,
@@ -1016,6 +1387,7 @@ impl GpuixView {
             let tab_index = tab_index(element).or_else(|| {
                 matches!(element.element_type.as_str(), "input" | "textarea").then_some(0)
             });
+
             if needs_focus(element) && !self.focus_handles.contains_key(&id) {
                 let handle = match tab_index {
                     Some(index) => cx.focus_handle().tab_index(index).tab_stop(index >= 0),
@@ -1100,6 +1472,8 @@ impl gpui::Render for GpuixView {
         // from scroll to non-scroll) is handled inside build_div().
         self.scroll_handles
             .retain(|id, _| tree.elements.contains_key(id));
+        self.virtual_lists
+            .retain(|id, _| tree.elements.contains_key(id));
 
         // Build the element tree. custom_registry, focus_handles, and scroll_handles
         // are different fields of self, so Rust allows borrowing all simultaneously.
@@ -1112,6 +1486,7 @@ impl gpui::Render for GpuixView {
                     focus_handles: &self.focus_handles,
                     scroll_handles: &mut self.scroll_handles,
                     custom_registry: &mut self.custom_registry,
+                    virtual_lists: &mut self.virtual_lists,
                     selection: self.selection.clone(),
                     inherited: Inherited::root(&theme),
                 };
@@ -1142,6 +1517,13 @@ impl gpui::Render for GpuixView {
             handles.clear();
             for (&id, handle) in &self.scroll_handles {
                 handles.insert(id, handle.clone());
+            }
+        });
+        VIRTUAL_LIST_STATES.with(|cell| {
+            let mut states = cell.borrow_mut();
+            states.clear();
+            for (&id, entry) in &self.virtual_lists {
+                states.insert(id, entry.state.clone());
             }
         });
 
@@ -1176,6 +1558,10 @@ pub(crate) fn build_element(
         "text" => {
             ctx.custom_registry.destroy(id);
             build_text(element, ctx, window, cx)
+        }
+        "virtual-list" => {
+            ctx.custom_registry.destroy(id);
+            build_virtual_list(element, ctx, window, cx)
         }
 
         // Polymorphic dispatch for all custom elements.
@@ -1254,6 +1640,125 @@ pub(crate) fn build_element(
 
     ctx.inherited = parent_inherited;
     built
+}
+
+fn build_virtual_list(
+    element: &crate::retained_tree::RetainedElement,
+    ctx: &mut BuildCtx,
+    window: &mut gpui::Window,
+    cx: &mut gpui::Context<GpuixView>,
+) -> gpui::AnyElement {
+    use gpui::prelude::*;
+
+    let child_ids: Vec<u64> = element
+        .children
+        .iter()
+        .copied()
+        .filter(|child_id| ctx.tree.elements.contains_key(child_id))
+        .collect();
+    let child_revisions: Vec<u64> = child_ids
+        .iter()
+        .filter_map(|child_id| {
+            ctx.tree
+                .elements
+                .get(child_id)
+                .map(|child| child.subtree_revision)
+        })
+        .collect();
+    let focusable_rows: HashSet<u64> = ctx
+        .focus_handles
+        .keys()
+        .filter_map(|element_id| virtual_row_ancestor(ctx.tree, element.id, *element_id))
+        .collect();
+    let focused_row = ctx
+        .focus_handles
+        .iter()
+        .find_map(|(element_id, handle)| {
+            handle
+                .is_focused(window)
+                .then(|| virtual_row_ancestor(ctx.tree, element.id, *element_id))
+                .flatten()
+        })
+        .or_else(|| {
+            ctx.focus_handles.keys().find_map(|element_id| {
+                ctx.tree
+                    .elements
+                    .get(element_id)
+                    .is_some_and(|element| element.auto_focus)
+                    .then(|| virtual_row_ancestor(ctx.tree, element.id, *element_id))
+                    .flatten()
+            })
+        });
+    let config = VirtualListConfig::from_element(element);
+    let list_state = match ctx.virtual_lists.entry(element.id) {
+        std::collections::hash_map::Entry::Occupied(mut entry) => {
+            entry.get_mut().sync(
+                config,
+                child_ids.clone(),
+                child_revisions,
+                &focusable_rows,
+                cx,
+            );
+            let entry = entry.into_mut();
+            if let Some(row_id) = focused_row.filter(|row_id| !entry.seen_rows.contains(row_id)) {
+                if let Some(index) = entry.child_ids.iter().position(|id| *id == row_id) {
+                    entry.state.scroll_to(gpui::ListOffset {
+                        item_ix: index,
+                        offset_in_item: gpui::px(0.0),
+                    });
+                }
+            }
+            entry.state.clone()
+        }
+        std::collections::hash_map::Entry::Vacant(entry) => {
+            let row_focus_handles = child_ids
+                .iter()
+                .map(|id| focusable_rows.contains(id).then(|| cx.focus_handle()))
+                .collect();
+            let entry = entry.insert(VirtualListEntry::new(
+                config,
+                child_ids.clone(),
+                child_revisions,
+                row_focus_handles,
+            ));
+            if let Some(row_id) = focused_row {
+                if let Some(index) = entry.child_ids.iter().position(|id| *id == row_id) {
+                    entry.state.scroll_to(gpui::ListOffset {
+                        item_ix: index,
+                        offset_in_item: gpui::px(0.0),
+                    });
+                }
+            }
+            entry.state.clone()
+        }
+    };
+
+    let list_id = element.id;
+    let child_ids = Rc::new(child_ids);
+    let inherited = ctx.inherited;
+    let render_item = cx.processor(move |view, index: usize, window, cx| {
+        let Some(&child_id) = child_ids.get(index) else {
+            return gpui::Empty.into_any_element();
+        };
+        view.build_virtual_child(list_id, index, child_id, inherited, window, cx)
+    });
+    let mut list =
+        gpui::list(list_state, render_item).with_sizing_behavior(gpui::ListSizingBehavior::Auto);
+    if let Some(style) = element.style.as_ref() {
+        list = apply_styles(list, style);
+    }
+    list.into_any_element()
+}
+
+fn virtual_row_ancestor(tree: &RetainedTree, list_id: u64, element_id: u64) -> Option<u64> {
+    let mut current = element_id;
+    loop {
+        let parent = tree.elements.get(&current)?.parent?;
+        if parent == list_id {
+            return Some(current);
+        }
+        current = parent;
+    }
 }
 
 pub(crate) fn build_div(

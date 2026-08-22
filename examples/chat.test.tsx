@@ -87,6 +87,12 @@ describeNative('chat example', () => {
     const { render, renderer } = createTestRoot()
     render(<ChatApp />)
 
+    const transcript = renderer.findByType('virtual-list')[0]
+    expect(transcript).toBeDefined()
+    expect(
+      transcript.children.map((id) => renderer.getElement(id)?.style.width)
+    ).toEqual(Array(transcript.children.length).fill(1))
+
     const painted = renderer.getPaintedText()
 
     // Sidebar chrome.
@@ -118,19 +124,24 @@ describeNative('chat example', () => {
   })
 
   it('scrolls the transcript', () => {
-    // The transcript is not virtualized, so every turn paints whether or not it
-    // is on screen and `getPaintedText()` cannot see a scroll. Compare pixels.
+    // Compare pixels because visible virtual rows change after the scroll.
     const top = path.join(SHOTS, 'chat-scroll-before.png')
     const down = path.join(SHOTS, 'chat-scroll-after.png')
 
     const { render, renderer } = createTestRoot()
     render(<ChatApp />)
+    expect(renderer.getPaintedText()).not.toContain('React-composed Markdown')
     renderer.captureScreenshot(top)
 
     renderer.nativeSimulateScrollWheel(700, 400, 0, -1400)
-    renderer.flush()
+    const transcript = renderer.findByType('virtual-list')[0]
+    renderer.scrollToItem(transcript.id, transcript.children.length - 1)
     renderer.captureScreenshot(down)
 
+    expect(renderer.getPaintedText()).toContain('React-composed Markdown')
+    expect(
+      renderer.getPaintedText().some((line) => line.includes('cross-element text selection'))
+    ).toBe(false)
     expect(fs.readFileSync(top).equals(fs.readFileSync(down))).toBe(false)
   })
 

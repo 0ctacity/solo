@@ -10,9 +10,8 @@
  * 1. **Chrome sets `userSelect: 'none'`.** The sidebar, top bar and composer opt
  *    out, so dragging across the transcript selects message text and never a
  *    conversation title. Content keeps the default.
- * 2. **The transcript is one scroll container** with a centred fixed-width
- *    column inside it, the same shape ChatGPT uses. `<diff>` gets an explicit
- *    height because it virtualizes internally and needs a bounded viewport.
+ * 2. **The transcript is a virtual list** with one variable-height row per
+ *    turn. `<diff>` gets its own bounded viewport because it also virtualizes.
  *
  * Run with:  cd examples && bun run chat
  */
@@ -25,6 +24,7 @@ import {
   startFrameLoop,
   type StyleDesc,
 } from '@gpuix/react'
+import { fileURLToPath } from 'node:url'
 import { SafeMdxRenderer } from 'safe-mdx'
 import { mdxParse } from 'safe-mdx/parse'
 
@@ -799,40 +799,50 @@ export function SafeMdxTranscript() {
 
 function Transcript() {
   return (
-    <div
+    <virtual-list
+      overdraw={820}
+      estimatedItemHeight={220}
       style={{
-        display: 'flex',
-        flexDirection: 'column',
         flexGrow: 1,
         minHeight: 0,
-        overflowY: 'scroll',
+        width: '100%',
       }}
     >
-      {/* Centred fixed-width column, the shape ChatGPT uses. */}
-      <div style={{ display: 'flex', flexDirection: 'row', justifyContent: 'center' }}>
+      {TURNS.map((turn, ix) => (
         <div
+          key={ix}
           style={{
             display: 'flex',
-            flexDirection: 'column',
-            width: 748,
-            gap: 30,
-            paddingTop: 26,
-            paddingBottom: 40,
-            paddingLeft: 12,
-            paddingRight: 12,
+            flexDirection: 'row',
+            justifyContent: 'center',
+            width: '100%',
+            paddingTop: ix === 0 ? 26 : 0,
+            paddingBottom: 30,
           }}
         >
-          {TURNS.map((turn, ix) =>
-            turn.role === 'user' ? (
-              <UserTurn key={ix} text={turn.text} />
+          <div style={{ width: 748, paddingLeft: 12, paddingRight: 12 }}>
+            {turn.role === 'user' ? (
+              <UserTurn text={turn.text} />
             ) : (
-              <AssistantTurn key={ix} turn={turn} />
-            )
-          )}
+              <AssistantTurn turn={turn} />
+            )}
+          </div>
+        </div>
+      ))}
+      <div
+        style={{
+          display: 'flex',
+          flexDirection: 'row',
+          justifyContent: 'center',
+          width: '100%',
+          paddingBottom: 40,
+        }}
+      >
+        <div style={{ width: 748, paddingLeft: 12, paddingRight: 12 }}>
           <SafeMdxTranscript />
         </div>
       </div>
-    </div>
+    </virtual-list>
   )
 }
 

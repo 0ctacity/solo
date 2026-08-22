@@ -10,6 +10,7 @@ export const gpuixComponents = {
   input: "input",
   textarea: "textarea",
   anchored: "anchored",
+  "virtual-list": "virtual-list",
 } as const
 
 export type GpuixComponentType = keyof typeof gpuixComponents

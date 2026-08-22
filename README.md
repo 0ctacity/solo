@@ -226,6 +226,8 @@ extension comes from the pinned GPUIX fork. Windows runtime validation is pendin
 
 Containers with `overflow: "scroll"` become natively scrollable — GPUI handles scroll physics, clipping, and offset persistence automatically.
 
+Plain scroll containers still build every child. Use `<virtual-list>` below when the collection can grow large.
+
 ```tsx
 function ScrollableList() {
   return (
@@ -269,6 +271,36 @@ renderer.scrollTo(elementId, x, y)        // set offset directly
 renderer.scrollToItem(elementId, index)   // scroll child into view
 renderer.getScrollOffset(elementId)       // returns [x, y] or null
 ```
+
+## Virtual lists
+
+Use `<virtual-list>` for long, variable-height collections such as chat transcripts. React and Rust retain every row, but GPUI only builds and lays out rows near the viewport.
+
+```tsx
+function Transcript({ messages }: { messages: Message[] }) {
+  return (
+    <virtual-list
+      alignment="bottom"
+      followTail
+      estimatedItemHeight={180}
+      style={{ flexGrow: 1, minHeight: 0 }}
+    >
+      {messages.map((message) => (
+        <Message key={message.id} message={message} />
+      ))}
+    </virtual-list>
+  )
+}
+```
+
+The list needs a bounded height or bounded flex space. Its direct children are the rows and can contain any GPUIX host or custom element.
+
+| Prop | Default | Purpose |
+|---|---:|---|
+| `alignment` | `"top"` | Use `"bottom"` for chat-style initial positioning |
+| `followTail` | `false` | Follow appended rows until the user scrolls away |
+| `overdraw` | `512` | Extra pixels built outside the viewport |
+| `estimatedItemHeight` | none | Gives unmeasured rows an initial height estimate |
 
 ## Text input
 
