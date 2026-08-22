@@ -91,6 +91,7 @@ export type ElementType =
   | "svg"
   | "canvas"
   | "input"
+  | "textarea"
   | "anchored"
   | "code"
   | "diff"
@@ -222,17 +223,27 @@ export type Props = Record<string, unknown> & {
   // ── Scroll events ──────────────────────────────────────────────
   onScroll?: (event: EventPayload) => void
 
+  // ── Text editor events ─────────────────────────────────────────
+  onChange?: (event: EventPayload) => void
+  onSubmit?: (event: EventPayload) => void
+
   // ── Focus props ────────────────────────────────────────────────
   /** Take keyboard focus when the element first mounts. Required for `<input>`:
    *  without it, or a click, the field never receives key events. */
   autoFocus?: boolean
 }
 
-// Props for the <input> custom element (controlled component).
+// Props for native text editor elements.
 export interface InputProps extends Props {
+  /** External editor value. Native edits apply immediately and report through onChange. */
   value?: string
   placeholder?: string
   readOnly?: boolean
+}
+
+export interface TextareaProps extends InputProps {
+  minRows?: number
+  maxRows?: number
 }
 
 // Props for native <img> rendering.
@@ -310,6 +321,10 @@ export interface NativeRenderer {
   setCustomProp(id: number, key: string, valueJson: string): void
   /** Apply a batch of mutations in a single FFI call. Returns destroyed IDs. */
   applyBatch?(json: string): Array<number>
+
+  // ── Focus API ──────────────────────────────────────────────────
+  focusElement?(elementId: number): void
+  blur?(): void
 
   // ── Scroll API ─────────────────────────────────────────────────
   /** Set the scroll offset of a scrollable element (overflow: "scroll").

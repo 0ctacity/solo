@@ -14,11 +14,27 @@ import fs from "fs"
 import { describe, it, expect, beforeEach } from "vitest"
 import React, { useState, useRef } from "react"
 import { createTestRoot, hasNativeTestRenderer } from "../testing"
+import { startFrameLoop } from "../reconciler/renderer.js"
 import type { EventPayload } from "@gpuix/native"
 import { expectScreenshotsDiffer } from "./test-utils"
 
 // All tests require the native GPUI test renderer (cargo build with test-support).
 const describeNative = hasNativeTestRenderer ? describe : describe.skip
+
+describe("frame loop", () => {
+  it("does not tick when the native platform owns its event loop", () => {
+    let ticks = 0
+    const loop = startFrameLoop({
+      requiresTick: () => false,
+      tick: () => {
+        ticks += 1
+      },
+    })
+
+    expect(ticks).toBe(0)
+    loop.stop()
+  })
+})
 
 describeNative("events", () => {
   let testRoot: ReturnType<typeof createTestRoot>

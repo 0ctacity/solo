@@ -8,6 +8,7 @@ import type {
   InputProps,
   MarkdownProps,
   Props,
+  TextareaProps,
 } from "./dist/types/host"
 
 export { jsx, jsxs, Fragment } from "react/jsx-dev-runtime"
@@ -27,6 +28,7 @@ export namespace JSX {
     svg: Props
     canvas: Props
     input: InputProps
+    textarea: TextareaProps
     anchored: AnchoredProps
     code: CodeProps
     diff: DiffProps

@@ -88,11 +88,8 @@ export function wrapWithBatching(inner: NativeRenderer): NativeRenderer {
             unregisterEventHandlers(id)
           }
 
-          // Clear queue only AFTER successful batch + cleanup.
+          // applyBatch already invalidates, so only clear after batch + cleanup.
           queue = []
-
-          // Trigger commit side effects (e.g. needs_redraw flag).
-          batchable.commitMutations()
         }
       }
 
@@ -119,5 +116,5 @@ export function wrapWithBatching(inner: NativeRenderer): NativeRenderer {
       }
       return value
     },
-  }) as NativeRenderer
+  })
 }

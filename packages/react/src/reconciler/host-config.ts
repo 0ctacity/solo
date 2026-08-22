@@ -55,6 +55,8 @@ const EVENT_PROPS: Record<string, string> = {
   onToggleFile: "toggleFile",
   onLineClick: "lineClick",
   onLinkClick: "linkClick",
+  onChange: "change",
+  onSubmit: "submit",
   // Mouse events
   onClick: "click",
   onMouseDown: "mouseDown",

@@ -1,7 +1,8 @@
 ---
 '@gpuix/native': patch
+'@gpuix/react': patch
 ---
 
-Use GPUI's native macOS platform, window, Metal renderer, and AppKit event pipeline in Node applications.
+Use GPUI's native platform, window, renderer, and event pipeline in Node applications on macOS, Windows, and Linux.
 
-The embedded platform pumps AppKit without blocking Node, so live applications now receive the same native mouse, keyboard, scroll, IME, clipboard, display, and window behavior as ordinary Rust GPUI applications. This removes GPUIX's custom platform and window reimplementations.
+On macOS, Node drives an embedded AppKit event pump from the pinned GPUIX fork on the process main thread. On Windows and Linux, GPUI runs its normal blocking event loop on a dedicated Rust UI thread while Node sends in-process render and window commands. Windows runtime validation is still pending.

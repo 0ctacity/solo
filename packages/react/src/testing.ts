@@ -21,11 +21,44 @@ import { wrapWithBatching } from "./reconciler/batch-renderer.js"
 import type { OpaqueRoot } from "react-reconciler"
 import { ConcurrentRoot } from "react-reconciler/constants.js"
 
-// Try to load the native TestGpuixRenderer (only available when built with test-support).
-let NativeTestRenderer: (new () => import("@gpuix/native").TestGpuixRenderer) | null = null
+interface NativeTestRendererApi extends NativeRenderer {
+  applyBatch(json: string): number[]
+  flush(): void
+  drainEvents(): EventPayload[]
+  simulateKeystrokes(keystrokes: string): void
+  focusElement(elementId: number): void
+  simulateKeyDown(keystroke: string, isHeld?: boolean): void
+  simulateKeyUp(keystroke: string): void
+  simulateClick(x: number, y: number): void
+  simulateScrollWheel(x: number, y: number, deltaX: number, deltaY: number): void
+  simulateMouseMove(x: number, y: number, pressedButton?: number): void
+  simulateMouseDown(x: number, y: number, button: number): void
+  simulateMouseUp(x: number, y: number, button: number): void
+  getTreeJson(): string
+  getRootId(): number | null
+  getAllText(): string[]
+  scrollTo(elementId: number, x: number, y: number): void
+  scrollToItem(elementId: number, index: number): void
+  getScrollOffset(elementId: number): number[] | null
+  dragSelect(x1: number, y1: number, x2: number, y2: number): void
+  getSelectedText(): string | null
+  getPaintedText(): string[]
+  getSyntaxCacheStats(): number[]
+  clearSelection(): void
+  captureScreenshot(path: string): void
+}
+
+interface NativeTestRendererConstructor {
+  new (): NativeTestRendererApi
+}
+
+// The native test renderer is currently exported only by macOS builds.
+let NativeTestRenderer: NativeTestRendererConstructor | null = null
 try {
   // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const native = require("@gpuix/native")
+  const native = require("@gpuix/native") as {
+    TestGpuixRenderer?: NativeTestRendererConstructor
+  }
   if (native.TestGpuixRenderer) {
     NativeTestRenderer = native.TestGpuixRenderer
   }
@@ -61,7 +94,7 @@ export class TestRenderer implements NativeRenderer {
   commitCount = 0
 
   /** Native TestGpuixRenderer — all state lives here in Rust's RetainedTree. */
-  private native: import("@gpuix/native").TestGpuixRenderer
+  private native: NativeTestRendererApi
 
   constructor() {
     if (!NativeTestRenderer) {

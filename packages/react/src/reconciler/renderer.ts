@@ -40,9 +40,12 @@ export interface FrameLoop {
 }
 
 /**
- * Drive GPUI frames at a fixed rate.
+ * Drive GPUI's embedded macOS event loop at a fixed rate.
  *
- * `renderer.tick()` pumps the OS event loop and asks GPUI for a frame, so it
+ * On Windows and Linux, GPUI owns a blocking event loop on a Rust UI thread,
+ * so this function returns a no-op handle without creating a timer.
+ *
+ * On macOS, `renderer.tick()` pumps AppKit and asks GPUI for a frame, so it
  * must be called repeatedly. Do NOT call it from a `setImmediate` loop: that
  * spins the CPU at tens of thousands of ticks per second (measured: 73% CPU on
  * an idle app, versus 1.5% when paced).
@@ -55,9 +58,13 @@ export interface FrameLoop {
  * delays the next one instead of letting timers pile up.
  */
 export function startFrameLoop(
-  renderer: Pick<GpuixRenderer, "tick">,
+  renderer: Pick<GpuixRenderer, "requiresTick" | "tick">,
   options: { frameMs?: number } = {}
 ): FrameLoop {
+  if (!renderer.requiresTick()) {
+    return { stop: () => {} }
+  }
+
   const frameMs = options.frameMs ?? DEFAULT_FRAME_MS
   let timer: ReturnType<typeof setTimeout> | null = null
   let stopped = false
@@ -125,7 +132,7 @@ export function createRoot(renderer: NativeRenderer): Root {
   )
 
   return {
-    render: (node: ReactNode): void => {
+    render: (node): void => {
       clearEventHandlers()
 
       reconciler.updateContainer(
