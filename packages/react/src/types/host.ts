@@ -198,9 +198,10 @@ export interface GpuixTheme {
 // Props passed to elements.
 // Element IDs are auto-generated numeric IDs (not user-settable).
 // Use React refs to get an element's ID: ref.current.id
-export type Props = Record<string, unknown> & {
+export interface Props {
   style?: StyleDesc
   children?: React.ReactNode
+  ref?: React.Ref<PublicInstance>
 
   // ── Mouse events ───────────────────────────────────────────────
   onClick?: (event: EventPayload) => void
@@ -227,10 +228,17 @@ export type Props = Record<string, unknown> & {
   onChange?: (event: EventPayload) => void
   onSubmit?: (event: EventPayload) => void
 
+  // ── Native component events ─────────────────────────────────────
+  onToggleFile?: (event: EventPayload) => void
+  onLineClick?: (event: EventPayload) => void
+  onLinkClick?: (event: EventPayload) => void
+
   // ── Focus props ────────────────────────────────────────────────
   /** Take keyboard focus when the element first mounts. Required for `<input>`:
    *  without it, or a click, the field never receives key events. */
   autoFocus?: boolean
+  /** Native GPUI tab order. Use 0 for normal keyboard focus. */
+  tabIndex?: number
 }
 
 // Props for native text editor elements.
@@ -294,14 +302,25 @@ export interface MarkdownProps extends Props {
 
 // Props for the <anchored> custom element.
 export interface AnchoredProps extends Props {
-  x?: number
-  y?: number
   position?: { x: number; y: number }
-  anchor?: "topLeft" | "topRight" | "bottomLeft" | "bottomRight"
-  snapToWindow?: boolean
+  side?: "top" | "right" | "bottom" | "left"
+  align?: "start" | "center" | "end"
+  gap?: number
+  anchor?:
+    | "topLeft"
+    | "topCenter"
+    | "topRight"
+    | "rightCenter"
+    | "bottomRight"
+    | "bottomCenter"
+    | "bottomLeft"
+    | "leftCenter"
+  offset?: { x: number; y: number }
+  fit?: "switch" | "snap"
   snapMargin?: number
   deferred?: boolean
   priority?: number
+  occlude?: boolean
 }
 
 /// Interface for the renderer that receives mutations from the reconciler.
@@ -340,6 +359,9 @@ export interface NativeRenderer {
   getSelectedText?(): string | null
   /** Drop the current selection. */
   clearSelection?(): void
+
+  // ── Window API ─────────────────────────────────────────────────
+  getWindowSize?(): { width: number; height: number }
 }
 
 // Container holds the renderer reference.

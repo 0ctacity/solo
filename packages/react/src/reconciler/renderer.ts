@@ -8,6 +8,7 @@ import type { Container, NativeRenderer } from "../types/host.js"
 import { clearEventHandlers, handleGpuixEvent } from "./event-registry.js"
 import { setNativeRenderer } from "./host-config.js"
 import { wrapWithBatching } from "./batch-renderer.js"
+import { GpuixContext } from "../hooks/use-gpuix.js"
 
 export function createRenderer(
   onEvent?: (event: import("@gpuix/native").EventPayload) => void
@@ -136,7 +137,11 @@ export function createRoot(renderer: NativeRenderer): Root {
       clearEventHandlers()
 
       reconciler.updateContainer(
-        React.createElement(React.Fragment, null, node),
+        React.createElement(
+          GpuixContext.Provider,
+          { value: { renderer: batchedRenderer } },
+          node
+        ),
         container,
         null,
         () => {}

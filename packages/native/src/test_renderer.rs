@@ -115,7 +115,10 @@ impl TestGpuixRenderer {
         // TestDispatcher for deterministic scheduling.
         let mac_platform = gpui_macos::MacPlatform::new(false);
         let mut cx = gpui::VisualTestAppContext::new(Rc::new(mac_platform));
-        cx.update(crate::custom_elements::input::init);
+        cx.update(|cx| {
+            crate::renderer::init_key_bindings(cx);
+            crate::custom_elements::input::init(cx);
+        });
 
         // Open an offscreen window at (-10000, -10000) — invisible but fully
         // rendered by Metal. Uses the same GpuixView as production.

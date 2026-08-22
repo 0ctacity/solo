@@ -18,6 +18,7 @@ import { reconciler } from "./reconciler/reconciler.js"
 import { setNativeRenderer, resetIdCounter } from "./reconciler/host-config.js"
 import { clearEventHandlers, handleGpuixEvent } from "./reconciler/event-registry.js"
 import { wrapWithBatching } from "./reconciler/batch-renderer.js"
+import { GpuixContext } from "./hooks/use-gpuix.js"
 import type { OpaqueRoot } from "react-reconciler"
 import { ConcurrentRoot } from "react-reconciler/constants.js"
 
@@ -479,7 +480,11 @@ export function createTestRoot(): TestRoot {
     flushSync(() => {
       clearEventHandlers()
       reconciler.updateContainer(
-        React.createElement(React.Fragment, null, node),
+        React.createElement(
+          GpuixContext.Provider,
+          { value: { renderer: batchedRenderer } },
+          node
+        ),
         container,
         null,
         () => {}

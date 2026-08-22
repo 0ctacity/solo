@@ -37,6 +37,15 @@ use crate::style::{parse_color_hex, StyleDesc};
 use crate::text::{selectable_text, selection_frame_reset, selection_key, SharedSelection};
 use crate::theme::Theme;
 
+gpui::actions!(gpuix_focus, [FocusNext, FocusPrevious]);
+
+pub(crate) fn init_key_bindings(cx: &mut gpui::App) {
+    cx.bind_keys([
+        gpui::KeyBinding::new("tab", FocusNext, None),
+        gpui::KeyBinding::new("shift-tab", FocusPrevious, None),
+    ]);
+}
+
 /// Parse a CSS font-weight value (string or number) into a GPUI FontWeight.
 /// Accepts named keywords ("bold", "semibold"), numeric strings ("700"),
 /// and raw numbers (700). Falls back to 400 (normal) for unrecognized values.
@@ -343,6 +352,7 @@ impl GpuixRenderer {
         let startup_error_for_app = startup_error.clone();
         let app = gpui::Application::with_platform(platform.clone());
         let app_handle = app.run_embedded(move |cx: &mut gpui::App| {
+            init_key_bindings(cx);
             crate::custom_elements::input::init(cx);
             let bounds = gpui::Bounds::centered(
                 None,
@@ -430,6 +440,7 @@ impl GpuixRenderer {
             .spawn(move || {
                 let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
                     gpui_platform::application().run(move |cx| {
+                        init_key_bindings(cx);
                         crate::custom_elements::input::init(cx);
                         let bounds = gpui::Bounds::centered(
                             None,
@@ -985,22 +996,44 @@ impl GpuixView {
         window: &mut gpui::Window,
         cx: &mut gpui::Context<Self>,
     ) {
-        // Create handles for elements that need focus but don't have one yet.
-        for (&id, element) in &tree.elements {
-            let needs_focus = matches!(element.element_type.as_str(), "input" | "textarea")
+        let tab_index = |element: &crate::retained_tree::RetainedElement| {
+            element
+                .custom_props
+                .get("tabIndex")
+                .and_then(|value| value.as_i64())
+                .and_then(|index| isize::try_from(index).ok())
+        };
+        let needs_focus = |element: &crate::retained_tree::RetainedElement| {
+            matches!(element.element_type.as_str(), "input" | "textarea")
+                || tab_index(element).is_some()
                 || element.events.contains("keyDown")
                 || element.events.contains("keyUp")
                 || element.events.contains("focus")
-                || element.events.contains("blur");
-
-            if needs_focus && !self.focus_handles.contains_key(&id) {
-                let handle = cx.focus_handle();
+                || element.events.contains("blur")
+        };
+        // Create handles for elements that need focus but don't have one yet.
+        for (&id, element) in &tree.elements {
+            let tab_index = tab_index(element).or_else(|| {
+                matches!(element.element_type.as_str(), "input" | "textarea").then_some(0)
+            });
+            if needs_focus(element) && !self.focus_handles.contains_key(&id) {
+                let handle = match tab_index {
+                    Some(index) => cx.focus_handle().tab_index(index).tab_stop(index >= 0),
+                    None => cx.focus_handle(),
+                };
                 // Focus once, at creation. Re-focusing every frame would
                 // steal focus back from whatever the user clicked next.
                 if element.auto_focus {
                     handle.focus(window, cx);
                 }
                 self.focus_handles.insert(id, handle);
+            } else if let (Some(handle), Some(index)) =
+                (self.focus_handles.get(&id).cloned(), tab_index)
+            {
+                self.focus_handles
+                    .insert(id, handle.tab_index(index).tab_stop(index >= 0));
+            } else if let Some(handle) = self.focus_handles.get(&id).cloned() {
+                self.focus_handles.insert(id, handle.tab_stop(false));
             }
         }
 
@@ -1095,6 +1128,8 @@ impl gpui::Render for GpuixView {
             use gpui::prelude::*;
             gpui::div()
                 .size_full()
+                .on_action(|_: &FocusNext, window, cx| window.focus_next(cx))
+                .on_action(|_: &FocusPrevious, window, cx| window.focus_prev(cx))
                 .child(selection_frame_reset(self.selection.clone()))
                 .child(result)
                 .into_any_element()
@@ -1293,6 +1328,14 @@ pub(crate) fn build_div(
     // because it's stored in GpuixView::focus_handles.
     if let Some(handle) = ctx.focus_handles.get(&element.id) {
         el = el.track_focus(handle);
+    }
+    if let Some(tab_index) = element
+        .custom_props
+        .get("tabIndex")
+        .and_then(|value| value.as_i64())
+        .and_then(|index| isize::try_from(index).ok())
+    {
+        el = el.tab_index(tab_index).tab_stop(tab_index >= 0);
     }
 
     // Wire up events.

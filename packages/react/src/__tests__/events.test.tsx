@@ -438,7 +438,12 @@ describeNative("events", () => {
             >
               <text>Open anchored</text>
               {open && (
-                <anchored x={700} y={360} anchor="topLeft" deferred priority={1}>
+                <anchored
+                  position={{ x: 700, y: 360 }}
+                  anchor="topLeft"
+                  deferred
+                  priority={1}
+                >
                   <div
                     style={{
                       width: 190,

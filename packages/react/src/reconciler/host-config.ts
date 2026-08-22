@@ -50,35 +50,37 @@ function getRenderer(): NativeRenderer {
 
 // ── Event wiring helpers ─────────────────────────────────────────────
 
-const EVENT_PROPS: Record<string, string> = {
+const EVENT_PROPS = [
   // Custom element events
-  onToggleFile: "toggleFile",
-  onLineClick: "lineClick",
-  onLinkClick: "linkClick",
-  onChange: "change",
-  onSubmit: "submit",
+  ["onToggleFile", "toggleFile"],
+  ["onLineClick", "lineClick"],
+  ["onLinkClick", "linkClick"],
+  ["onChange", "change"],
+  ["onSubmit", "submit"],
   // Mouse events
-  onClick: "click",
-  onMouseDown: "mouseDown",
-  onMouseUp: "mouseUp",
-  onMouseEnter: "mouseEnter",
-  onMouseLeave: "mouseLeave",
-  onMouseMove: "mouseMove",
-  onMouseDownOutside: "mouseDownOutside",
+  ["onClick", "click"],
+  ["onMouseDown", "mouseDown"],
+  ["onMouseUp", "mouseUp"],
+  ["onMouseEnter", "mouseEnter"],
+  ["onMouseLeave", "mouseLeave"],
+  ["onMouseMove", "mouseMove"],
+  ["onMouseDownOutside", "mouseDownOutside"],
   // Keyboard events (require focus — tabIndex or autoFocus)
-  onKeyDown: "keyDown",
-  onKeyUp: "keyUp",
+  ["onKeyDown", "keyDown"],
+  ["onKeyUp", "keyUp"],
   // Focus events
-  onFocus: "focus",
-  onBlur: "blur",
+  ["onFocus", "focus"],
+  ["onBlur", "blur"],
   // Scroll events
-  onScroll: "scroll",
-}
+  ["onScroll", "scroll"],
+] as const
+
+const EVENT_PROP_NAMES = new Set<string>(EVENT_PROPS.map(([name]) => name))
 
 function syncEventListeners(id: number, props: Props): void {
   const r = getRenderer()
-  for (const [propName, eventType] of Object.entries(EVENT_PROPS)) {
-    const handler = props[propName] as ((event: any) => void) | undefined
+  for (const [propName, eventType] of EVENT_PROPS) {
+    const handler = props[propName]
     if (handler) {
       registerEventHandler(id, eventType, handler)
       r.setEventListener(id, eventType, true)
@@ -88,9 +90,9 @@ function syncEventListeners(id: number, props: Props): void {
 
 function diffEventListeners(id: number, oldProps: Props, newProps: Props): void {
   const r = getRenderer()
-  for (const [propName, eventType] of Object.entries(EVENT_PROPS)) {
-    const oldHandler = oldProps[propName] as ((event: any) => void) | undefined
-    const newHandler = newProps[propName] as ((event: any) => void) | undefined
+  for (const [propName, eventType] of EVENT_PROPS) {
+    const oldHandler = oldProps[propName]
+    const newHandler = newProps[propName]
 
     if (oldHandler && !newHandler) {
       // Removed — clean up both JS closure and Rust listener
@@ -124,10 +126,10 @@ const BUILT_IN_TYPES = new Set(["div", "text"])
 
 // Props that reach Rust on EVERY element type, including div and text.
 // Custom props are otherwise skipped for built-ins.
-const UNIVERSAL_PROPS = new Set(["autoFocus"])
+const UNIVERSAL_PROPS = new Set(["autoFocus", "tabIndex"])
 
 function isReservedProp(name: string): boolean {
-  return RESERVED_PROPS.has(name) || name in EVENT_PROPS
+  return RESERVED_PROPS.has(name) || EVENT_PROP_NAMES.has(name)
 }
 
 function serializeCustomProp(
@@ -170,11 +172,14 @@ function diffCustomProps(
 ): void {
   const builtIn = BUILT_IN_TYPES.has(type)
   const r = getRenderer()
+  const oldEntries = Object.entries(oldProps)
+  const newKeys = Object.keys(newProps)
   // Updated or added props
   for (const [key, value] of Object.entries(newProps)) {
     if (isReservedProp(key)) continue
     if (builtIn && !UNIVERSAL_PROPS.has(key)) continue
-    if (oldProps[key] !== value) {
+    const oldValue = oldEntries.find(([oldKey]) => oldKey === key)?.[1]
+    if (oldValue !== value) {
       r.setCustomProp(id, key, serializeCustomProp(type, key, value))
     }
   }
@@ -182,7 +187,7 @@ function diffCustomProps(
   for (const key of Object.keys(oldProps)) {
     if (isReservedProp(key)) continue
     if (builtIn && !UNIVERSAL_PROPS.has(key)) continue
-    if (!(key in newProps)) {
+    if (!newKeys.includes(key)) {
       r.setCustomProp(id, key, JSON.stringify(null))
     }
   }

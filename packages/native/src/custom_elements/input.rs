@@ -53,7 +53,8 @@ actions!(
     ]
 );
 
-const KEY_CONTEXT: &str = "GpuixTextEditor";
+const INPUT_KEY_CONTEXT: &str = "GpuixInput";
+const TEXTAREA_KEY_CONTEXT: &str = "GpuixTextarea";
 
 fn utf16_offset_to_utf8(text: &str, offset: usize) -> usize {
     let mut utf8_offset = 0;
@@ -73,7 +74,13 @@ fn single_line_text(text: &str) -> String {
 }
 
 pub fn init(cx: &mut App) {
-    let context = Some(KEY_CONTEXT);
+    let mut bindings = text_editor_bindings(INPUT_KEY_CONTEXT, false);
+    bindings.extend(text_editor_bindings(TEXTAREA_KEY_CONTEXT, true));
+    cx.bind_keys(bindings);
+}
+
+fn text_editor_bindings(context: &'static str, multiline: bool) -> Vec<KeyBinding> {
+    let context = Some(context);
     let mut bindings = vec![
         KeyBinding::new("enter", Submit, context),
         KeyBinding::new("shift-enter", Newline, context),
@@ -81,12 +88,8 @@ pub fn init(cx: &mut App) {
         KeyBinding::new("delete", Delete, context),
         KeyBinding::new("left", Left, context),
         KeyBinding::new("right", Right, context),
-        KeyBinding::new("up", Up, context),
-        KeyBinding::new("down", Down, context),
         KeyBinding::new("shift-left", SelectLeft, context),
         KeyBinding::new("shift-right", SelectRight, context),
-        KeyBinding::new("shift-up", SelectUp, context),
-        KeyBinding::new("shift-down", SelectDown, context),
         KeyBinding::new("home", Home, context),
         KeyBinding::new("end", End, context),
         KeyBinding::new("shift-home", SelectHome, context),
@@ -100,6 +103,14 @@ pub fn init(cx: &mut App) {
         KeyBinding::new("shift-cmd-up", SelectDocStart, context),
         KeyBinding::new("shift-cmd-down", SelectDocEnd, context),
     ];
+    if multiline {
+        bindings.extend([
+            KeyBinding::new("up", Up, context),
+            KeyBinding::new("down", Down, context),
+            KeyBinding::new("shift-up", SelectUp, context),
+            KeyBinding::new("shift-down", SelectDown, context),
+        ]);
+    }
 
     let word_prefix = if cfg!(target_os = "macos") {
         "alt"
@@ -132,7 +143,7 @@ pub fn init(cx: &mut App) {
             KeyBinding::new(&format!("shift-{prefix}-z"), Redo, context),
         ]);
     }
-    cx.bind_keys(bindings);
+    bindings
 }
 
 pub struct InputFactory;
@@ -1154,9 +1165,12 @@ impl gpui::Render for TextEditorState {
         let key_up_callback = self.callback.clone();
         let element_id = self.element_id;
         div()
-            .key_context(KEY_CONTEXT)
+            .key_context(if self.multiline {
+                TEXTAREA_KEY_CONTEXT
+            } else {
+                INPUT_KEY_CONTEXT
+            })
             .track_focus(&self.focus_handle)
-            .tab_index(0)
             .cursor(CursorStyle::IBeam)
             .on_action(cx.listener(Self::backspace))
             .on_action(cx.listener(Self::delete))

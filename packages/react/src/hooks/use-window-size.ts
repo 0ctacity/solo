@@ -14,7 +14,7 @@ export function useWindowSize(): WindowSize {
   const [size, setSize] = useState<WindowSize>({ width: 800, height: 600 })
 
   useEffect(() => {
-    if (renderer) {
+    if (renderer?.getWindowSize) {
       try {
         const windowSize = renderer.getWindowSize()
         setSize({

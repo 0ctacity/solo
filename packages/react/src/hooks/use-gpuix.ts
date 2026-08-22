@@ -1,8 +1,8 @@
 import { useContext, createContext } from "react"
-import type { GpuixRenderer } from "@gpuix/native"
+import type { NativeRenderer } from "../types/host.js"
 
 export interface GpuixContextValue {
-  renderer: GpuixRenderer | null
+  renderer: NativeRenderer | null
 }
 
 export const GpuixContext = createContext<GpuixContextValue>({
@@ -19,7 +19,7 @@ export function useGpuix(): GpuixContextValue {
 /**
  * Access the GPUIX renderer, throwing if not available
  */
-export function useGpuixRequired(): GpuixRenderer {
+export function useGpuixRequired(): NativeRenderer {
   const { renderer } = useGpuix()
   if (!renderer) {
     throw new Error("useGpuixRequired must be used within a GpuixProvider")
