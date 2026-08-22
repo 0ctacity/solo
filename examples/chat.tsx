@@ -18,7 +18,15 @@
  */
 
 import React, { useMemo, useState } from 'react'
-import { createRoot, createRenderer, flushSync, startFrameLoop } from '@gpuix/react'
+import {
+  createRoot,
+  createRenderer,
+  flushSync,
+  startFrameLoop,
+  type StyleDesc,
+} from '@gpuix/react'
+import { SafeMdxRenderer } from 'safe-mdx'
+import { mdxParse } from 'safe-mdx/parse'
 
 // ── Palette (ChatGPT dark) ───────────────────────────────────────────
 
@@ -174,6 +182,32 @@ const ANSWER_3 = `Short version: **no**, and it is worth knowing why.
 So the loop rebuilds and restarts. An incremental build is about **two seconds**,
 which is fast enough that the restart is not the bottleneck. Design numbers avoid
 the rebuild entirely because they travel in a theme prop.`
+
+const SAFE_MDX_STRESS = `# React-composed Markdown
+
+This message uses **safe-mdx**, *styled spans*, ~~deleted text~~, an
+\`inline code value\`, and [a link](https://github.com/holocron-hq/safe-mdx).
+
+> The parser runs in TypeScript. Every Markdown node becomes a normal React
+> component, then GPUIX renders the resulting \`div\`, \`text\`, and \`code\` tree.
+
+- nested **inline formatting** inside a list
+- a second item with a long sentence that must wrap without leaving the transcript column
+- [x] a GFM task item
+
+| Path | Renderer | Native Markdown element |
+|:-----|:---------|:------------------------|
+| safe-mdx | React tree | no |
+| pulldown-cmark | Rust tree | yes |
+
+\`\`\`typescript
+const tree = mdxParse(source)
+return <SafeMdxRenderer markdown={source} mdast={tree} />
+\`\`\`
+
+<Callout title="Custom MDX component">
+  MDX components also map to ordinary GPUIX React components.
+</Callout>`
 
 const TURNS: Turn[] = [
   {
@@ -621,6 +655,186 @@ function AssistantTurn({ turn }: { turn: Extract<Turn, { role: 'assistant' }> })
   )
 }
 
+type MdxChildren = { children?: React.ReactNode }
+
+function MdxBlock({ children }: MdxChildren) {
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 8, width: '100%' }}>
+      {children}
+    </div>
+  )
+}
+
+function MdxInline({
+  children,
+  style,
+}: MdxChildren & { style?: StyleDesc }) {
+  return <text style={{ fontSize: 15, lineHeight: 26, color: C.text, ...style }}>{children}</text>
+}
+
+/** Deliberately composes Markdown from host elements to expose missing web-style text flow. */
+const SAFE_MDX_COMPONENTS = {
+  h1: ({ children }: MdxChildren) => (
+    <text style={{ fontSize: 22, lineHeight: 30, fontWeight: 700, color: C.text }}>{children}</text>
+  ),
+  h2: ({ children }: MdxChildren) => (
+    <text style={{ fontSize: 18, lineHeight: 26, fontWeight: 700, color: C.text }}>{children}</text>
+  ),
+  h3: ({ children }: MdxChildren) => (
+    <text style={{ fontSize: 16, lineHeight: 24, fontWeight: 700, color: C.text }}>{children}</text>
+  ),
+  h4: MdxInline,
+  h5: MdxInline,
+  h6: MdxInline,
+  p: ({ children }: MdxChildren) => (
+    <div
+      style={{
+        display: 'flex',
+        flexDirection: 'row',
+        flexWrap: 'wrap',
+        alignItems: 'start',
+        width: '100%',
+        fontSize: 15,
+        lineHeight: 26,
+        color: C.text,
+      }}
+    >
+      {children}
+    </div>
+  ),
+  blockquote: ({ children }: MdxChildren) => (
+    <div style={{ display: 'flex', flexDirection: 'row', gap: 12, width: '100%' }}>
+      <div style={{ width: 3, flexShrink: 0, backgroundColor: CHAT_THEME.accent }} />
+      <div style={{ display: 'flex', flexDirection: 'column', flexGrow: 1, color: C.muted }}>
+        {children}
+      </div>
+    </div>
+  ),
+  hr: () => <div style={{ height: 1, width: '100%', backgroundColor: C.border }} />,
+  ul: MdxBlock,
+  ol: MdxBlock,
+  li: ({ children }: MdxChildren) => (
+    <div style={{ display: 'flex', flexDirection: 'row', gap: 9, width: '100%' }}>
+      <text style={{ fontSize: 15, lineHeight: 26, color: C.muted }}>•</text>
+      <div style={{ display: 'flex', flexDirection: 'column', flexGrow: 1 }}>{children}</div>
+    </div>
+  ),
+  strong: ({ children }: MdxChildren) => <MdxInline style={{ fontWeight: 700 }}>{children}</MdxInline>,
+  em: ({ children }: MdxChildren) => <MdxInline style={{ color: C.muted }}>{children}</MdxInline>,
+  del: ({ children }: MdxChildren) => <MdxInline style={{ color: C.faint }}>{children}</MdxInline>,
+  code: ({ children }: MdxChildren) => (
+    <MdxInline
+      style={{
+        fontFamily: 'Menlo',
+        fontSize: 13,
+        backgroundColor: C.raised,
+        borderRadius: 5,
+        paddingLeft: 5,
+        paddingRight: 5,
+      }}
+    >
+      {children}
+    </MdxInline>
+  ),
+  a: ({ children }: MdxChildren & { href?: string }) => (
+    <MdxInline style={{ color: CHAT_THEME.accent }}>{children}</MdxInline>
+  ),
+  table: ({ children }: MdxChildren) => (
+    <div
+      style={{
+        display: 'flex',
+        flexDirection: 'column',
+        width: '100%',
+        borderWidth: 1,
+        borderColor: C.border,
+        borderRadius: 8,
+        overflow: 'hidden',
+      }}
+    >
+      {children}
+    </div>
+  ),
+  thead: MdxBlock,
+  tbody: MdxBlock,
+  tr: ({ children }: MdxChildren) => (
+    <div style={{ display: 'flex', flexDirection: 'row', width: '100%' }}>{children}</div>
+  ),
+  td: ({ children }: MdxChildren) => (
+    <div
+      style={{
+        display: 'flex',
+        flexDirection: 'row',
+        flexWrap: 'wrap',
+        flexGrow: 1,
+        width: '33%',
+        minWidth: 0,
+        padding: 8,
+        borderWidth: 1,
+        borderColor: C.border,
+        fontSize: 15,
+        lineHeight: 26,
+        color: C.text,
+      }}
+    >
+      {children}
+    </div>
+  ),
+  Callout: ({ children, title }: MdxChildren & { title?: string }) => (
+    <div
+      style={{
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 6,
+        width: '100%',
+        padding: 12,
+        backgroundColor: C.raised,
+        borderRadius: 10,
+        borderWidth: 1,
+        borderColor: C.border,
+      }}
+    >
+      <text style={{ fontSize: 13, fontWeight: 700, color: CHAT_THEME.accent }}>{title}</text>
+      {children}
+    </div>
+  ),
+}
+
+function SafeMdxContent({ source }: { source: string }) {
+  const mdast = useMemo(() => mdxParse(source), [source])
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 16, width: '100%' }}>
+      <SafeMdxRenderer
+        markdown={source}
+        mdast={mdast}
+        components={SAFE_MDX_COMPONENTS}
+        renderNode={(node) => {
+          if (node.type !== 'code') return undefined
+          return (
+            <code
+              code={node.value}
+              language={node.lang ?? undefined}
+              showLineNumbers
+              theme={CHAT_THEME}
+            />
+          )
+        }}
+      />
+    </div>
+  )
+}
+
+export function SafeMdxTranscript() {
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 30, width: 748 }}>
+      <UserTurn text="Can Markdown be composed as normal React elements instead?" />
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+        <SafeMdxContent source={SAFE_MDX_STRESS} />
+        <ActionBar />
+      </div>
+    </div>
+  )
+}
+
 function Transcript() {
   return (
     <div
@@ -653,6 +867,7 @@ function Transcript() {
               <AssistantTurn key={ix} turn={turn} />
             )
           )}
+          <SafeMdxTranscript />
         </div>
       </div>
     </div>

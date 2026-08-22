@@ -14,6 +14,7 @@ import type {
 export { jsx, jsxs, Fragment } from "react/jsx-dev-runtime"
 
 export namespace JSX {
+  type ElementType = React.JSX.ElementType
   type Element = React.JSX.Element
   type ElementClass = React.JSX.ElementClass
   type ElementAttributesProperty = React.JSX.ElementAttributesProperty

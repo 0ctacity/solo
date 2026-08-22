@@ -11,7 +11,7 @@ import { fileURLToPath } from 'url'
 import React from 'react'
 import { beforeAll, describe, expect, it } from 'vitest'
 import { createTestRoot, hasNativeTestRenderer } from '@gpuix/react'
-import { ChatApp } from './chat'
+import { ChatApp, SafeMdxTranscript } from './chat'
 
 const describeNative = hasNativeTestRenderer ? describe : describe.skip
 const SHOTS = path.resolve(path.dirname(fileURLToPath(import.meta.url)), 'screenshots')
@@ -21,6 +21,68 @@ beforeAll(() => {
 })
 
 describeNative('chat example', () => {
+  it('renders safe-mdx through GPUIX primitives', () => {
+    const { render, renderer } = createTestRoot()
+    render(<SafeMdxTranscript />)
+
+    const screenshot = path.join(SHOTS, 'chat-safe-mdx.png')
+    renderer.captureScreenshot(screenshot)
+
+    expect(renderer.findByType('markdown')).toHaveLength(0)
+    expect(renderer.findByType('code')).toHaveLength(1)
+    expect(fs.statSync(screenshot).size).toBeGreaterThan(0)
+    expect(renderer.getPaintedText()).toMatchInlineSnapshot(`
+      [
+        "Can Markdown be composed as normal React elements instead?",
+        "React-composed Markdown",
+        "This message uses ",
+        "safe-mdx",
+        ", ",
+        "styled spans",
+        ", ",
+        "deleted text",
+        ", an
+      ",
+        "inline code value",
+        ", and ",
+        "a link",
+        ".",
+        "The parser runs in TypeScript. Every Markdown node becomes a normal React
+      component, then GPUIX renders the resulting ",
+        "div",
+        ", ",
+        "text",
+        ", and ",
+        "code",
+        " tree.",
+        "•",
+        "nested ",
+        "inline formatting",
+        " inside a list",
+        "•",
+        "a second item with a long sentence that must wrap without leaving the transcript column",
+        "•",
+        "a GFM task item",
+        "Path",
+        "Renderer",
+        "Native Markdown element",
+        "safe-mdx",
+        "React tree",
+        "no",
+        "pulldown-cmark",
+        "Rust tree",
+        "yes",
+        "typescript",
+        "1",
+        "const tree = mdxParse(source)",
+        "2",
+        "return <SafeMdxRenderer markdown={source} mdast={tree} />",
+        "Custom MDX component",
+        "MDX components also map to ordinary GPUIX React components.",
+      ]
+    `)
+  })
+
   it('renders the sidebar, transcript and composer', () => {
     const { render, renderer } = createTestRoot()
     render(<ChatApp />)
