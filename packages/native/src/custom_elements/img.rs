@@ -1,10 +1,22 @@
-/// Image custom element — renders raster/SVG images from local file paths via GPUI img().
+/// Image custom elements for raster images and tintable SVG icons.
 ///
 /// This provides a native `<img>` for GPUIX React apps while keeping the same
 /// custom-element prop pipeline (`setCustomProp`/`custom_props`).
 use super::{CustomElement, CustomElementFactory, CustomRenderContext};
 
 pub struct ImgFactory;
+
+pub struct SvgFactory;
+
+impl CustomElementFactory for SvgFactory {
+    fn element_type(&self) -> &str {
+        "svg"
+    }
+
+    fn create(&self, _id: u64) -> Box<dyn CustomElement> {
+        Box::new(SvgElement::default())
+    }
+}
 
 impl CustomElementFactory for ImgFactory {
     fn element_type(&self) -> &str {
@@ -141,6 +153,56 @@ impl CustomElement for ImgElement {
             )),
             _ => None,
         }
+    }
+
+    fn supported_events(&self) -> &[&str] {
+        &[]
+    }
+
+    fn destroy(&mut self) {}
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct SvgElement {
+    src: String,
+}
+
+impl CustomElement for SvgElement {
+    fn render(
+        &mut self,
+        ctx: CustomRenderContext,
+        _window: &mut gpui::Window,
+        _cx: &mut gpui::Context<crate::renderer::GpuixView>,
+    ) -> gpui::AnyElement {
+        use gpui::prelude::*;
+
+        if self.src.trim().is_empty() {
+            let mut empty = gpui::div();
+            if let Some(style) = ctx.style {
+                empty = crate::renderer::apply_styles(empty, style);
+            }
+            return empty.into_any_element();
+        }
+
+        let mut icon = gpui::svg().external_path(self.src.clone()).flex_none();
+        if let Some(style) = ctx.style {
+            icon = crate::renderer::apply_styles(icon, style);
+        }
+        icon.into_any_element()
+    }
+
+    fn set_prop(&mut self, key: &str, value: serde_json::Value) {
+        if key == "src" {
+            self.src = value.as_str().unwrap_or_default().to_string();
+        }
+    }
+
+    fn supported_props(&self) -> &[&str] {
+        &["src"]
+    }
+
+    fn get_prop(&self, key: &str) -> Option<serde_json::Value> {
+        (key == "src").then(|| serde_json::Value::String(self.src.clone()))
     }
 
     fn supported_events(&self) -> &[&str] {

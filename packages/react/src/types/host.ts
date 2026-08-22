@@ -96,6 +96,7 @@ export type ElementType =
   | "code"
   | "diff"
   | "markdown"
+  | "virtual-list"
 
 // ── Theme ────────────────────────────────────────────────────────────
 
@@ -254,11 +255,27 @@ export interface TextareaProps extends InputProps {
   maxRows?: number
 }
 
+/** A variable-height list that builds only rows near its viewport. */
+export interface VirtualListProps {
+  style?: StyleDesc
+  children?: React.ReactNode
+  ref?: React.Ref<PublicInstance>
+  alignment?: "top" | "bottom"
+  followTail?: boolean
+  overdraw?: number
+  estimatedItemHeight?: number
+}
+
 // Props for native <img> rendering.
 export interface ImgProps extends Props {
   src?: string
   objectFit?: "fill" | "contain" | "cover" | "scaleDown" | "none"
   alt?: string
+}
+
+// Props for monochrome SVGs loaded from local files and tinted by style.color.
+export interface SvgProps extends Props {
+  src?: string
 }
 
 // Props for the <code> custom element — a syntax-highlighted code block.

@@ -20,6 +20,14 @@ are ported from **[Comet](https://github.com/zeronsh/comet)** (MIT, Copyright (c
 | `packages/native/src/custom_elements/code.rs` | `render_code_block` in `crates/ui/src/markdown/render.rs` |
 | `packages/native/src/theme.rs` | `crates/ui/src/theme.rs` |
 
+## Example icons
+
+The chat example includes SVG icons ported from
+**[Comet](https://github.com/zeronsh/comet)** (MIT, Copyright (c) 2026 Wing).
+Most are **Solar Icons by 480 Design**, licensed under
+[CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). Other icons are
+Comet's original work under the MIT license or original GPUIX assets.
+
 ## Bundled grammars
 
 Syntax highlighting bundles the following Tree-sitter components. Versions are

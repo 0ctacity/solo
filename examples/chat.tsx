@@ -44,6 +44,38 @@ const C = {
   accent: '#ffffff',
 }
 
+const ICONS = {
+  app: fileURLToPath(new URL('./assets/icons/openai-mark.svg', import.meta.url)),
+  newChat: fileURLToPath(new URL('./assets/icons/pen-new-square.svg', import.meta.url)),
+  search: fileURLToPath(new URL('./assets/icons/magnifer.svg', import.meta.url)),
+  library: fileURLToPath(new URL('./assets/icons/folder-with-files.svg', import.meta.url)),
+  sidebar: fileURLToPath(
+    new URL('./assets/icons/sidebar-minimalistic-left.svg', import.meta.url)
+  ),
+  copy: fileURLToPath(new URL('./assets/icons/copy.svg', import.meta.url)),
+  check: fileURLToPath(new URL('./assets/icons/check.svg', import.meta.url)),
+  retry: fileURLToPath(new URL('./assets/icons/restart.svg', import.meta.url)),
+  star: fileURLToPath(new URL('./assets/icons/star.svg', import.meta.url)),
+  starFilled: fileURLToPath(new URL('./assets/icons/star-bold.svg', import.meta.url)),
+  share: fileURLToPath(new URL('./assets/icons/arrow-up-right.svg', import.meta.url)),
+  more: fileURLToPath(new URL('./assets/icons/more-horizontal.svg', import.meta.url)),
+  chevronDown: fileURLToPath(new URL('./assets/icons/alt-arrow-down.svg', import.meta.url)),
+  attach: fileURLToPath(new URL('./assets/icons/paperclip.svg', import.meta.url)),
+  tools: fileURLToPath(new URL('./assets/icons/tuning.svg', import.meta.url)),
+  send: fileURLToPath(new URL('./assets/icons/arrow-up.svg', import.meta.url)),
+} as const
+
+type IconName = keyof typeof ICONS
+
+function Icon({ name, size = 16, color }: { name: IconName; size?: number; color: string }) {
+  return (
+    <svg
+      src={ICONS[name]}
+      style={{ width: size, height: size, flexShrink: 0, color }}
+    />
+  )
+}
+
 /** Native text components read colours and layout numbers from this. */
 const CHAT_THEME = {
   text: C.text,
@@ -223,36 +255,12 @@ const TURNS: Turn[] = [
 
 // ── Sidebar ──────────────────────────────────────────────────────────
 
-/**
- * A fixed 20x20 box that centres a glyph both ways.
- *
- * Glyphs have wildly different ink extents ("+" is short, "◇" is tall), so a
- * bare `<text>` next to a label puts every icon on its own baseline. Centring
- * inside a square of the label's line height lines them all up.
- */
-function IconBox({ glyph, color }: { glyph: string; color: string }) {
-  return (
-    <div
-      style={{
-        width: 20,
-        height: 20,
-        flexShrink: 0,
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-      }}
-    >
-      <text style={{ fontSize: 14, lineHeight: 20, color }}>{glyph}</text>
-    </div>
-  )
-}
-
 function SidebarButton({
-  glyph,
+  icon,
   label,
   onClick,
 }: {
-  glyph: string
+  icon: IconName
   label: string
   onClick?: () => void
 }) {
@@ -272,7 +280,7 @@ function SidebarButton({
       }}
       onClick={onClick}
     >
-      <IconBox glyph={glyph} color={C.text} />
+      <Icon name={icon} size={20} color={C.text} />
       <text style={{ fontSize: 14, lineHeight: 20, color: C.text }}>{label}</text>
     </div>
   )
@@ -374,7 +382,7 @@ function Sidebar({
             justifyContent: 'center',
           }}
         >
-          <text style={{ fontSize: 13, fontWeight: 'bold', color: C.onAccent }}>G</text>
+          <Icon name="app" size={17} color={C.onAccent} />
         </div>
         <div
           style={{
@@ -389,14 +397,14 @@ function Sidebar({
           }}
           onClick={onCollapse}
         >
-          <text style={{ fontSize: 15, color: C.muted }}>‹</text>
+          <Icon name="sidebar" size={18} color={C.muted} />
         </div>
       </div>
 
       <div style={{ display: 'flex', flexDirection: 'column', paddingLeft: 8, paddingRight: 8 }}>
-        <SidebarButton glyph="+" label="New chat" />
-        <SidebarButton glyph="○" label="Search chats" />
-        <SidebarButton glyph="◇" label="Library" />
+        <SidebarButton icon="newChat" label="New chat" />
+        <SidebarButton icon="search" label="Search chats" />
+        <SidebarButton icon="library" label="Library" />
       </div>
 
       <div
@@ -501,55 +509,14 @@ function UserTurn({ text }: { text: string }) {
   )
 }
 
-/**
- * A copy icon drawn from two rounded squares.
- *
- * GPUIX has no icon element yet, and the unicode glyphs for "copy" render
- * inconsistently across system fonts. Two 10px rounded boxes, one outlined and
- * offset behind the other, read unmistakably and scale with the theme.
- */
-function CopyGlyph({ color }: { color: string }) {
-  return (
-    <div style={{ position: 'relative', width: 14, height: 14 }}>
-      <div
-        style={{
-          position: 'absolute',
-          left: 0,
-          top: 0,
-          width: 10,
-          height: 10,
-          borderRadius: 3,
-          borderWidth: 1.25,
-          borderColor: color,
-        }}
-      />
-      <div
-        style={{
-          position: 'absolute',
-          left: 4,
-          top: 4,
-          width: 10,
-          height: 10,
-          borderRadius: 3,
-          borderWidth: 1.25,
-          borderColor: color,
-          backgroundColor: C.canvas,
-        }}
-      />
-    </div>
-  )
-}
-
 /** A ghost button: icon, optional label, rounded, washes on hover. */
 function GhostButton({
-  glyph,
   icon,
   label,
   active,
   onClick,
 }: {
-  glyph?: string
-  icon?: React.ReactNode
+  icon: IconName
   label?: string
   active?: boolean
   onClick?: () => void
@@ -574,8 +541,7 @@ function GhostButton({
       }}
       onClick={onClick}
     >
-      {icon}
-      {glyph && <text style={{ fontSize: 14, color }}>{glyph}</text>}
+      <Icon name={icon} size={16} color={color} />
       {label && <text style={{ fontSize: 12.5, color }}>{label}</text>}
     </div>
   )
@@ -599,22 +565,18 @@ function ActionBar() {
       }}
     >
       <GhostButton
-        icon={copied ? undefined : <CopyGlyph color={C.faint} />}
-        glyph={copied ? '✓' : undefined}
+        icon={copied ? 'check' : 'copy'}
         active={copied}
         onClick={() => setCopied((was) => !was)}
       />
-      <GhostButton glyph="↻" />
-      {/* One positive signal rather than a thumbs pair: the outlined heart and
-          its filled twin read unambiguously, where two abstract glyphs for
-          up and down do not. */}
+      <GhostButton icon="retry" />
       <GhostButton
-        glyph={liked ? '♥' : '♡'}
+        icon={liked ? 'starFilled' : 'star'}
         active={liked}
         onClick={() => setLiked((was) => !was)}
       />
-      <GhostButton glyph="↗" />
-      <GhostButton glyph="⋯" />
+      <GhostButton icon="share" />
+      <GhostButton icon="more" />
     </div>
   )
 }
@@ -913,7 +875,7 @@ function TopBar({
           }}
           onClick={onExpand}
         >
-          <text style={{ fontSize: 15, color: C.muted }}>›</text>
+          <Icon name="sidebar" size={18} color={C.muted} />
         </div>
       )}
       <div
@@ -931,7 +893,7 @@ function TopBar({
         }}
       >
         <text style={{ fontSize: 15, color: C.text }}>GPUIX</text>
-        <text style={{ fontSize: 11, color: C.faint }}>▾</text>
+        <Icon name="chevronDown" size={13} color={C.faint} />
       </div>
       <div style={{ flexGrow: 1 }} />
       <text
@@ -1016,8 +978,8 @@ function Composer({
               paddingTop: 6,
             }}
           >
-            <RoundButton glyph="+" />
-            <ComposerPill glyph="◇" label="Tools" />
+            <RoundButton icon="attach" />
+            <ComposerPill icon="tools" label="Tools" />
             <div style={{ flexGrow: 1 }} />
             <div
               style={{
@@ -1033,15 +995,7 @@ function Composer({
               }}
               onClick={() => ready && onSend()}
             >
-              <text
-                style={{
-                  fontSize: 16,
-                  fontWeight: 'bold',
-                  color: ready ? C.onAccent : C.faint,
-                }}
-              >
-                {'↑'}
-              </text>
+              <Icon name="send" size={18} color={ready ? C.onAccent : C.faint} />
             </div>
           </div>
         </div>
@@ -1057,7 +1011,7 @@ function Composer({
 }
 
 /** A 38px circular ghost button, matching the send button. */
-function RoundButton({ glyph }: { glyph: string }) {
+function RoundButton({ icon }: { icon: IconName }) {
   return (
     <div
       style={{
@@ -1071,13 +1025,13 @@ function RoundButton({ glyph }: { glyph: string }) {
         hover: { backgroundColor: C.hoverStrong },
       }}
     >
-      <text style={{ fontSize: 16, color: C.muted }}>{glyph}</text>
+      <Icon name={icon} size={18} color={C.muted} />
     </div>
   )
 }
 
 /** An outlined pill for the composer's tool switches. */
-function ComposerPill({ glyph, label }: { glyph: string; label: string }) {
+function ComposerPill({ icon, label }: { icon: IconName; label: string }) {
   return (
     <div
       style={{
@@ -1095,7 +1049,7 @@ function ComposerPill({ glyph, label }: { glyph: string; label: string }) {
         hover: { backgroundColor: C.hoverStrong },
       }}
     >
-      <text style={{ fontSize: 13, color: C.muted }}>{glyph}</text>
+      <Icon name={icon} size={16} color={C.muted} />
       <text style={{ fontSize: 13, color: C.muted }}>{label}</text>
     </div>
   )

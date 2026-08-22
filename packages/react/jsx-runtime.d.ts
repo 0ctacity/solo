@@ -9,7 +9,9 @@ import type {
   InputProps,
   MarkdownProps,
   Props,
+  SvgProps,
   TextareaProps,
+  VirtualListProps,
 } from "./dist/types/host"
 
 export { jsx, jsxs, Fragment } from "react/jsx-runtime"
@@ -27,7 +29,7 @@ export namespace JSX {
     div: Props
     text: Props
     img: ImgProps
-    svg: Props
+    svg: SvgProps
     canvas: Props
     input: InputProps
     textarea: TextareaProps
@@ -35,5 +37,6 @@ export namespace JSX {
     code: CodeProps
     diff: DiffProps
     markdown: MarkdownProps
+    "virtual-list": VirtualListProps
   }
 }

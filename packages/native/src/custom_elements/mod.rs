@@ -152,6 +152,7 @@ impl CustomElementRegistry {
         registry.register(Box::new(input::TextareaFactory));
         registry.register(Box::new(anchored::AnchoredFactory));
         registry.register(Box::new(img::ImgFactory));
+        registry.register(Box::new(img::SvgFactory));
         registry.register(Box::new(code::CodeFactory));
         registry.register(Box::new(diff::DiffFactory));
         registry.register(Box::new(markdown::MarkdownFactory));

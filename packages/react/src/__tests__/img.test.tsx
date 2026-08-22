@@ -131,3 +131,55 @@ describeNative("custom element: img", () => {
     })
   })
 })
+
+describeNative("custom element: svg", () => {
+  it("renders a local SVG with the style color", () => {
+    writeSvgFixture(IMAGE_FIXTURE_PATH)
+    const testRoot = createTestRoot()
+
+    function SvgScreenshotProbe() {
+      const [loaded, setLoaded] = useState(false)
+
+      return (
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            width: "100%",
+            height: "100%",
+            backgroundColor: "#0f111a",
+          }}
+          onClick={() => setLoaded(true)}
+        >
+          <svg
+            src={loaded ? IMAGE_FIXTURE_PATH : ""}
+            style={{ width: 240, height: 140, color: "#5ca9ff" }}
+          />
+        </div>
+      )
+    }
+
+    testRoot.render(<SvgScreenshotProbe />)
+
+    const beforePath = "/tmp/gpuix-svg-0.png"
+    const afterPath = "/tmp/gpuix-svg-1.png"
+    if (fs.existsSync(beforePath)) fs.unlinkSync(beforePath)
+    if (fs.existsSync(afterPath)) fs.unlinkSync(afterPath)
+
+    testRoot.renderer.captureScreenshot(beforePath)
+    testRoot.renderer.nativeSimulateClick(640, 400)
+    testRoot.renderer.flush()
+    testRoot.renderer.flush()
+    testRoot.renderer.flush()
+    testRoot.renderer.captureScreenshot(afterPath)
+
+    expect(fs.existsSync(beforePath)).toBe(true)
+    expect(fs.existsSync(afterPath)).toBe(true)
+    if (!isCI) {
+      const before = fs.readFileSync(beforePath)
+      const after = fs.readFileSync(afterPath)
+      expect(bufferSimilarity(before, after)).toBeLessThan(0.99)
+    }
+  })
+})

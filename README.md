@@ -439,8 +439,18 @@ Bash, TOML, YAML, Markdown, HTML, CSS, C.
 | `textarea`  | Native multiline, auto-growing text editor       |
 | `img`       | Images                                           |
 | `anchored`  | Positioned overlay                               |
-| `svg`       | Vector graphics (planned)                        |
+| `svg`       | Tintable SVGs loaded from local files            |
 | `canvas`    | Custom drawing (planned)                         |
+
+SVGs use GPUI's monochrome icon renderer. Set the local file path with `src`,
+the size with `width` and `height`, and the tint with `color`:
+
+```tsx
+<svg
+  src="/absolute/path/to/search.svg"
+  style={{ width: 16, height: 16, color: '#b4b4b4' }}
+/>
+```
 
 ## Supported Events
 
