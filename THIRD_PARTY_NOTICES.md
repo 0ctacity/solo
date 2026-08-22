@@ -18,6 +18,7 @@ are ported from **[Comet](https://github.com/zeronsh/comet)** (MIT, Copyright (c
 | `packages/native/src/diff/mod.rs` | pure sections of `crates/ui/src/changes.rs` |
 | `packages/native/src/custom_elements/diff.rs` | rendering sections of `crates/ui/src/changes.rs` |
 | `packages/native/src/custom_elements/code.rs` | `render_code_block` in `crates/ui/src/markdown/render.rs` |
+| `packages/native/src/custom_elements/input.rs` | caret blink sections of `crates/ui/src/composer.rs` |
 | `packages/native/src/theme.rs` | `crates/ui/src/theme.rs` |
 
 ## Example icons

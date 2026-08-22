@@ -185,6 +185,7 @@ export interface GpuixTheme {
   textFaint?: string
   textDim?: string
   accent?: string
+  caret?: string
   codeText?: string
   codeWash?: string
   diffAdd?: string
@@ -248,6 +249,7 @@ export interface InputProps extends Props {
   value?: string
   placeholder?: string
   readOnly?: boolean
+  theme?: GpuixTheme
 }
 
 export interface TextareaProps extends InputProps {

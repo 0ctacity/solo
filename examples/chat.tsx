@@ -85,6 +85,7 @@ const CHAT_THEME = {
   border: C.border,
   bg: C.canvas,
   accent: '#7c86ff',
+  caret: '#7c86ff',
   metrics: {
     mdTextSize: 15,
     mdLineHeight: 26,
@@ -974,6 +975,7 @@ function Composer({
             minRows={1}
             maxRows={8}
             autoFocus
+            theme={CHAT_THEME}
             style={{
               width: '100%',
               minWidth: 0,

@@ -1,4 +1,4 @@
-//! Theme tokens for the native text components (`<code>`, `<diff>`, `<markdown>`).
+//! Theme tokens for native text editors and document components.
 //!
 //! Ported from Comet (https://github.com/zeronsh/comet), MIT.
 //! Original: `crates/ui/src/theme.rs`.
@@ -11,8 +11,8 @@
 //! deserializes into [`ThemeOverride`] and is applied on top of [`Theme::dark`].
 //! Unknown keys are ignored so a JS theme object can carry extra fields.
 
-use gpui::{hsla, Hsla};
 use crate::syntax::HighlightKind;
+use gpui::{hsla, Hsla};
 use serde::Deserialize;
 
 // ── Colour helpers ───────────────────────────────────────────────────
@@ -426,8 +426,8 @@ impl Default for Metrics {
 
 /// The token set the native text components paint with.
 ///
-/// This is a trimmed Comet theme: only the tokens `<code>`, `<diff>` and
-/// `<markdown>` actually read. Surfaces, buttons and chrome tokens are the host
+/// This is a trimmed Comet theme: only tokens read by the native editors and
+/// document elements remain. Surfaces, buttons and chrome tokens are the host
 /// app's business and stay in JS as ordinary `style` props.
 #[derive(Debug, Clone)]
 pub struct Theme {
@@ -445,6 +445,8 @@ pub struct Theme {
     pub text_dim: Hsla,
     /// Accent (indigo) — list markers, blockquote rail, selection wash.
     pub accent: Hsla,
+    /// Text-editor caret.
+    pub caret: Hsla,
     /// Inline-code text, violet-300.
     pub code_text: Hsla,
     /// Rounded wash behind inline code, violet-400 at 12%.
@@ -477,16 +479,13 @@ impl Theme {
             text_faint: neutral(0.556),
             text_dim: grey(0x98),
             accent: oklch(0.673, 0.182, 276.935),
+            caret: oklch(0.673, 0.182, 276.935),
             code_text: oklch(0.811, 0.111, 293.571),
             code_wash: with_alpha(oklch(0.702, 0.183, 293.541), 0.12),
             diff_add: oklch(0.765, 0.177, 163.223),
             diff_del: oklch(0.704, 0.191, 22.216),
             diff_hunk_bg: hsla(0.6, 0.35, 0.6, 0.05),
-            syntax: SyntaxPalette::dark(
-                neutral(0.922),
-                neutral(0.60),
-                oklch(0.704, 0.191, 22.216),
-            ),
+            syntax: SyntaxPalette::dark(neutral(0.922), neutral(0.60), oklch(0.704, 0.191, 22.216)),
             font_sans: system_sans().to_string(),
             font_mono: system_mono().to_string(),
             metrics: Metrics::default(),
@@ -503,16 +502,13 @@ impl Theme {
             text_faint: neutral(0.535),
             text_dim: neutral(0.50),
             accent: oklch(0.511, 0.262, 276.966),
+            caret: oklch(0.511, 0.262, 276.966),
             code_text: oklch(0.491, 0.27, 292.581),
             code_wash: with_alpha(oklch(0.541, 0.281, 293.009), 0.10),
             diff_add: oklch(0.596, 0.145, 163.225),
             diff_del: oklch(0.577, 0.245, 27.325),
             diff_hunk_bg: hsla(0.6, 0.35, 0.35, 0.07),
-            syntax: SyntaxPalette::dark(
-                neutral(0.25),
-                neutral(0.48),
-                oklch(0.505, 0.213, 27.518),
-            ),
+            syntax: SyntaxPalette::dark(neutral(0.25), neutral(0.48), oklch(0.505, 0.213, 27.518)),
             font_sans: system_sans().to_string(),
             font_mono: system_mono().to_string(),
             metrics: Metrics::default(),
@@ -531,6 +527,7 @@ impl Theme {
         set(&mut self.text_faint, &o.text_faint);
         set(&mut self.text_dim, &o.text_dim);
         set(&mut self.accent, &o.accent);
+        set(&mut self.caret, &o.caret);
         set(&mut self.code_text, &o.code_text);
         set(&mut self.code_wash, &o.code_wash);
         set(&mut self.diff_add, &o.diff_add);
@@ -642,6 +639,7 @@ pub struct ThemeOverride {
     pub text_faint: Option<String>,
     pub text_dim: Option<String>,
     pub accent: Option<String>,
+    pub caret: Option<String>,
     pub code_text: Option<String>,
     pub code_wash: Option<String>,
     pub diff_add: Option<String>,
@@ -735,8 +733,14 @@ mod tests {
     /// Reference values from CSS Color 4 matrices — the same assertion Comet makes.
     #[test]
     fn oklch_matches_tailwind_reference() {
-        assert_eq!(srgb_u8(oklch_to_srgb(0.673, 0.182, 276.935)), [124, 134, 255]);
-        assert_eq!(srgb_u8(oklch_to_srgb(0.704, 0.191, 22.216)), [255, 100, 103]);
+        assert_eq!(
+            srgb_u8(oklch_to_srgb(0.673, 0.182, 276.935)),
+            [124, 134, 255]
+        );
+        assert_eq!(
+            srgb_u8(oklch_to_srgb(0.704, 0.191, 22.216)),
+            [255, 100, 103]
+        );
         assert_eq!(srgb_u8(oklch_to_srgb(0.828, 0.189, 84.429)), [255, 185, 0]);
     }
 
@@ -753,11 +757,12 @@ mod tests {
     fn override_replaces_only_named_tokens() {
         let base = Theme::dark();
         let o: ThemeOverride = serde_json::from_str(
-            r##"{ "text": "#ff0000", "syntax": { "keyword": "#00ff00" }, "unknownKey": 1 }"##,
+            r##"{ "text": "#ff0000", "caret": "#0000ff", "syntax": { "keyword": "#00ff00" }, "unknownKey": 1 }"##,
         )
         .unwrap();
         let t = base.clone().with_override(&o);
         assert_eq!(t.text, gpui::rgba(0xff0000ff).into());
+        assert_eq!(t.caret, gpui::rgba(0x0000ffff).into());
         assert_eq!(t.syntax.keyword, gpui::rgba(0x00ff00ff).into());
         assert_eq!(t.diff_add, base.diff_add);
         assert_eq!(t.syntax.string, base.syntax.string);

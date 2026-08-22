@@ -181,9 +181,10 @@ cheaper than retaining one React node per line.
 
 ## Ported code
 
-`text/`, `syntax/`, `markdown/`, `diff/`, `theme.rs`, `custom_elements/code.rs`
-and `custom_elements/diff.rs` are ported from
-[Comet](https://github.com/zeronsh/comet) (MIT). Each file names its original in
+`text/`, `syntax/`, `markdown/`, `diff/`, `theme.rs`, `custom_elements/code.rs`,
+`custom_elements/diff.rs`, and the caret blink sections of
+`custom_elements/input.rs` are ported from [Comet](https://github.com/zeronsh/comet)
+(MIT). Each file names its original in
 its header, and `THIRD_PARTY_NOTICES.md` has the full table. When fixing a bug in
 one of them, read the Comet original first: it usually documents why the code is
 shaped that way.

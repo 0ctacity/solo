@@ -324,6 +324,14 @@ The editor updates natively first, then reports the complete value to React.
 `value` changes can replace the native content, but keeping the same prop value
 does not reject an edit like a browser-controlled input.
 
+The focused caret stays solid during edits and then blinks every 500ms while
+idle. It stops scheduling repaint frames on blur or while the window is
+inactive. Override its colour through the shared native theme:
+
+```tsx
+<input theme={{ caret: '#22c55e' }} />
+```
+
 ## Text selection
 
 Every text GPUIX paints is **selectable and copyable**, including text inside

@@ -148,6 +148,24 @@ describeNative("native text editors", () => {
     expect(testRoot.renderer.getAllText()).toContain("Value: locked")
   })
 
+  it("forwards the caret theme to the native editor", () => {
+    testRoot.render(
+      <input
+        autoFocus
+        value=""
+        theme={{ caret: "#22c55e" }}
+        style={{ width: 300, height: 40 }}
+      />
+    )
+
+    const input = testRoot.renderer.findByType("input")[0]
+    expect(input.customProps?.theme).toMatchInlineSnapshot(`
+      {
+        "caret": "#22c55e",
+      }
+    `)
+  })
+
   it("applies external value changes", () => {
     function TextInput() {
       const [text, setText] = useState("draft")

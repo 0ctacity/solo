@@ -1,19 +1,23 @@
 //! Native single-line and multiline text editors with platform IME support.
+//!
+//! Caret blinking is ported from Comet's `crates/ui/src/composer.rs` (MIT).
 
 use std::collections::VecDeque;
 use std::ops::Range;
+use std::time::{Duration, Instant};
 
 use gpui::{
     actions, div, fill, point, prelude::*, px, relative, size, App, Bounds, ClipboardItem, Context,
     CursorStyle, ElementInputHandler, Entity, EntityInputHandler, FocusHandle, GlobalElementId,
     KeyBinding, LayoutId, MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent, PaintQuad,
-    Pixels, Point, ScrollWheelEvent, SharedString, Style, TextRun, TextStyle, UTF16Selection,
+    Pixels, Point, ScrollWheelEvent, SharedString, Style, Task, TextRun, TextStyle, UTF16Selection,
     UnderlineStyle, Window, WrappedLine,
 };
 use unicode_segmentation::UnicodeSegmentation;
 
 use super::{CustomElement, CustomElementFactory, CustomRenderContext};
 use crate::renderer::{emit_event_full, EventCallback};
+use crate::theme::Theme;
 
 actions!(
     gpuix_text_editor,
@@ -55,6 +59,11 @@ actions!(
 
 const INPUT_KEY_CONTEXT: &str = "GpuixInput";
 const TEXTAREA_KEY_CONTEXT: &str = "GpuixTextarea";
+const CARET_BLINK_MS: u64 = 500;
+
+fn caret_visible(ms_since_activity: u64) -> bool {
+    (ms_since_activity / CARET_BLINK_MS) % 2 == 0
+}
 
 fn utf16_offset_to_utf8(text: &str, offset: usize) -> usize {
     let mut utf8_offset = 0;
@@ -178,6 +187,7 @@ struct TextEditorElement {
     min_rows: usize,
     max_rows: usize,
     last_prop_value: Option<String>,
+    theme: Theme,
     state: Option<Entity<TextEditorState>>,
 }
 
@@ -191,6 +201,7 @@ impl TextEditorElement {
             min_rows: 1,
             max_rows: if multiline { 10 } else { 1 },
             last_prop_value: None,
+            theme: Theme::dark(),
             state: None,
         }
     }
@@ -222,11 +233,12 @@ impl CustomElement for TextEditorElement {
                 let read_only = self.read_only;
                 let min_rows = self.min_rows;
                 let max_rows = self.max_rows;
+                let caret_color = self.theme.caret;
                 let callback = callback.clone();
                 let id = ctx.id;
                 let cursor = value.len();
                 let state_focus_handle = focus_handle.clone();
-                cx.new(move |_| TextEditorState {
+                cx.new(move |cx| TextEditorState {
                     element_id: id,
                     callback,
                     emits_change,
@@ -254,6 +266,9 @@ impl CustomElement for TextEditorElement {
                     content_height: 20.0,
                     content_width: 0.0,
                     display_is_placeholder: false,
+                    caret_color,
+                    blink_anchor: cx.background_executor().now(),
+                    blink_task: None,
                     pending_values: VecDeque::new(),
                     undo_stack: Vec::new(),
                     redo_stack: Vec::new(),
@@ -272,6 +287,10 @@ impl CustomElement for TextEditorElement {
             state.read_only = self.read_only;
             state.min_rows = self.min_rows.max(1);
             state.max_rows = self.max_rows.max(state.min_rows);
+            if state.caret_color != self.theme.caret {
+                state.caret_color = self.theme.caret;
+                cx.notify();
+            }
             if prop_changed {
                 state.sync_prop_value(self.value.clone(), cx);
             }
@@ -316,12 +335,20 @@ impl CustomElement for TextEditorElement {
                     .unwrap_or(if self.multiline { 10 } else { 1 })
                     as usize
             }
+            "theme" => self.theme = Theme::from_prop(Some(&value)),
             _ => {}
         }
     }
 
     fn supported_props(&self) -> &[&str] {
-        &["value", "placeholder", "readOnly", "minRows", "maxRows"]
+        &[
+            "value",
+            "placeholder",
+            "readOnly",
+            "minRows",
+            "maxRows",
+            "theme",
+        ]
     }
 
     fn get_prop(&self, key: &str) -> Option<serde_json::Value> {
@@ -381,12 +408,38 @@ struct TextEditorState {
     content_height: f32,
     content_width: f32,
     display_is_placeholder: bool,
+    caret_color: gpui::Hsla,
+    blink_anchor: Instant,
+    blink_task: Option<Task<()>>,
     pending_values: VecDeque<String>,
     undo_stack: Vec<EditSnapshot>,
     redo_stack: Vec<EditSnapshot>,
 }
 
 impl TextEditorState {
+    fn reset_blink(&mut self, cx: &Context<Self>) {
+        self.blink_anchor = cx.background_executor().now();
+    }
+
+    fn caret_shown(&mut self, window: &Window, cx: &mut Context<Self>) -> bool {
+        if !self.focus_handle.is_focused(window) || !window.is_window_active() {
+            self.blink_task = None;
+            return false;
+        }
+        if self.blink_task.is_none() {
+            self.reset_blink(cx);
+            self.blink_task = Some(cx.spawn(async move |this, cx| loop {
+                cx.background_executor()
+                    .timer(Duration::from_millis(CARET_BLINK_MS))
+                    .await;
+                if this.update(cx, |_, cx| cx.notify()).is_err() {
+                    break;
+                }
+            }));
+        }
+        caret_visible(self.blink_anchor.elapsed().as_millis() as u64)
+    }
+
     fn snapshot(&self) -> EditSnapshot {
         EditSnapshot {
             content: self.content.clone(),
@@ -420,6 +473,7 @@ impl TextEditorState {
         self.scroll_top = 0.0;
         self.scroll_left = 0.0;
         self.follow_cursor = true;
+        self.reset_blink(cx);
         self.undo_stack.clear();
         self.redo_stack.clear();
         cx.notify();
@@ -451,6 +505,7 @@ impl TextEditorState {
         self.selection_reversed = snapshot.selection_reversed;
         self.marked_range = None;
         self.follow_cursor = true;
+        self.reset_blink(cx);
         self.emit_change();
         cx.notify();
     }
@@ -468,6 +523,7 @@ impl TextEditorState {
         self.selected_range = offset..offset;
         self.selection_reversed = false;
         self.follow_cursor = true;
+        self.reset_blink(cx);
         cx.notify();
     }
 
@@ -483,6 +539,7 @@ impl TextEditorState {
             self.selected_range = self.selected_range.end..self.selected_range.start;
         }
         self.follow_cursor = true;
+        self.reset_blink(cx);
         cx.notify();
     }
 
@@ -623,6 +680,7 @@ impl TextEditorState {
     fn select_all(&mut self, _: &SelectAll, _: &mut Window, cx: &mut Context<Self>) {
         self.selected_range = 0..self.content.len();
         self.selection_reversed = false;
+        self.reset_blink(cx);
         cx.notify();
     }
 
@@ -1066,6 +1124,7 @@ impl EntityInputHandler for TextEditorState {
         self.selection_reversed = false;
         self.marked_range = None;
         self.follow_cursor = true;
+        self.reset_blink(cx);
         self.emit_change();
         cx.notify();
     }
@@ -1107,6 +1166,7 @@ impl EntityInputHandler for TextEditorState {
             })
             .unwrap_or_else(|| range.start + replacement.len()..range.start + replacement.len());
         self.follow_cursor = true;
+        self.reset_blink(cx);
         self.emit_change();
         cx.notify();
     }
@@ -1147,6 +1207,7 @@ impl EntityInputHandler for TextEditorState {
         self.selected_range = self.range_from_utf16(&range_utf16);
         self.selection_reversed = false;
         self.follow_cursor = true;
+        self.reset_blink(cx);
         cx.notify();
     }
 
@@ -1319,7 +1380,7 @@ impl gpui::Element for EditorTextElement {
                     point(origin.x + caret_point.x, origin.y + caret_point.y),
                     size(px(2.0), input.line_height),
                 ),
-                gpui::rgba(0x7c86ffff),
+                input.caret_color,
             ));
         } else if let (Some(start), Some(end)) = (
             input.point_for_index(input.selected_range.start),
@@ -1414,7 +1475,10 @@ impl gpui::Element for EditorTextElement {
                 y += height;
             }
             self.input.update(cx, |input, _| input.last_lines = lines);
-            if focus_handle.is_focused(window) {
+            let caret_shown = self
+                .input
+                .update(cx, |input, cx| input.caret_shown(window, cx));
+            if caret_shown {
                 if let Some(caret) = prepaint.caret.take() {
                     window.paint_quad(caret);
                 }
@@ -1445,5 +1509,21 @@ mod tests {
     #[test]
     fn single_line_newlines_become_one_space() {
         assert_eq!(single_line_text("a\r\nb\nc\rd"), "a b c d");
+    }
+
+    #[test]
+    fn caret_blink_phase() {
+        assert!(caret_visible(0));
+        assert!(caret_visible(CARET_BLINK_MS - 1));
+        assert!(!caret_visible(CARET_BLINK_MS));
+        assert!(!caret_visible(2 * CARET_BLINK_MS - 1));
+        assert!(caret_visible(2 * CARET_BLINK_MS));
+    }
+
+    #[test]
+    fn caret_color_comes_from_the_input_theme() {
+        let mut input = TextEditorElement::new(false);
+        input.set_prop("theme", serde_json::json!({ "caret": "#22c55e" }));
+        assert_eq!(input.theme.caret, gpui::rgba(0x22c55eff).into());
     }
 }
