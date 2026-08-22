@@ -14,6 +14,8 @@ import { connectTest } from '@gpuix/react/automation'
 const app = await connectTest(renderer)
 await app.getByTestId('inc').click()
 await app.getByText('Count: 1').waitFor()
+await app.getByTestId('composer').fill('hello gpuix')
+await app.getByTestId('composer').press('enter')
 await app.captureFrames('review/sidebar', [0, 150, 300])
 ```
 

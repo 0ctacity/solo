@@ -242,6 +242,17 @@ export class SseBackend implements AutomationBackend {
   }
 }
 
+function toKeystrokes(text: string): string {
+  return [...text]
+    .map((ch) => {
+      if (ch === " ") return "space"
+      if (ch === "\n") return "enter"
+      if (ch === "\t") return "tab"
+      return ch
+    })
+    .join(" ")
+}
+
 interface Selector {
   testId?: string
   text?: string
@@ -334,6 +345,24 @@ export class Locator {
     await this.app.call("click", {
       x: bounds.x + bounds.width / 2,
       y: bounds.y + bounds.height / 2,
+    })
+  }
+
+  async fill(text: string): Promise<void> {
+    const node = await this.element()
+    const selectAll = process.platform === "darwin" ? "cmd-a" : "ctrl-a"
+    const replacement = text.length === 0 ? "backspace" : toKeystrokes(text)
+    await this.app.call("keystrokes", {
+      elementId: node.id,
+      keys: `${selectAll} ${replacement}`,
+    })
+  }
+
+  async press(key: string): Promise<void> {
+    const node = await this.element()
+    await this.app.call("keystrokes", {
+      elementId: node.id,
+      keys: key,
     })
   }
 
