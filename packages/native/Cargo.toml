@@ -19,9 +19,9 @@ env_logger = "0.11"
 parking_lot = "0.12"
 futures = "0.3"
 
-# Use the embedded-platform fork checked out in the zed submodule.
+# Use the GPUI fork checked out in the zed submodule.
 gpui = { path = "../../zed/crates/gpui", default-features = false, features = ["font-kit"] }
-gpui_platform = { path = "../../zed/crates/gpui_platform", default-features = false, features = ["font-kit"] }
+gpui_platform = { path = "../../zed/crates/gpui_platform", default-features = false, features = ["font-kit", "wayland", "x11"] }
 thiserror = "2"
 tree-sitter = "0.26.11"
 tree-sitter-highlight = "0.26.11"
@@ -39,19 +39,19 @@ tree-sitter-css = "0.25.0"
 tree-sitter-yaml = "0.7.2"
 tree-sitter-c = "0.24.2"
 pulldown-cmark = { version = "0.12", default-features = false }
+unicode-segmentation = "1"
 
 # macOS text/graphics deps - pinned to avoid core-graphics version conflicts
 # core-text 21.1.0 uses core-graphics 0.25 which conflicts with font-kit's core-graphics 0.24
 [target.'cfg(target_os = "macos")'.dependencies]
 core-text = "=21.0.0"
 core-graphics = "=0.24.0"
-# Production uses MacPlatform; tests use its real Metal renderer.
+# Production uses the embedded AppKit loop; tests use the native Metal renderer.
 gpui_macos = { path = "../../zed/crates/gpui_macos", default-features = false, features = ["font-kit"] }
 
 [features]
 # test-support is default so published binaries include TestGpuixRenderer,
 # letting users write GPU-backed tests for their apps.
-# On Linux CI, pass --no-default-features since gpui_macos is macOS-only.
 default = ["test-support"]
 test-support = ["gpui/test-support", "gpui_macos/test-support", "gpui_macos/font-kit"]
 

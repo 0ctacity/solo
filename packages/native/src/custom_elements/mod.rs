@@ -149,6 +149,7 @@ impl CustomElementRegistry {
     pub fn with_defaults() -> Self {
         let mut registry = Self::new();
         registry.register(Box::new(input::InputFactory));
+        registry.register(Box::new(input::TextareaFactory));
         registry.register(Box::new(anchored::AnchoredFactory));
         registry.register(Box::new(img::ImgFactory));
         registry.register(Box::new(code::CodeFactory));

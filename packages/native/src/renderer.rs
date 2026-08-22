@@ -1,27 +1,34 @@
-/// GpuixRenderer — napi-rs binding exposed to Node.js.
-///
-/// Mutation-based API: React's reconciler sends individual mutations
-/// (createElement, appendChild, setStyle, etc.) instead of a full JSON tree.
-/// Rust maintains a RetainedTree and rebuilds GPUI elements from it each frame.
-///
-/// Lifecycle:
-///   const renderer = new GpuixRenderer(eventCallback)
-///   renderer.init({ title: 'My App', width: 800, height: 600 })
-///   renderer.createElement(1, "div")     // mutations from React reconciler
-///   renderer.appendChild(0, 1)
-///   renderer.commitMutations()           // signal batch complete
-///   setTimeout(function loop() {         // drive the AppKit event loop
-///     renderer.tick()
-///     setTimeout(loop, 8)
-///   })
+//! GpuixRenderer — napi-rs binding exposed to Node.js.
+//!
+//! Mutation-based API: React's reconciler sends individual mutations
+//! (createElement, appendChild, setStyle, etc.) instead of a full JSON tree.
+//! Rust maintains a RetainedTree and rebuilds GPUI elements from it each frame.
+//!
+//! Lifecycle:
+//!   const renderer = new GpuixRenderer(eventCallback)
+//!   renderer.init({ title: 'My App', width: 800, height: 600 })
+//!   renderer.createElement(1, "div")     // mutations from React reconciler
+//!   renderer.appendChild(0, 1)
+//!   renderer.commitMutations()           // signal batch complete
+//!   setTimeout(function loop() {         // drive AppKit on macOS
+//!     renderer.tick()
+//!     setTimeout(loop, 8)
+//!   })
+#[cfg(any(target_os = "windows", target_os = "linux", target_os = "freebsd"))]
+use futures::{channel::mpsc, StreamExt as _};
 use gpui::AppContext as _;
 use napi::bindgen_prelude::*;
 use napi::threadsafe_function::{ThreadsafeFunction, ThreadsafeFunctionCallMode};
 use napi_derive::napi;
 use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
+#[cfg(target_os = "macos")]
 use std::rc::Rc;
+#[cfg(any(target_os = "windows", target_os = "linux", target_os = "freebsd"))]
+use std::sync::mpsc::{sync_channel, RecvTimeoutError, SyncSender};
 use std::sync::{Arc, Mutex};
+#[cfg(any(target_os = "windows", target_os = "linux", target_os = "freebsd"))]
+use std::time::Duration;
 
 use crate::custom_elements::{CustomElementRegistry, CustomRenderContext};
 use crate::element_tree::EventPayload;
@@ -35,9 +42,7 @@ use crate::theme::Theme;
 /// and raw numbers (700). Falls back to 400 (normal) for unrecognized values.
 fn parse_font_weight(value: &crate::style::FontWeightValue) -> gpui::FontWeight {
     match value {
-        crate::style::FontWeightValue::Num(n) => {
-            gpui::FontWeight((*n as f32).clamp(1.0, 1000.0))
-        }
+        crate::style::FontWeightValue::Num(n) => gpui::FontWeight((*n as f32).clamp(1.0, 1000.0)),
         crate::style::FontWeightValue::Str(s) => {
             let lower = s.trim().to_ascii_lowercase();
             match lower.as_str() {
@@ -81,7 +86,7 @@ thread_local! {
     #[cfg(target_os = "macos")]
     static GPUI_WINDOW: RefCell<Option<gpui::WindowHandle<GpuixView>>> = const { RefCell::new(None) };
     /// Shared scroll handles — GpuixView writes here during render(),
-    /// napi methods read from here for programmatic scroll control.
+    /// platform-local handlers read from here for programmatic scroll control.
     /// ScrollHandle is Rc<RefCell<...>> so its methods (set_offset, offset,
     /// scroll_to_item) work without an App context.
     ///
@@ -120,46 +125,190 @@ fn invalidate_window() -> Result<()> {
     })
 }
 
+#[cfg(any(target_os = "windows", target_os = "linux", target_os = "freebsd"))]
+enum UiCommand {
+    Invalidate,
+    SetWindowTitle(String),
+    ScrollTo {
+        id: u64,
+        x: f32,
+        y: f32,
+    },
+    ScrollToItem {
+        id: u64,
+        index: usize,
+    },
+    GetScrollOffset {
+        id: u64,
+        response: SyncSender<Option<[f64; 2]>>,
+    },
+    FocusElement(u64),
+    Blur,
+}
+
+#[cfg(any(target_os = "windows", target_os = "linux", target_os = "freebsd"))]
+fn refresh_ui_window(
+    window: gpui::WindowHandle<GpuixView>,
+    cx: &mut gpui::AsyncApp,
+) -> anyhow::Result<()> {
+    window.update(cx, |_view, window, cx| {
+        cx.notify();
+        window.refresh();
+    })
+}
+
+#[cfg(any(target_os = "windows", target_os = "linux", target_os = "freebsd"))]
+async fn run_ui_commands(
+    mut commands: mpsc::UnboundedReceiver<UiCommand>,
+    window: gpui::WindowHandle<GpuixView>,
+    cx: &mut gpui::AsyncApp,
+) {
+    while let Some(command) = commands.next().await {
+        let result = match command {
+            UiCommand::Invalidate => refresh_ui_window(window, cx),
+            UiCommand::SetWindowTitle(title) => window.update(cx, move |view, window, cx| {
+                view.window_title = title;
+                cx.notify();
+                window.refresh();
+            }),
+            UiCommand::ScrollTo { id, x, y } => {
+                SCROLL_HANDLES.with(|cell| {
+                    if let Some(handle) = cell.borrow().get(&id) {
+                        handle.set_offset(gpui::point(gpui::px(x), gpui::px(y)));
+                    }
+                });
+                refresh_ui_window(window, cx)
+            }
+            UiCommand::ScrollToItem { id, index } => {
+                SCROLL_HANDLES.with(|cell| {
+                    if let Some(handle) = cell.borrow().get(&id) {
+                        handle.scroll_to_item(index);
+                    }
+                });
+                refresh_ui_window(window, cx)
+            }
+            UiCommand::GetScrollOffset { id, response } => {
+                let offset = SCROLL_HANDLES.with(|cell| {
+                    cell.borrow().get(&id).map(|handle| {
+                        let offset = handle.offset();
+                        [
+                            f64::from(f32::from(offset.x)),
+                            f64::from(f32::from(offset.y)),
+                        ]
+                    })
+                });
+                response.send(offset).ok();
+                Ok(())
+            }
+            UiCommand::FocusElement(id) => window.update(cx, move |view, window, cx| {
+                if let Some(handle) = view.focus_handles.get(&id) {
+                    handle.focus(window, cx);
+                }
+            }),
+            UiCommand::Blur => window.update(cx, |_view, window, _cx| window.blur()),
+        };
+        if let Err(error) = result {
+            log::error!("Failed to handle GPUI UI command: {error:#}");
+        }
+    }
+    cx.update(|cx| cx.quit());
+}
+
+#[cfg(any(target_os = "windows", target_os = "linux", target_os = "freebsd"))]
+fn panic_message(payload: Box<dyn std::any::Any + Send>) -> String {
+    payload
+        .downcast_ref::<&str>()
+        .map(|message| (*message).to_string())
+        .or_else(|| payload.downcast_ref::<String>().cloned())
+        .unwrap_or_else(|| "unknown panic".to_string())
+}
+
 /// The main GPUI renderer exposed to Node.js.
 #[napi]
 pub struct GpuixRenderer {
-    /// Wrapped in Arc because napi v3 ThreadsafeFunction is !Clone.
-    /// Arc lets us share it into the GpuixView closure from &self methods.
-    event_callback: Option<Arc<ThreadsafeFunction<EventPayload>>>,
+    event_callback: Mutex<Option<Arc<ThreadsafeFunction<EventPayload>>>>,
     tree: Arc<Mutex<RetainedTree>>,
     initialized: Arc<Mutex<bool>>,
     /// Shared with GpuixView so napi methods can read the live selection
-    /// without an App context. `Rc` + `RefCell` because paint closures run on
-    /// the JS main thread where no `&mut GpuixView` is available.
+    /// without an App context. Paint and napi calls can use different threads.
     selection: SharedSelection,
+    #[cfg(any(target_os = "windows", target_os = "linux", target_os = "freebsd"))]
+    ui_commands: Mutex<Option<mpsc::UnboundedSender<UiCommand>>>,
 }
 
 #[napi]
 impl GpuixRenderer {
+    fn event_callback_for_view(&self) -> Option<EventCallback> {
+        self.event_callback.lock().unwrap().clone().map(|tsf| {
+            Arc::new(move |payload: EventPayload| {
+                tsf.call(Ok(payload), ThreadsafeFunctionCallMode::NonBlocking);
+            }) as EventCallback
+        })
+    }
+
+    #[cfg(any(target_os = "windows", target_os = "linux", target_os = "freebsd"))]
+    fn send_ui_command(&self, command: UiCommand) -> Result<()> {
+        self.ui_commands
+            .lock()
+            .unwrap()
+            .as_ref()
+            .ok_or_else(|| Error::from_reason("GPUI application is not initialized"))?
+            .unbounded_send(command)
+            .map_err(|_| Error::from_reason("The GPUI UI thread is not running"))
+    }
+
+    fn request_invalidate(&self) -> Result<()> {
+        #[cfg(target_os = "macos")]
+        return invalidate_window();
+
+        #[cfg(any(target_os = "windows", target_os = "linux", target_os = "freebsd"))]
+        return self.send_ui_command(UiCommand::Invalidate);
+
+        #[cfg(not(any(
+            target_os = "macos",
+            target_os = "windows",
+            target_os = "linux",
+            target_os = "freebsd"
+        )))]
+        Err(Error::from_reason(
+            "The production GPUIX renderer does not support this operating system",
+        ))
+    }
+
     #[napi(constructor)]
     pub fn new(event_callback: Option<ThreadsafeFunction<EventPayload>>) -> Self {
         let _ = env_logger::try_init();
         Self {
-            event_callback: event_callback.map(Arc::new),
+            event_callback: Mutex::new(event_callback.map(Arc::new)),
             tree: Arc::new(Mutex::new(RetainedTree::new())),
             initialized: Arc::new(Mutex::new(false)),
             selection: SharedSelection::default(),
+            #[cfg(any(target_os = "windows", target_os = "linux", target_os = "freebsd"))]
+            ui_commands: Mutex::new(None),
         }
     }
 
-    /// Initialize GPUI with AppKit embedded in Node's main thread.
+    /// Initialize GPUI using the native event-loop architecture for this OS.
     #[napi]
     pub fn init(&self, options: Option<WindowOptions>) -> Result<()> {
-        #[cfg(not(target_os = "macos"))]
+        #[cfg(not(any(
+            target_os = "macos",
+            target_os = "windows",
+            target_os = "linux",
+            target_os = "freebsd"
+        )))]
         {
             let _ = options;
             return Err(Error::from_reason(
-                "The production GPUIX renderer currently supports only macOS",
+                "The production GPUIX renderer does not support this operating system",
             ));
         }
 
         #[cfg(target_os = "macos")]
-        self.init_macos(options)
+        return self.init_macos(options);
+
+        #[cfg(any(target_os = "windows", target_os = "linux", target_os = "freebsd"))]
+        return self.init_threaded(options);
     }
 
     #[cfg(target_os = "macos")]
@@ -172,67 +321,172 @@ impl GpuixRenderer {
                 return Err(Error::from_reason("Renderer is already initialized"));
             }
         }
+        if MAC_PLATFORM.with(|platform| platform.borrow().is_some()) {
+            return Err(Error::from_reason(
+                "A GPUI application already exists on this thread",
+            ));
+        }
 
         let width = options.width.unwrap_or(800.0);
         let height = options.height.unwrap_or(600.0);
         let title = options.title.clone().unwrap_or_else(|| "GPUIX".to_string());
 
         let platform = Rc::new(gpui_macos::MacPlatform::new_embedded());
-        MAC_PLATFORM.with(|p| {
-            *p.borrow_mut() = Some(platform.clone());
-        });
 
         let tree = self.tree.clone();
-        // Wrap ThreadsafeFunction in Arc so GpuixView uses the abstracted EventCallback.
-        // Clone the Option<ThreadsafeFunction> to get an owned value — in napi v3,
-        // #[napi] methods have stricter lifetime bounds on &self, so as_ref() won't
-        // produce a 'static closure.
-        let callback: Option<EventCallback> = self.event_callback.clone().map(|tsf| {
-            Arc::new(move |payload: EventPayload| {
-                tsf.call(Ok(payload), ThreadsafeFunctionCallMode::NonBlocking);
-            }) as EventCallback
-        });
+        let callback = self.event_callback_for_view();
 
         let selection = self.selection.clone();
-        let app = gpui::Application::with_platform(platform);
+        let opened_window = Rc::new(RefCell::new(None));
+        let startup_error = Rc::new(RefCell::new(None));
+        let opened_window_for_app = opened_window.clone();
+        let startup_error_for_app = startup_error.clone();
+        let app = gpui::Application::with_platform(platform.clone());
         let app_handle = app.run_embedded(move |cx: &mut gpui::App| {
+            crate::custom_elements::input::init(cx);
             let bounds = gpui::Bounds::centered(
                 None,
                 gpui::size(gpui::px(width as f32), gpui::px(height as f32)),
                 cx,
             );
 
-            let window_handle = cx
-                .open_window(
-                    gpui::WindowOptions {
-                        window_bounds: Some(gpui::WindowBounds::Windowed(bounds)),
-                        ..Default::default()
-                    },
-                    |_window, cx| {
-                        cx.new(|_| {
-                            GpuixView::new(
-                                tree.clone(),
-                                callback.clone(),
-                                title,
-                                selection.clone(),
-                            )
-                        })
-                    },
-                )
-                .unwrap();
-
-            GPUI_WINDOW.with(|w| {
-                *w.borrow_mut() = Some(window_handle);
-            });
-
-            cx.activate(true);
+            match cx.open_window(
+                gpui::WindowOptions {
+                    window_bounds: Some(gpui::WindowBounds::Windowed(bounds)),
+                    ..Default::default()
+                },
+                |_window, cx| {
+                    cx.new(|_| {
+                        GpuixView::new(tree.clone(), callback.clone(), title, selection.clone())
+                    })
+                },
+            ) {
+                Ok(window_handle) => {
+                    *opened_window_for_app.borrow_mut() = Some(window_handle);
+                    cx.activate(true);
+                }
+                Err(error) => {
+                    *startup_error_for_app.borrow_mut() = Some(error.to_string());
+                }
+            }
         });
 
+        let startup_result = match startup_error.borrow_mut().take() {
+            Some(error) => Err(Error::from_reason(format!(
+                "Failed to open the GPUI window: {error}"
+            ))),
+            None => opened_window
+                .borrow_mut()
+                .take()
+                .ok_or_else(|| Error::from_reason("GPUI did not open the application window")),
+        };
+        let window_handle = match startup_result {
+            Ok(window_handle) => window_handle,
+            Err(error) => {
+                app_handle.update(|cx| cx.quit());
+                if platform.pump_events() {
+                    MAC_PLATFORM.with(|stored| {
+                        *stored.borrow_mut() = Some(platform.clone());
+                    });
+                }
+                return Err(error);
+            }
+        };
+
+        MAC_PLATFORM.with(|stored| {
+            *stored.borrow_mut() = Some(platform);
+        });
         GPUI_APP.with(|a| {
             *a.borrow_mut() = Some(app_handle);
         });
+        GPUI_WINDOW.with(|w| {
+            *w.borrow_mut() = Some(window_handle);
+        });
 
         *self.initialized.lock().unwrap() = true;
+        self.event_callback.lock().unwrap().take();
+        Ok(())
+    }
+
+    #[cfg(any(target_os = "windows", target_os = "linux", target_os = "freebsd"))]
+    fn init_threaded(&self, options: Option<WindowOptions>) -> Result<()> {
+        let options = options.unwrap_or_default();
+        if *self.initialized.lock().unwrap() {
+            return Err(Error::from_reason("Renderer is already initialized"));
+        }
+
+        let width = options.width.unwrap_or(800.0);
+        let height = options.height.unwrap_or(600.0);
+        let title = options.title.unwrap_or_else(|| "GPUIX".to_string());
+        let tree = self.tree.clone();
+        let selection = self.selection.clone();
+        let callback = self.event_callback_for_view();
+        let (command_sender, command_receiver) = mpsc::unbounded();
+        let (startup_sender, startup_receiver) = sync_channel(1);
+        let exit_startup_sender = startup_sender.clone();
+
+        std::thread::Builder::new()
+            .name("gpuix-ui".to_string())
+            .spawn(move || {
+                let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                    gpui_platform::application().run(move |cx| {
+                        crate::custom_elements::input::init(cx);
+                        let bounds = gpui::Bounds::centered(
+                            None,
+                            gpui::size(gpui::px(width as f32), gpui::px(height as f32)),
+                            cx,
+                        );
+                        let window = match cx.open_window(
+                            gpui::WindowOptions {
+                                window_bounds: Some(gpui::WindowBounds::Windowed(bounds)),
+                                ..Default::default()
+                            },
+                            |_window, cx| {
+                                cx.new(|_| GpuixView::new(tree, callback, title, selection))
+                            },
+                        ) {
+                            Ok(window) => window,
+                            Err(error) => {
+                                startup_sender
+                                    .send(Err(format!("Failed to open the GPUI window: {error}")))
+                                    .ok();
+                                cx.quit();
+                                return;
+                            }
+                        };
+
+                        cx.spawn(async move |cx| {
+                            run_ui_commands(command_receiver, window, cx).await;
+                        })
+                        .detach();
+                        cx.activate(true);
+                        startup_sender.send(Ok(())).ok();
+                    });
+                }));
+
+                let error = match result {
+                    Ok(()) => {
+                        "The GPUI event loop exited before initialization completed".to_string()
+                    }
+                    Err(payload) => format!(
+                        "The GPUI UI thread panicked during initialization: {}",
+                        panic_message(payload)
+                    ),
+                };
+                exit_startup_sender.try_send(Err(error)).ok();
+            })
+            .map_err(|error| {
+                Error::from_reason(format!("Failed to spawn the GPUI UI thread: {error}"))
+            })?;
+
+        startup_receiver
+            .recv()
+            .map_err(|_| Error::from_reason("The GPUI UI thread stopped during initialization"))?
+            .map_err(Error::from_reason)?;
+
+        *self.ui_commands.lock().unwrap() = Some(command_sender);
+        *self.initialized.lock().unwrap() = true;
+        self.event_callback.lock().unwrap().take();
         Ok(())
     }
 
@@ -344,13 +598,7 @@ impl GpuixRenderer {
     /// Signal that a batch of mutations is complete. Triggers re-render.
     #[napi]
     pub fn commit_mutations(&self) -> Result<()> {
-        #[cfg(target_os = "macos")]
-        return invalidate_window();
-
-        #[cfg(not(target_os = "macos"))]
-        Err(Error::from_reason(
-            "The production GPUIX renderer currently supports only macOS",
-        ))
+        self.request_invalidate()
     }
 
     /// Apply a batch of mutations in a single FFI call.
@@ -379,8 +627,7 @@ impl GpuixRenderer {
         let mut tree = self.tree.lock().unwrap();
         let destroyed = apply_batch_to_tree(&mut tree, &ops)?;
         drop(tree);
-        #[cfg(target_os = "macos")]
-        invalidate_window()?;
+        self.request_invalidate()?;
         Ok(destroyed)
     }
 
@@ -402,18 +649,34 @@ impl GpuixRenderer {
             }
         });
 
-        #[cfg(target_os = "macos")]
+        #[cfg(any(
+            target_os = "macos",
+            target_os = "windows",
+            target_os = "linux",
+            target_os = "freebsd"
+        ))]
         return Ok(());
 
-        #[cfg(not(target_os = "macos"))]
+        #[cfg(not(any(
+            target_os = "macos",
+            target_os = "windows",
+            target_os = "linux",
+            target_os = "freebsd"
+        )))]
         Err(Error::from_reason(
-            "The production GPUIX renderer currently supports only macOS",
+            "The production GPUIX renderer does not support this operating system",
         ))
     }
 
     #[napi]
     pub fn is_initialized(&self) -> bool {
         *self.initialized.lock().unwrap()
+    }
+
+    /// Whether JavaScript must drive the native event loop with tick().
+    #[napi]
+    pub fn requires_tick(&self) -> bool {
+        cfg!(target_os = "macos")
     }
 
     #[napi]
@@ -433,20 +696,57 @@ impl GpuixRenderer {
             window.refresh();
         });
 
-        #[cfg(not(target_os = "macos"))]
+        #[cfg(any(target_os = "windows", target_os = "linux", target_os = "freebsd"))]
+        return self.send_ui_command(UiCommand::SetWindowTitle(title));
+
+        #[cfg(not(any(
+            target_os = "macos",
+            target_os = "windows",
+            target_os = "linux",
+            target_os = "freebsd"
+        )))]
         Err(Error::from_reason(
-            "The production GPUIX renderer currently supports only macOS",
+            "The production GPUIX renderer does not support this operating system",
         ))
     }
 
     #[napi]
-    pub fn focus_element(&self, _element_id: f64) -> Result<()> {
-        Ok(())
+    pub fn focus_element(&self, element_id: f64) -> Result<()> {
+        let id = to_element_id(element_id)?;
+        #[cfg(target_os = "macos")]
+        return update_window(move |view, window, cx| {
+            if let Some(handle) = view.focus_handles.get(&id) {
+                handle.focus(window, cx);
+            }
+        });
+
+        #[cfg(any(target_os = "windows", target_os = "linux", target_os = "freebsd"))]
+        return self.send_ui_command(UiCommand::FocusElement(id));
+
+        #[cfg(not(any(
+            target_os = "macos",
+            target_os = "windows",
+            target_os = "linux",
+            target_os = "freebsd"
+        )))]
+        Err(Error::from_reason("Unsupported operating system"))
     }
 
     #[napi]
     pub fn blur(&self) -> Result<()> {
-        Ok(())
+        #[cfg(target_os = "macos")]
+        return update_window(move |_view, window, _cx| window.blur());
+
+        #[cfg(any(target_os = "windows", target_os = "linux", target_os = "freebsd"))]
+        return self.send_ui_command(UiCommand::Blur);
+
+        #[cfg(not(any(
+            target_os = "macos",
+            target_os = "windows",
+            target_os = "linux",
+            target_os = "freebsd"
+        )))]
+        Err(Error::from_reason("Unsupported operating system"))
     }
 
     // ── Selection API ────────────────────────────────────────────────
@@ -457,15 +757,11 @@ impl GpuixRenderer {
         self.selection.lock().selected_text()
     }
 
-    /// Drop the current selection and repaint on the next tick.
+    /// Drop the current selection and request a repaint.
     #[napi]
     pub fn clear_selection(&self) -> Result<()> {
         self.selection.lock().clear();
-        #[cfg(target_os = "macos")]
-        return invalidate_window();
-
-        #[cfg(not(target_os = "macos"))]
-        Ok(())
+        self.request_invalidate()
     }
 
     // ── Scroll API ───────────────────────────────────────────────────
@@ -477,13 +773,30 @@ impl GpuixRenderer {
     #[napi]
     pub fn scroll_to(&self, element_id: f64, x: f64, y: f64) -> Result<()> {
         let id = to_element_id(element_id)?;
+        #[cfg(target_os = "macos")]
         SCROLL_HANDLES.with(|cell| {
             let handles = cell.borrow();
             if let Some(handle) = handles.get(&id) {
                 handle.set_offset(gpui::point(gpui::px(x as f32), gpui::px(y as f32)));
             }
         });
-        Ok(())
+        #[cfg(target_os = "macos")]
+        return invalidate_window();
+
+        #[cfg(any(target_os = "windows", target_os = "linux", target_os = "freebsd"))]
+        return self.send_ui_command(UiCommand::ScrollTo {
+            id,
+            x: x as f32,
+            y: y as f32,
+        });
+
+        #[cfg(not(any(
+            target_os = "macos",
+            target_os = "windows",
+            target_os = "linux",
+            target_os = "freebsd"
+        )))]
+        Err(Error::from_reason("Unsupported operating system"))
     }
 
     /// Scroll a child into view by its index in the children list.
@@ -491,13 +804,26 @@ impl GpuixRenderer {
     pub fn scroll_to_item(&self, element_id: f64, index: f64) -> Result<()> {
         let id = to_element_id(element_id)?;
         let index = index as usize;
+        #[cfg(target_os = "macos")]
         SCROLL_HANDLES.with(|cell| {
             let handles = cell.borrow();
             if let Some(handle) = handles.get(&id) {
                 handle.scroll_to_item(index);
             }
         });
-        Ok(())
+        #[cfg(target_os = "macos")]
+        return invalidate_window();
+
+        #[cfg(any(target_os = "windows", target_os = "linux", target_os = "freebsd"))]
+        return self.send_ui_command(UiCommand::ScrollToItem { id, index });
+
+        #[cfg(not(any(
+            target_os = "macos",
+            target_os = "windows",
+            target_os = "linux",
+            target_os = "freebsd"
+        )))]
+        Err(Error::from_reason("Unsupported operating system"))
     }
 
     /// Get the current scroll offset of a scrollable element.
@@ -505,7 +831,8 @@ impl GpuixRenderer {
     #[napi]
     pub fn get_scroll_offset(&self, element_id: f64) -> Result<Option<Vec<f64>>> {
         let id = to_element_id(element_id)?;
-        Ok(SCROLL_HANDLES.with(|cell| {
+        #[cfg(target_os = "macos")]
+        return Ok(SCROLL_HANDLES.with(|cell| {
             let handles = cell.borrow();
             handles.get(&id).map(|handle| {
                 let offset = handle.offset();
@@ -514,7 +841,37 @@ impl GpuixRenderer {
                     f64::from(f32::from(offset.y)),
                 ]
             })
-        }))
+        }));
+
+        #[cfg(any(target_os = "windows", target_os = "linux", target_os = "freebsd"))]
+        {
+            let (response, receiver) = sync_channel(1);
+            self.send_ui_command(UiCommand::GetScrollOffset { id, response })?;
+            return match receiver.recv_timeout(Duration::from_secs(2)) {
+                Ok(offset) => Ok(offset.map(|[x, y]| vec![x, y])),
+                Err(RecvTimeoutError::Timeout) => Err(Error::from_reason(
+                    "Timed out after 2 seconds waiting for the GPUI scroll query",
+                )),
+                Err(RecvTimeoutError::Disconnected) => Err(Error::from_reason(
+                    "The GPUI UI thread stopped during the scroll query",
+                )),
+            };
+        }
+
+        #[cfg(not(any(
+            target_os = "macos",
+            target_os = "windows",
+            target_os = "linux",
+            target_os = "freebsd"
+        )))]
+        Err(Error::from_reason("Unsupported operating system"))
+    }
+}
+
+#[cfg(any(target_os = "windows", target_os = "linux", target_os = "freebsd"))]
+impl Drop for GpuixRenderer {
+    fn drop(&mut self) {
+        self.ui_commands.lock().unwrap().take();
     }
 }
 
@@ -528,8 +885,8 @@ pub(crate) struct GpuixView {
     /// Created lazily for elements with keyboard or focus/blur listeners.
     /// Handles persist across renders so GPUI maintains focus state.
     pub(crate) focus_handles: HashMap<u64, gpui::FocusHandle>,
-    /// Keep subscriptions alive — dropping them unsubscribes.
-    pub(crate) _focus_subscriptions: Vec<gpui::Subscription>,
+    /// Active focus/blur subscriptions keyed by element and event type.
+    pub(crate) focus_subscriptions: HashMap<(u64, String), gpui::Subscription>,
     /// Registry for custom element types (input, editor, diff, etc.).
     /// Stores factories (one per type) and live instances (one per element ID).
     pub(crate) custom_registry: CustomElementRegistry,
@@ -553,7 +910,7 @@ impl GpuixView {
             event_callback,
             window_title,
             focus_handles: HashMap::new(),
-            _focus_subscriptions: Vec::new(),
+            focus_subscriptions: HashMap::new(),
             custom_registry: CustomElementRegistry::with_defaults(),
             scroll_handles: HashMap::new(),
             selection,
@@ -630,42 +987,50 @@ impl GpuixView {
     ) {
         // Create handles for elements that need focus but don't have one yet.
         for (&id, element) in &tree.elements {
-            let needs_focus = element.events.contains("keyDown")
+            let needs_focus = matches!(element.element_type.as_str(), "input" | "textarea")
+                || element.events.contains("keyDown")
                 || element.events.contains("keyUp")
                 || element.events.contains("focus")
                 || element.events.contains("blur");
 
             if needs_focus && !self.focus_handles.contains_key(&id) {
                 let handle = cx.focus_handle();
-
-                // Subscribe to focus events if listeners exist.
-                if element.events.contains("focus") {
-                    let cb = callback.clone();
-                    self._focus_subscriptions.push(cx.on_focus(
-                        &handle,
-                        window,
-                        move |_this, _window, _cx| {
-                            emit_event_full(&cb, id, "focus", |_| {});
-                        },
-                    ));
-                }
-                if element.events.contains("blur") {
-                    let cb = callback.clone();
-                    self._focus_subscriptions.push(cx.on_blur(
-                        &handle,
-                        window,
-                        move |_this, _window, _cx| {
-                            emit_event_full(&cb, id, "blur", |_| {});
-                        },
-                    ));
-                }
-
                 // Focus once, at creation. Re-focusing every frame would
                 // steal focus back from whatever the user clicked next.
                 if element.auto_focus {
                     handle.focus(window, cx);
                 }
                 self.focus_handles.insert(id, handle);
+            }
+        }
+
+        self.focus_subscriptions.retain(|(id, event), _| {
+            tree.elements
+                .get(id)
+                .is_some_and(|element| element.events.contains(event))
+        });
+        for (&id, element) in &tree.elements {
+            let Some(handle) = self.focus_handles.get(&id).cloned() else {
+                continue;
+            };
+            let focus_key = (id, "focus".to_string());
+            if element.events.contains("focus")
+                && !self.focus_subscriptions.contains_key(&focus_key)
+            {
+                let callback = callback.clone();
+                let subscription = cx.on_focus(&handle, window, move |_this, _window, _cx| {
+                    emit_event_full(&callback, id, "focus", |_| {});
+                });
+                self.focus_subscriptions.insert(focus_key, subscription);
+            }
+            let blur_key = (id, "blur".to_string());
+            if element.events.contains("blur") && !self.focus_subscriptions.contains_key(&blur_key)
+            {
+                let callback = callback.clone();
+                let subscription = cx.on_blur(&handle, window, move |_this, _window, _cx| {
+                    emit_event_full(&callback, id, "blur", |_| {});
+                });
+                self.focus_subscriptions.insert(blur_key, subscription);
             }
         }
 
@@ -890,14 +1255,8 @@ pub(crate) fn build_div(
     // (overflow). E.g. { overflow: "scroll", overflowY: "hidden" } → scroll X only.
     if let Some(ref style) = element.style {
         // Resolve each axis: axis-specific overrides shorthand.
-        let resolved_x = style
-            .overflow_x
-            .as_deref()
-            .or(style.overflow.as_deref());
-        let resolved_y = style
-            .overflow_y
-            .as_deref()
-            .or(style.overflow.as_deref());
+        let resolved_x = style.overflow_x.as_deref().or(style.overflow.as_deref());
+        let resolved_y = style.overflow_y.as_deref().or(style.overflow.as_deref());
 
         let needs_scroll_x = resolved_x == Some("scroll");
         let needs_scroll_y = resolved_y == Some("scroll");
@@ -1249,11 +1608,21 @@ pub(crate) fn apply_styles<E: gpui::Styled>(mut el: E, style: &StyleDesc) -> E {
         _ => {}
     }
     match style.align_self.as_deref() {
-        Some("center") => { el.style().align_self = Some(gpui::AlignItems::Center); }
-        Some("start") | Some("flex-start") => { el.style().align_self = Some(gpui::AlignItems::FlexStart); }
-        Some("end") | Some("flex-end") => { el.style().align_self = Some(gpui::AlignItems::FlexEnd); }
-        Some("stretch") => { el.style().align_self = Some(gpui::AlignItems::Stretch); }
-        Some("baseline") => { el.style().align_self = Some(gpui::AlignItems::Baseline); }
+        Some("center") => {
+            el.style().align_self = Some(gpui::AlignItems::Center);
+        }
+        Some("start") | Some("flex-start") => {
+            el.style().align_self = Some(gpui::AlignItems::FlexStart);
+        }
+        Some("end") | Some("flex-end") => {
+            el.style().align_self = Some(gpui::AlignItems::FlexEnd);
+        }
+        Some("stretch") => {
+            el.style().align_self = Some(gpui::AlignItems::Stretch);
+        }
+        Some("baseline") => {
+            el.style().align_self = Some(gpui::AlignItems::Baseline);
+        }
         _ => {}
     }
     if let Some(gap) = style.gap {
@@ -1484,16 +1853,47 @@ pub(crate) fn emit_event_full(
 /// All ops are parsed and validated BEFORE any tree mutation occurs.
 /// This prevents partial application on malformed batches.
 enum BatchOp {
-    CreateElement { id: u64, element_type: String },
-    DestroyElement { id: u64 },
-    AppendChild { parent_id: u64, child_id: u64 },
-    RemoveChild { parent_id: u64, child_id: u64 },
-    InsertBefore { parent_id: u64, child_id: u64, before_id: u64 },
-    SetStyle { id: u64, style: StyleDesc },
-    SetText { id: u64, content: String },
-    SetEventListener { id: u64, event_type: String, has_handler: bool },
-    SetRoot { id: u64 },
-    SetCustomProp { id: u64, key: String, value: serde_json::Value },
+    CreateElement {
+        id: u64,
+        element_type: String,
+    },
+    DestroyElement {
+        id: u64,
+    },
+    AppendChild {
+        parent_id: u64,
+        child_id: u64,
+    },
+    RemoveChild {
+        parent_id: u64,
+        child_id: u64,
+    },
+    InsertBefore {
+        parent_id: u64,
+        child_id: u64,
+        before_id: u64,
+    },
+    SetStyle {
+        id: u64,
+        style: StyleDesc,
+    },
+    SetText {
+        id: u64,
+        content: String,
+    },
+    SetEventListener {
+        id: u64,
+        event_type: String,
+        has_handler: bool,
+    },
+    SetRoot {
+        id: u64,
+    },
+    SetCustomProp {
+        id: u64,
+        key: String,
+        value: serde_json::Value,
+    },
 }
 
 /// Parse all batch ops from JSON into typed enums.
@@ -1566,13 +1966,9 @@ fn parse_batch_ops(ops: &[serde_json::Value]) -> Result<Vec<BatchOp>> {
             },
             "setCustomProp" => {
                 let value_json = batch_str(arr, 3, i)?;
-                let value: serde_json::Value =
-                    serde_json::from_str(&value_json).map_err(|e| {
-                        Error::from_reason(format!(
-                            "Batch op {} setCustomProp parse error: {}",
-                            i, e
-                        ))
-                    })?;
+                let value: serde_json::Value = serde_json::from_str(&value_json).map_err(|e| {
+                    Error::from_reason(format!("Batch op {} setCustomProp parse error: {}", i, e))
+                })?;
                 BatchOp::SetCustomProp {
                     id: batch_id(arr, 1, i)?,
                     key: batch_str(arr, 2, i)?,
@@ -1620,13 +2016,23 @@ pub(crate) fn apply_batch_to_tree(
                 let destroyed = tree.destroy_element(id);
                 destroyed_ids.extend(destroyed.iter().map(|&id| id as f64));
             }
-            BatchOp::AppendChild { parent_id, child_id } => {
+            BatchOp::AppendChild {
+                parent_id,
+                child_id,
+            } => {
                 tree.append_child(parent_id, child_id);
             }
-            BatchOp::RemoveChild { parent_id, child_id } => {
+            BatchOp::RemoveChild {
+                parent_id,
+                child_id,
+            } => {
                 tree.remove_child(parent_id, child_id);
             }
-            BatchOp::InsertBefore { parent_id, child_id, before_id } => {
+            BatchOp::InsertBefore {
+                parent_id,
+                child_id,
+                before_id,
+            } => {
                 tree.insert_before(parent_id, child_id, before_id);
             }
             BatchOp::SetStyle { id, style } => {
@@ -1635,7 +2041,11 @@ pub(crate) fn apply_batch_to_tree(
             BatchOp::SetText { id, content } => {
                 tree.set_text(id, content);
             }
-            BatchOp::SetEventListener { id, event_type, has_handler } => {
+            BatchOp::SetEventListener {
+                id,
+                event_type,
+                has_handler,
+            } => {
                 tree.set_event_listener(id, event_type, has_handler);
             }
             BatchOp::SetRoot { id } => {
@@ -1652,10 +2062,9 @@ pub(crate) fn apply_batch_to_tree(
 
 /// Extract a u64 element ID from a batch tuple at the given index.
 fn batch_id(arr: &[serde_json::Value], idx: usize, op_idx: usize) -> Result<u64> {
-    let v = arr
-        .get(idx)
-        .and_then(|v| v.as_f64())
-        .ok_or_else(|| Error::from_reason(format!("Batch op {} missing id at index {}", op_idx, idx)))?;
+    let v = arr.get(idx).and_then(|v| v.as_f64()).ok_or_else(|| {
+        Error::from_reason(format!("Batch op {} missing id at index {}", op_idx, idx))
+    })?;
     to_element_id(v)
 }
 

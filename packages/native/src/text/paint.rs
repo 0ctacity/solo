@@ -16,7 +16,7 @@ use std::sync::Arc;
 use parking_lot::Mutex;
 
 use gpui::{
-    canvas, div, point, prelude::*, px, quad, size, Bounds, BorderStyle, Hsla, SharedString,
+    canvas, div, point, prelude::*, px, quad, size, BorderStyle, Bounds, Hsla, SharedString,
     StyledText, TextLayout, TextRun, Window,
 };
 
@@ -69,6 +69,11 @@ pub fn selection_frame_reset(selection: SharedSelection) -> impl IntoElement {
 /// Every string painted in the last frame, in paint order. Test-facing.
 pub fn painted_text() -> Vec<String> {
     PAINTED.with(|p| p.borrow().iter().map(|s| s.to_string()).collect())
+}
+
+/// Record text painted by a custom element that owns its text layout.
+pub fn log_painted_text(text: SharedString) {
+    PAINTED.with(|painted| painted.borrow_mut().push(text));
 }
 
 /// Text that is deliberately NOT selectable: line-number gutters, language
@@ -351,9 +356,7 @@ fn register_listeners(
     layout: &TextLayout,
     selection: &SharedSelection,
 ) {
-    use gpui::{
-        DispatchPhase, MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent,
-    };
+    use gpui::{DispatchPhase, MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent};
 
     {
         let (key, text, layout, selection) =

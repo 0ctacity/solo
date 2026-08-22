@@ -3,7 +3,7 @@
 /** The main GPUI renderer exposed to Node.js. */
 export declare class GpuixRenderer {
   constructor(eventCallback?: (((err: Error | null, arg: EventPayload) => any)) | undefined | null)
-  /** Initialize GPUI with AppKit embedded in Node's main thread. */
+  /** Initialize GPUI using the native event-loop architecture for this OS. */
   init(options?: WindowOptions | undefined | null): void
   createElement(id: number, elementType: string): void
   /**
@@ -52,13 +52,15 @@ export declare class GpuixRenderer {
   applyBatch(json: string): Array<number>
   tick(): void
   isInitialized(): boolean
+  /** Whether JavaScript must drive the native event loop with tick(). */
+  requiresTick(): boolean
   getWindowSize(): WindowSize
   setWindowTitle(title: string): void
   focusElement(elementId: number): void
   blur(): void
   /** The current text selection joined in document order, or null. */
   getSelectedText(): string | null
-  /** Drop the current selection and repaint on the next tick. */
+  /** Drop the current selection and request a repaint. */
   clearSelection(): void
   /**
    * Set the scroll offset of a scrollable element.

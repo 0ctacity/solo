@@ -3,10 +3,9 @@
  *
  * There is no hot reload for the Rust half and there cannot be: `require()` of
  * a `.node` file calls `process.dlopen`, Node has no matching unload, and all
- * the live state (the embedded MacPlatform, Metal device, open window, the
- * selection registry) lives in thread-locals of the loaded library. A second
- * load would get empty thread-locals and a dead window. So the loop rebuilds
- * and restarts instead. An incremental rebuild is a few seconds.
+ * the live state (the GPUI platform, GPU device, open window, UI thread, and
+ * selection registry) stays inside the loaded library. So the loop rebuilds
+ * and restarts the process instead. An incremental rebuild is a few seconds.
  *
  *   bun scripts/dev.ts                    # rebuild, then re-run the showcase
  *                                         # screenshot test (default)
