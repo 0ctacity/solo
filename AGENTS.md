@@ -311,12 +311,13 @@ pub struct EventPayload {
 
 ### Standalone Build
 
-The `zed/` submodule tracks the `gpuix` branch of `remorses/zed`. Cargo uses path
-dependencies from that submodule so the native addon and the embedded platform
-always compile from the same source:
+The `zed/` submodule tracks the `gpui-macos-embedded` branch of `remorses/zed`. Cargo uses path
+dependencies from that submodule so the native addon and native platforms always
+compile from the same source:
 
-- `gpui`, `gpui_platform`, and `gpui_macos` come from `zed/crates/`
-- `gpui_macos::MacPlatform::new_embedded()` runs the native platform without blocking Node
+- macOS uses `MacPlatform::new_embedded()` and pumps AppKit on Node's main thread
+- Windows and Linux run `gpui_platform::application().run()` on a dedicated UI thread
+- `gpui_macos` is a direct macOS dependency for production and the GPU-backed test renderer
 - `core-text = 21.0.0`, `core-graphics = 0.24.0` for macOS
 
 These avoid the core-graphics 0.24 vs 0.25 conflict between `core-text` and Zed's `font-kit` fork.
@@ -338,9 +339,9 @@ xcodebuild -downloadComponent MetalToolchain
 
 ### Bumping the gpui revision
 
-1. Update the `gpuix` branch in `remorses/zed` from upstream Zed.
-2. Rebase the two embedded `gpui_macos` commits without rewriting published history.
-3. Fast-forward the `zed/` submodule to the updated `gpuix` branch.
+1. Merge upstream Zed into the `gpui-macos-embedded` branch in `remorses/zed`.
+2. Resolve any embedded `gpui_macos` conflicts in a new commit; do not rewrite history.
+3. Fast-forward the `zed/` submodule to the updated `gpui-macos-embedded` branch.
 4. Match `rust-toolchain.toml` to `zed/rust-toolchain.toml`.
 5. Run `cargo check --all-targets`, `bun run build`, and the test suites.
 
@@ -378,7 +379,7 @@ xcodebuild -downloadComponent MetalToolchain
 - [ ] **Focus management** - Wire up FocusHandle for keyboard events
 - [ ] **onKeyDown/onKeyUp** - Keyboard event handlers
 - [ ] **onFocus/onBlur** - Focus event handlers
-- [ ] **Text input** - Handle text input (GPUI has no built-in input element)
+- [x] **Text input** - Native input and multiline textarea
 - [ ] **More elements** - img (gpui::img), svg (gpui::svg), list (virtualized)
 
 #### Low Priority

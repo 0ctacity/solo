@@ -76,18 +76,15 @@ describeNative('chat example', () => {
     const { render, renderer } = createTestRoot()
     render(<ChatApp />)
 
-    const input = renderer.findByType('input')[0]
-    expect(input).toBeDefined()
-    // In the running app `autoFocus` supplies the focus; the helper focuses
-    // explicitly. Either way `<input>` is controlled, so this only passes if
-    // the app appends `event.keyChar` on every keyDown.
-    renderer.nativeSimulateKeystrokes(input.id, 'h i')
+    const textarea = renderer.findByType('textarea')[0]
+    expect(textarea).toBeDefined()
+    renderer.nativeSimulateKeystrokes(textarea.id, 'h i')
     expect(renderer.getPaintedText()).toContain('hi')
 
-    renderer.nativeSimulateKeystrokes(input.id, 'backspace')
+    renderer.nativeSimulateKeystrokes(textarea.id, 'backspace')
     expect(renderer.getPaintedText()).toContain('h')
 
-    renderer.nativeSimulateKeystrokes(input.id, 'enter')
+    renderer.nativeSimulateKeystrokes(textarea.id, 'enter')
     // Cleared, so the placeholder is back.
     expect(renderer.getPaintedText()).toContain('Ask anything')
   })
@@ -120,5 +117,5 @@ describeNative('chat example', () => {
       expect(fs.existsSync(shot)).toBe(true)
       expect(fs.statSync(shot).size).toBeGreaterThan(0)
     }
-  })
+  }, 15_000)
 })

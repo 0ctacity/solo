@@ -2,7 +2,7 @@
 
 React bindings for [GPUI](https://github.com/zed-industries/zed/tree/main/crates/gpui) - Zed's GPU-accelerated UI framework.
 
-Build native GPU-accelerated desktop apps with React and TypeScript. Your components render directly to the GPU via Metal/Vulkan — no Electron, no web views.
+Build native GPU-accelerated desktop apps with React and TypeScript. Your components render directly to the GPU via Metal, DirectX, or Vulkan. No Electron, no web views.
 
 ![A ChatGPT-style app built with GPUIX](docs/images/chat-app.png)
 
@@ -68,7 +68,7 @@ GPUIX bridges React to GPUI using a **mutation-based protocol** over napi-rs FFI
 ┌─────────────────────────────────────────────────────────────────┐
 │  GPUI                                                           │
 │                                                                 │
-│  GPU-accelerated rendering via Metal (macOS) / Vulkan (Linux)   │
+│  GPU rendering via Metal (macOS), DirectX (Windows), or Vulkan  │
 │  Flexbox layout via Taffy                                       │
 └─────────────────────────────────────────────────────────────────┘
 ```
@@ -202,17 +202,23 @@ renderer.init({ title: 'My App', width: 800, height: 600 })
 const root = createRoot(renderer)
 flushSync(() => root.render(<App />))
 
-// Drive the frame loop
+// Drive AppKit on macOS. This is a no-op on Windows and Linux.
 startFrameLoop(renderer)
 ```
 
-`startFrameLoop` calls `renderer.tick()` at a fixed rate (~125fps by default), which
-pumps AppKit without blocking Node. Rendering, input, scrolling, text, IME, clipboard,
-and window management still use GPUI's native macOS platform. Pass `{ frameMs }` to
-change the rate, and call `.stop()` on the returned handle to end the loop.
+On **macOS**, `startFrameLoop` calls `renderer.tick()` at a fixed rate (~125fps by
+default). This pumps AppKit on the process main thread without blocking Node. Pass
+`{ frameMs }` to change the rate, and call `.stop()` on the returned handle to end it.
+
+On **Windows and Linux**, GPUI runs its normal blocking native event loop on one
+dedicated Rust UI thread. Node sends in-process commands to that thread, so
+`startFrameLoop` returns a no-op handle and does not create a JavaScript timer.
+All platforms use GPUI's native platform, window, renderer, input, scroll,
+clipboard, keyboard, and IME implementations. The embedded macOS run-loop
+extension comes from the pinned GPUIX fork. Windows runtime validation is pending.
 
 > [!IMPORTANT]
-> Never drive `tick()` from a `setImmediate` loop. That spins at tens of thousands of
+> On macOS, never drive `tick()` from a `setImmediate` loop. That spins at tens of thousands of
 > ticks per second and burns **73% CPU on a completely idle app**, versus **1%** when
 > paced.
 
@@ -263,6 +269,28 @@ renderer.scrollTo(elementId, x, y)        // set offset directly
 renderer.scrollToItem(elementId, index)   // scroll child into view
 renderer.getScrollOffset(elementId)       // returns [x, y] or null
 ```
+
+## Text input
+
+`<input>` and `<textarea>` use GPUI's platform input handler. They support a
+native caret, text selection, IME composition, clipboard actions, undo/redo,
+grapheme-safe deletion and mouse positioning.
+
+```tsx
+<textarea
+  value={draft}
+  placeholder="Ask anything"
+  minRows={1}
+  maxRows={8}
+  onChange={(event) => setDraft(event.value ?? '')}
+  onSubmit={send}
+/>
+```
+
+`Enter` emits `onSubmit`. In a `<textarea>`, `Shift+Enter` inserts a newline.
+The editor updates natively first, then reports the complete value to React.
+`value` changes can replace the native content, but keeping the same prop value
+does not reject an edit like a browser-controlled input.
 
 ## Text selection
 
@@ -407,7 +435,8 @@ Bash, TOML, YAML, Markdown, HTML, CSS, C.
 | `code`      | Syntax-highlighted code block                    |
 | `diff`      | Virtualized unified diff viewer                  |
 | `markdown`  | GitHub-flavoured markdown                        |
-| `input`     | Controlled text input                            |
+| `input`     | Native single-line text editor                   |
+| `textarea`  | Native multiline, auto-growing text editor       |
 | `img`       | Images                                           |
 | `anchored`  | Positioned overlay                               |
 | `svg`       | Vector graphics (planned)                        |
@@ -429,6 +458,8 @@ Bash, TOML, YAML, Markdown, HTML, CSS, C.
 | Focus | `onFocus` | — |
 | Blur | `onBlur` | — |
 | Scroll | `onScroll` | `deltaX`, `deltaY`, `precise`, `touchPhase`, `modifiers` |
+| Change | `onChange` | `value` — `<input>` and `<textarea>` only |
+| Submit | `onSubmit` | `value` — `<input>` and `<textarea>` only |
 | Toggle file | `onToggleFile` | `value` (file path) — `<diff>` only |
 | Line click | `onLineClick` | `value`, `oldLine`, `newLine` — `<diff>` only |
 | Link click | `onLinkClick` | `value` (URL) — `<markdown>` only |
@@ -534,9 +565,9 @@ bun scripts/screenshots.ts
 
 There is **no hot reload for the native half**, and there cannot be: `require()`
 of a `.node` file calls `process.dlopen`, Node has no matching unload, and the
-live state (GPUI's embedded `MacPlatform`, Metal device, open window, and
-selection registry) lives in thread-locals of the loaded library. A second load
-would get empty thread-locals and a dead window.
+live state (GPUI's platform, GPU device, open window, UI thread, and selection
+registry) stays inside the loaded library. A second load would create independent
+native state while the first library remains loaded.
 
 The rebuild is fast enough that it does not matter. Measured on an M-series Mac
 after touching one file:
@@ -585,8 +616,8 @@ The test renderer uses `VisualTestAppContext` with a `TestDispatcher` for determ
 - [x] Keyboard events (keyDown, keyUp) with focus management
 - [x] Focus/blur events with automatic FocusHandle creation
 - [x] GPU-backed test renderer with screenshot capture
-- [x] Standalone build (pinned GPUI + macOS deps)
-- [ ] Text input (GPUI has no built-in input element)
+- [x] Standalone build (pinned GPUI platform dependencies)
+- [x] Native text input and multiline textarea
 - [ ] Image and SVG elements
 - [ ] Multiple windows
 - [ ] Hot reload

@@ -758,80 +758,76 @@ function Composer({
       }}
     >
       <div style={{ display: 'flex', flexDirection: 'column', width: 748, gap: 8 }}>
-        {/* One row. GPUIX's `<input>` is single-line, so ChatGPT's two-row
-            composer would leave a permanent void under the prompt. A single
-            56px bar reads as a field, not as an empty box. */}
         <div
           style={{
             display: 'flex',
-            flexDirection: 'row',
-            alignItems: 'center',
-            gap: 6,
-            height: 56,
+            flexDirection: 'column',
             backgroundColor: C.raised,
             borderRadius: 28,
             borderWidth: 1,
             borderColor: C.border,
-            paddingLeft: 8,
-            paddingRight: 8,
+            paddingTop: 14,
+            paddingBottom: 8,
+            paddingLeft: 12,
+            paddingRight: 10,
           }}
         >
-          <RoundButton glyph="+" />
-          <input
+          <textarea
             value={value}
             placeholder="Ask anything"
-            // `<input>` is a CONTROLLED element: it paints `value` and reports
-            // keystrokes. The app owns the text, so every character has to be
-            // appended here or the field never fills.
-            //
-            // `autoFocus` matters too: without it (or a click) the element
-            // holds no keyboard focus and no key event ever arrives.
+            minRows={1}
+            maxRows={8}
             autoFocus
             style={{
-              flexGrow: 1,
+              width: '100%',
               minWidth: 0,
               fontSize: 15.5,
               lineHeight: 22,
               color: C.text,
               backgroundColor: '#00000000',
               borderWidth: 0,
-              paddingLeft: 4,
-              paddingRight: 4,
+              paddingLeft: 8,
+              paddingRight: 8,
             }}
-            onKeyDown={(event) => {
-              if (event.key === 'enter') {
-                onSend()
-              } else if (event.key === 'backspace') {
-                onChange(value.slice(0, -1))
-              } else if (event.keyChar) {
-                onChange(value + event.keyChar)
-              }
-            }}
+            onChange={(event) => onChange(event.value ?? '')}
+            onSubmit={() => ready && onSend()}
           />
-          <ComposerPill glyph="◇" label="Tools" />
           <div
             style={{
-              width: 38,
-              height: 38,
-              borderRadius: 19,
               display: 'flex',
+              flexDirection: 'row',
               alignItems: 'center',
-              justifyContent: 'center',
-              cursor: 'pointer',
-              backgroundColor: ready ? C.accent : '#ffffff1f',
-              hover: { backgroundColor: ready ? '#e8e8e8' : '#ffffff2b' },
+              gap: 6,
+              paddingTop: 6,
             }}
-            onClick={onSend}
           >
-            <text
+            <RoundButton glyph="+" />
+            <ComposerPill glyph="◇" label="Tools" />
+            <div style={{ flexGrow: 1 }} />
+            <div
               style={{
-                fontSize: 16,
-                fontWeight: 'bold',
-                color: ready ? C.onAccent : C.faint,
+                width: 38,
+                height: 38,
+                borderRadius: 19,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                cursor: 'pointer',
+                backgroundColor: ready ? C.accent : '#ffffff1f',
+                hover: { backgroundColor: ready ? '#e8e8e8' : '#ffffff2b' },
               }}
+              onClick={() => ready && onSend()}
             >
-              {'↑'}
-            </text>
+              <text
+                style={{
+                  fontSize: 16,
+                  fontWeight: 'bold',
+                  color: ready ? C.onAccent : C.faint,
+                }}
+              >
+                {'↑'}
+              </text>
+            </div>
           </div>
         </div>
 

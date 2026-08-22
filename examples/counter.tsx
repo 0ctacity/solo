@@ -120,14 +120,14 @@ function App() {
   )
 }
 
-// Initialize GPUIX with non-blocking platform
+// Initialize GPUIX with its native platform.
 async function main() {
   // Create the native GPUI renderer with event callback
   const renderer = createRenderer((event) => {
     console.log('GPUI Event:', event.elementId, event.eventType)
   })
 
-  // Initialize GPUI with the embedded native macOS platform.
+  // macOS embeds AppKit. Windows and Linux start a Rust UI thread.
   renderer.init({
     title: 'GPUIX Counter',
     width: 800,
@@ -142,10 +142,9 @@ async function main() {
     root.render(<App />)
   })
 
-  console.log('[GPUIX] Initial render complete, starting tick loop')
+  console.log('[GPUIX] Initial render complete')
 
-  // Drive the frame loop — Node.js event loop stays alive,
-  // React state updates work, events flow back from GPUI
+  // Drives AppKit only on macOS. Other platforms return a no-op handle.
   startFrameLoop(renderer)
 }
 
