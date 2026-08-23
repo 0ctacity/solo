@@ -1,0 +1,295 @@
+/// Framework-neutral GPUIX types shared by every renderer package.
+///
+/// Nothing in this file may import React, Solid, or any other UI framework.
+/// These describe the native mutation protocol and the style vocabulary that
+/// Rust's `apply_styles` understands.
+
+export type DimensionValue = number | string
+
+export interface MotionStyle {
+  width?: number
+  height?: number
+  opacity?: number
+  top?: number
+  right?: number
+  bottom?: number
+  left?: number
+  borderRadius?: number
+}
+
+export type MotionEase =
+  | "linear"
+  | "ease"
+  | "easeIn"
+  | "easeOut"
+  | "easeInOut"
+  | [number, number, number, number]
+
+export interface MotionTransition {
+  /** Duration in seconds. */
+  duration?: number
+  /** Delay in seconds. */
+  delay?: number
+  ease?: MotionEase
+}
+
+export interface MotionProps {
+  initial?: MotionStyle | false
+  animate: MotionStyle
+  transition?: MotionTransition
+}
+
+export interface StyleDesc {
+  display?: string
+  visibility?: string
+  flexDirection?: string
+  flexWrap?: string
+  flexGrow?: number
+  flexShrink?: number
+  flexBasis?: number
+  alignItems?: string
+  alignSelf?: string
+  alignContent?: string
+  justifyContent?: string
+  gap?: number
+  rowGap?: number
+  columnGap?: number
+  gridTemplateColumns?: number
+  gridTemplateRows?: number
+  gridColumnMin?: "zero" | "min-content" | "max-content"
+  gridRowMin?: "zero" | "min-content" | "max-content"
+
+  width?: DimensionValue
+  height?: DimensionValue
+  minWidth?: DimensionValue
+  minHeight?: DimensionValue
+  maxWidth?: DimensionValue
+  maxHeight?: DimensionValue
+
+  padding?: number
+  paddingTop?: number
+  paddingRight?: number
+  paddingBottom?: number
+  paddingLeft?: number
+
+  margin?: number
+  marginTop?: number
+  marginRight?: number
+  marginBottom?: number
+  marginLeft?: number
+
+  position?: string
+  top?: number
+  right?: number
+  bottom?: number
+  left?: number
+
+  background?: string
+  backgroundColor?: string
+  color?: string
+  opacity?: number
+
+  borderWidth?: number
+  borderColor?: string
+  borderRadius?: number
+  borderTopLeftRadius?: number
+  borderTopRightRadius?: number
+  borderBottomLeftRadius?: number
+  borderBottomRightRadius?: number
+
+  fontSize?: number
+  fontFamily?: string
+  fontWeight?: string | number
+  textAlign?: string
+  lineHeight?: number
+  whiteSpace?: "normal" | "nowrap"
+  textOverflow?: "ellipsis" | "ellipsis-start"
+  lineClamp?: number
+
+  overflow?: string
+  overflowX?: string
+  overflowY?: string
+
+  cursor?: string
+  /** `"auto"` blocks hits behind this element. `"none"` never does. Unset blocks when the element paints a fill or is absolutely positioned. */
+  pointerEvents?: "auto" | "none"
+
+  /** "none" opts this element and its subtree out of text selection.
+   *  Inherited like the CSS property, so a toolbar can disable it once. */
+  userSelect?: "text" | "none" | "auto"
+  /** Selection wash colour for this subtree. Defaults to the theme accent at 35%. */
+  selectionColor?: string
+
+  // Pseudo-selector styles — applied by GPUI natively (no JS round-trip).
+  // Nesting is one level deep: hover/active cannot contain hover/active.
+  hover?: Omit<StyleDesc, "hover" | "active">
+  active?: Omit<StyleDesc, "hover" | "active">
+}
+
+// Element types supported by GPUIX
+export type ElementType =
+  | "div"
+  | "text"
+  | "img"
+  | "svg"
+  | "canvas"
+  | "input"
+  | "textarea"
+  | "anchored"
+  | "code"
+  | "diff"
+  | "markdown"
+  | "virtual-list"
+
+// ── Theme ────────────────────────────────────────────────────────────
+
+/** Colours for one syntax capture class each. Every field is a CSS colour. */
+export interface SyntaxTheme {
+  comment?: string
+  keyword?: string
+  string?: string
+  stringSpecial?: string
+  escape?: string
+  number?: string
+  boolean?: string
+  typeName?: string
+  typeBuiltin?: string
+  constructor?: string
+  function?: string
+  functionBuiltin?: string
+  macroName?: string
+  property?: string
+  constant?: string
+  variable?: string
+  variableSpecial?: string
+  parameter?: string
+  operator?: string
+  punctuation?: string
+  tag?: string
+  attribute?: string
+  label?: string
+  invalid?: string
+}
+
+/**
+ * Every number that decides layout in the native text components.
+ *
+ * These live in the theme, not in Rust constants, so tuning a row height or a
+ * heading scale is a re-render and needs no native rebuild.
+ */
+export interface GpuixMetrics {
+  // Code blocks
+  codeTextSize?: number
+  codeLineHeight?: number
+  codePaddingX?: number
+  codePaddingY?: number
+  codeRadius?: number
+  codeHeaderPaddingY?: number
+  codeHeaderTextSize?: number
+  codeGutterDigitWidth?: number
+  codeGutterPaddingRight?: number
+  codeGutterMinWidth?: number
+
+  // Diffs
+  diffTextSize?: number
+  diffLineHeight?: number
+  diffFileHeaderHeight?: number
+  diffHunkHeaderHeight?: number
+  diffNoticeHeight?: number
+  diffBodyBottomPad?: number
+  diffGutterWidth?: number
+  diffMarkerWidth?: number
+  diffAccentBarWidth?: number
+  diffRowPaddingX?: number
+
+  // Markdown
+  mdTextSize?: number
+  mdLineHeight?: number
+  mdBlockGap?: number
+  /** `[h1, h2, h3, h4to6]`. A shorter array leaves the rest at their defaults. */
+  mdHeadingSizes?: number[]
+  mdHeadingLineHeights?: number[]
+  mdTableCellPadding?: number
+  mdTableMinColumnWidth?: number
+  mdTableMinColumnContent?: number
+  mdInlineCodeRadius?: number
+}
+
+/**
+ * Theme tokens for the native text components. Every field is optional and
+ * layers on top of the built-in dark theme (or light, via `appearance`).
+ */
+export interface GpuixTheme {
+  appearance?: "dark" | "light"
+  bg?: string
+  border?: string
+  text?: string
+  textMuted?: string
+  textFaint?: string
+  textDim?: string
+  accent?: string
+  caret?: string
+  codeText?: string
+  codeWash?: string
+  diffAdd?: string
+  diffDel?: string
+  diffHunkBg?: string
+  fontSans?: string
+  fontMono?: string
+  syntax?: SyntaxTheme
+  metrics?: GpuixMetrics
+}
+
+export type DebugFrameOverlayMode = "hidden" | "minimal" | "full"
+
+/// Interface for the renderer that receives mutations from a framework
+/// reconciler. Implemented by the real napi GpuixRenderer and by TestRenderer
+/// (which delegates to native TestGpuixRenderer for tests).
+export interface NativeRenderer {
+  createElement(id: number, elementType: string): void
+  destroyElement(id: number): Array<number>
+  appendChild(parentId: number, childId: number): void
+  removeChild(parentId: number, childId: number): void
+  insertBefore(parentId: number, childId: number, beforeId: number): void
+  setStyle(id: number, styleJson: string | object): void
+  setText(id: number, content: string): void
+  setEventListener(id: number, eventType: string, hasHandler: boolean): void
+  setRoot(id: number): void
+  commitMutations(): void
+  setCustomProp(id: number, key: string, valueJson: string | object | number | boolean | null): void
+  /** Apply a batch of mutations in a single FFI call. Returns destroyed IDs. */
+  applyBatch?(json: string): Array<number>
+
+  // ── Focus API ──────────────────────────────────────────────────
+  focusElement?(elementId: number): void
+  blur?(): void
+
+  // ── Scroll API ─────────────────────────────────────────────────
+  /** Set the scroll offset of a scrollable element (overflow: "scroll").
+   *  x and y are negative pixel values (scroll down = more negative y). */
+  scrollTo?(elementId: number, x: number, y: number): void
+  /** Scroll a child into view by its index in the children list. */
+  scrollToItem?(elementId: number, index: number): void
+  /** Get the current scroll offset [x, y] or null if element is not scrollable. */
+  getScrollOffset?(elementId: number): Array<number> | null
+
+  // ── Selection API ──────────────────────────────────────────────
+  /** The current text selection joined in document order, or null. */
+  getSelectedText?(): string | null
+  /** Drop the current selection. */
+  clearSelection?(): void
+
+  // ── Window API ─────────────────────────────────────────────────
+  getWindowSize?(): { width: number; height: number }
+  setWindowTitle?(title: string): void
+  setDebugFrameOverlay?(mode: DebugFrameOverlayMode): string
+  getDebugFrameOverlay?(): string
+  cycleDebugFrameOverlay?(): string
+  resetDebugFrameOverlayStats?(): void
+}
+
+// Container holds the renderer reference.
+// Mutations go directly via napi calls.
+export interface Container {
+  renderer: NativeRenderer
+}

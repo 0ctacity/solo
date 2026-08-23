@@ -14,29 +14,16 @@
 ///
 /// ## Batch timing
 ///
-/// The batch boundary is React's commit phase (synchronous):
+/// The batch boundary is the framework's commit phase:
 ///
-///   setState() → React render → reconciler mutation callbacks → resetAfterCommit()
-///                                ↓ each callback queues ops     ↓ flushes queue
-///                                queue.push([name, ...args])    applyBatch(json)
+///   state change → framework render → mutation callbacks → commit end
+///                                ↓ each callback queues ops  ↓ flushes queue
+///                                queue.push([name, ...args]) applyBatch(json)
 ///
-/// Multiple setState calls batched by React into one render = one batch.
+/// Multiple updates batched by the framework into one render = one batch.
 /// Multiple separate commits in the same event loop tick = multiple batches.
-///
-/// ## Render-phase caveat (concurrent mode)
-///
-/// React's createInstance / createTextInstance / appendInitialChild are called
-/// during the RENDER phase, not the commit phase. In concurrent mode, React
-/// can abandon a render and retry. Mutations from abandoned renders stay in
-/// the queue and get flushed with the next successful commit. This can create
-/// orphaned elements in the Rust retained tree.
-///
-/// This is a pre-existing issue (before batching, these calls went directly
-/// to native and could also leave orphaned elements). Batching doesn't make
-/// it worse. The proper fix is moving element creation to commit-phase
-/// callbacks, but that requires a larger reconciler refactor.
 
-import type { NativeRenderer } from "../types/host.js"
+import type { NativeRenderer } from "./types.js"
 import { unregisterEventHandlers } from "./event-registry.js"
 
 export type MutationTuple = (number | string | boolean | object | null)[]
@@ -61,7 +48,7 @@ const BATCHED_METHODS = new Set([
  * Wrap a NativeRenderer with batching support.
  *
  * If the inner renderer has applyBatch(), returns a Proxy that buffers
- * all mutation calls and flushes them in one applyBatch() per React commit.
+ * all mutation calls and flushes them in one applyBatch() per commit.
  * setCustomProp is queued as setCustomPropValue so raw strings stay strings.
  * Without applyBatch, style and custom-prop objects are stringified for the
  * string-only napi methods.
@@ -99,7 +86,7 @@ export function wrapWithBatching(inner: NativeRenderer): NativeRenderer {
   return new Proxy(inner, {
     get(_target, prop: string) {
       // commitMutations: flush the queue via a single applyBatch() FFI call.
-      // Called by resetAfterCommit() at the end of React's commit phase.
+      // Called by the framework at the end of its commit phase.
       if (prop === "commitMutations") {
         return () => {
           if (queue.length === 0) {

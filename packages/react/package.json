@@ -69,6 +69,7 @@
     "test:watch": "vitest"
   },
   "dependencies": {
+    "@gpuix/core": "workspace:^",
     "@gpuix/native": "workspace:^",
     "eventsource-parser": "^4.1.0",
     "react-reconciler": "^0.31.0",

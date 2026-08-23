@@ -1,6 +1,8 @@
 import type { EventPayload } from "@gpuix/native"
 
 // Event handler registry — keyed by numeric element ID.
+// Shared by every framework package: the native side emits events by element
+// ID, and whichever framework owns an element registers its handler here.
 const eventHandlers = new Map<number, Map<string, (event: EventPayload) => void>>()
 
 export function handleGpuixEvent(payload: EventPayload): void {

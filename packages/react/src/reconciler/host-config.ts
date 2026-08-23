@@ -23,7 +23,7 @@ import {
   registerEventHandler,
   unregisterEventHandler,
   unregisterEventHandlers,
-} from "./event-registry.js"
+} from "@gpuix/core"
 
 let elementIdCounter = 0
 let currentUpdatePriority = NoEventPriority

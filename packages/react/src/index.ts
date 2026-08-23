@@ -75,7 +75,7 @@ export type {
   StyleDesc,
 } from "./types/host.js"
 export { resetIdCounter } from "./reconciler/host-config.js"
-export { handleGpuixEvent } from "./reconciler/event-registry.js"
+export { handleGpuixEvent } from "@gpuix/core"
 
 // Testing utilities
 export { TestRenderer, createTestRoot, hasNativeTestRenderer } from "./testing.js"
