@@ -55,6 +55,13 @@ export declare class GpuixRenderer {
   /** Whether JavaScript must drive the native event loop with tick(). */
   requiresTick(): boolean
   getWindowSize(): WindowSize
+  /** `"hidden"` | `"minimal"` | `"full"`. Paints into the scene after layout. */
+  setDebugFrameOverlay(mode: string): string
+  /** Hidden → minimal → full → hidden. */
+  cycleDebugFrameOverlay(): string
+  getDebugFrameOverlay(): string
+  /** Clears the last 1000 draw samples. Frame count stays. */
+  resetDebugFrameOverlayStats(): void
   setWindowTitle(title: string): void
   focusElement(elementId: number): void
   blur(): void
@@ -224,6 +231,13 @@ export declare class TestGpuixRenderer {
    * Call flush() after to apply and re-render.
    */
   scrollToItem(elementId: number, index: number): void
+  /** `"hidden"` | `"minimal"` | `"full"`. */
+  setDebugFrameOverlay(mode: string): string
+  /** Hidden → minimal → full → hidden. */
+  cycleDebugFrameOverlay(): string
+  getDebugFrameOverlay(): string
+  /** Clears the last 1000 draw samples. Frame count stays. */
+  resetDebugFrameOverlayStats(): void
   /**
    * Get the current scroll offset of a scrollable element.
    * Returns [x, y] or null if the element has no scroll handle.

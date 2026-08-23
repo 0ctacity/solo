@@ -393,7 +393,14 @@ export interface NativeRenderer {
 
   // ── Window API ─────────────────────────────────────────────────
   getWindowSize?(): { width: number; height: number }
+  setWindowTitle?(title: string): void
+  setDebugFrameOverlay?(mode: DebugFrameOverlayMode): string
+  getDebugFrameOverlay?(): string
+  cycleDebugFrameOverlay?(): string
+  resetDebugFrameOverlayStats?(): void
 }
+
+export type DebugFrameOverlayMode = "hidden" | "minimal" | "full"
 
 // Container holds the renderer reference.
 // Mutations go directly via napi calls.

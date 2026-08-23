@@ -105,10 +105,44 @@ thread_local! {
     static VIRTUAL_LIST_STATES: RefCell<HashMap<u64, gpui::ListState>> = RefCell::new(HashMap::new());
 }
 
+pub(crate) fn parse_debug_frame_overlay_mode(mode: &str) -> Result<gpui::DebugFrameOverlayMode> {
+    match mode {
+        "hidden" => Ok(gpui::DebugFrameOverlayMode::Hidden),
+        "minimal" => Ok(gpui::DebugFrameOverlayMode::Minimal),
+        "full" => Ok(gpui::DebugFrameOverlayMode::Full),
+        other => Err(Error::from_reason(format!(
+            "Unknown debug frame overlay mode {other:?}. Use hidden, minimal, or full."
+        ))),
+    }
+}
+
+pub(crate) fn debug_frame_overlay_mode_name(mode: gpui::DebugFrameOverlayMode) -> &'static str {
+    match mode {
+        gpui::DebugFrameOverlayMode::Hidden => "hidden",
+        gpui::DebugFrameOverlayMode::Minimal => "minimal",
+        gpui::DebugFrameOverlayMode::Full => "full",
+    }
+}
+
+#[cfg(any(target_os = "windows", target_os = "linux", target_os = "freebsd"))]
+fn recv_debug_frame_overlay_mode(
+    receiver: std::sync::mpsc::Receiver<String>,
+) -> Result<String> {
+    match receiver.recv_timeout(Duration::from_secs(2)) {
+        Ok(mode) => Ok(mode),
+        Err(RecvTimeoutError::Timeout) => Err(Error::from_reason(
+            "Timed out after 2 seconds waiting for the debug frame overlay query",
+        )),
+        Err(RecvTimeoutError::Disconnected) => Err(Error::from_reason(
+            "The GPUI UI thread stopped during the debug frame overlay query",
+        )),
+    }
+}
+
 #[cfg(target_os = "macos")]
-fn update_window(
-    update: impl FnOnce(&mut GpuixView, &mut gpui::Window, &mut gpui::Context<GpuixView>),
-) -> Result<()> {
+fn update_window<R>(
+    update: impl FnOnce(&mut GpuixView, &mut gpui::Window, &mut gpui::Context<GpuixView>) -> R,
+) -> Result<R> {
     let window = GPUI_WINDOW
         .with(|window| *window.borrow())
         .ok_or_else(|| Error::from_reason("GPUI window is not initialized"))?;
@@ -138,6 +172,14 @@ fn invalidate_window() -> Result<()> {
 enum UiCommand {
     Invalidate,
     SetWindowTitle(String),
+    SetDebugFrameOverlay(gpui::DebugFrameOverlayMode),
+    CycleDebugFrameOverlay {
+        response: SyncSender<String>,
+    },
+    GetDebugFrameOverlay {
+        response: SyncSender<String>,
+    },
+    ResetDebugFrameOverlayStats,
     ScrollTo {
         id: u64,
         x: f32,
@@ -180,6 +222,29 @@ async fn run_ui_commands(
                 cx.notify();
                 window.refresh();
             }),
+            UiCommand::SetDebugFrameOverlay(mode) => window.update(cx, move |_view, window, _cx| {
+                window.set_debug_frame_overlay_mode(mode);
+            }),
+            UiCommand::CycleDebugFrameOverlay { response } => {
+                window.update(cx, move |_view, window, _cx| {
+                    window.cycle_debug_frame_overlay_mode();
+                    response
+                        .send(debug_frame_overlay_mode_name(window.debug_frame_overlay_mode()).into())
+                        .ok();
+                })
+            }
+            UiCommand::GetDebugFrameOverlay { response } => {
+                window.update(cx, move |_view, window, _cx| {
+                    response
+                        .send(debug_frame_overlay_mode_name(window.debug_frame_overlay_mode()).into())
+                        .ok();
+                })
+            }
+            UiCommand::ResetDebugFrameOverlayStats => {
+                window.update(cx, |_view, window, _cx| {
+                    window.reset_debug_frame_overlay_stats();
+                })
+            },
             UiCommand::ScrollTo { id, x, y } => {
                 if !VIRTUAL_LIST_STATES.with(|cell| {
                     let states = cell.borrow();
@@ -732,6 +797,103 @@ impl GpuixRenderer {
             width: 800.0,
             height: 600.0,
         })
+    }
+
+    /// `"hidden"` | `"minimal"` | `"full"`. Paints into the scene after layout.
+    #[napi]
+    pub fn set_debug_frame_overlay(&self, mode: String) -> Result<String> {
+        let mode = parse_debug_frame_overlay_mode(&mode)?;
+        #[cfg(target_os = "macos")]
+        return update_window(move |_view, window, _cx| {
+            window.set_debug_frame_overlay_mode(mode);
+            debug_frame_overlay_mode_name(window.debug_frame_overlay_mode()).to_string()
+        });
+
+        #[cfg(any(target_os = "windows", target_os = "linux", target_os = "freebsd"))]
+        {
+            self.send_ui_command(UiCommand::SetDebugFrameOverlay(mode))?;
+            return self.debug_frame_overlay_mode();
+        }
+
+        #[cfg(not(any(
+            target_os = "macos",
+            target_os = "windows",
+            target_os = "linux",
+            target_os = "freebsd"
+        )))]
+        Err(Error::from_reason("Unsupported operating system"))
+    }
+
+    /// Hidden → minimal → full → hidden.
+    #[napi]
+    pub fn cycle_debug_frame_overlay(&self) -> Result<String> {
+        #[cfg(target_os = "macos")]
+        return update_window(move |_view, window, _cx| {
+            window.cycle_debug_frame_overlay_mode();
+            debug_frame_overlay_mode_name(window.debug_frame_overlay_mode()).to_string()
+        });
+
+        #[cfg(any(target_os = "windows", target_os = "linux", target_os = "freebsd"))]
+        {
+            let (response, receiver) = sync_channel(1);
+            self.send_ui_command(UiCommand::CycleDebugFrameOverlay { response })?;
+            return recv_debug_frame_overlay_mode(receiver);
+        }
+
+        #[cfg(not(any(
+            target_os = "macos",
+            target_os = "windows",
+            target_os = "linux",
+            target_os = "freebsd"
+        )))]
+        Err(Error::from_reason("Unsupported operating system"))
+    }
+
+    #[napi]
+    pub fn get_debug_frame_overlay(&self) -> Result<String> {
+        self.debug_frame_overlay_mode()
+    }
+
+    fn debug_frame_overlay_mode(&self) -> Result<String> {
+        #[cfg(target_os = "macos")]
+        return update_window(|_view, window, _cx| {
+            debug_frame_overlay_mode_name(window.debug_frame_overlay_mode()).to_string()
+        });
+
+        #[cfg(any(target_os = "windows", target_os = "linux", target_os = "freebsd"))]
+        {
+            let (response, receiver) = sync_channel(1);
+            self.send_ui_command(UiCommand::GetDebugFrameOverlay { response })?;
+            recv_debug_frame_overlay_mode(receiver)
+        }
+
+        #[cfg(not(any(
+            target_os = "macos",
+            target_os = "windows",
+            target_os = "linux",
+            target_os = "freebsd"
+        )))]
+        Err(Error::from_reason("Unsupported operating system"))
+    }
+
+    /// Clears the last 1000 draw samples. Frame count stays.
+    #[napi]
+    pub fn reset_debug_frame_overlay_stats(&self) -> Result<()> {
+        #[cfg(target_os = "macos")]
+        return update_window(|_view, window, _cx| {
+            window.reset_debug_frame_overlay_stats();
+        });
+
+        #[cfg(any(target_os = "windows", target_os = "linux", target_os = "freebsd"))]
+        return self.send_ui_command(UiCommand::ResetDebugFrameOverlayStats);
+
+        #[cfg(not(any(
+            target_os = "macos",
+            target_os = "windows",
+            target_os = "linux",
+            target_os = "freebsd"
+        )))]
+        Err(Error::from_reason("Unsupported operating system"))
     }
 
     #[napi]

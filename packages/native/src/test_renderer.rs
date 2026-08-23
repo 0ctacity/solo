@@ -20,7 +20,10 @@ use napi_derive::napi;
 use gpui::AppContext as _;
 
 use crate::element_tree::EventPayload;
-use crate::renderer::{apply_batch_to_tree, to_element_id, EventCallback, GpuixView};
+use crate::renderer::{
+    apply_batch_to_tree, debug_frame_overlay_mode_name, parse_debug_frame_overlay_mode,
+    to_element_id, EventCallback, GpuixView,
+};
 use crate::retained_tree::RetainedTree;
 use crate::style::StyleDesc;
 
@@ -560,6 +563,53 @@ impl TestGpuixRenderer {
                         handle.scroll_to_item(index);
                     }
                 });
+            })
+            .map_err(|e| Error::from_reason(e.to_string()))?;
+            Ok(())
+        })
+    }
+
+    /// `"hidden"` | `"minimal"` | `"full"`.
+    #[napi]
+    pub fn set_debug_frame_overlay(&self, mode: String) -> Result<String> {
+        let mode = parse_debug_frame_overlay_mode(&mode)?;
+        with_test_state(|cx, window, _view| {
+            cx.update_window(window, |_, window, _app| {
+                window.set_debug_frame_overlay_mode(mode);
+                debug_frame_overlay_mode_name(window.debug_frame_overlay_mode()).to_string()
+            })
+            .map_err(|e| Error::from_reason(e.to_string()))
+        })
+    }
+
+    /// Hidden → minimal → full → hidden.
+    #[napi]
+    pub fn cycle_debug_frame_overlay(&self) -> Result<String> {
+        with_test_state(|cx, window, _view| {
+            cx.update_window(window, |_, window, _app| {
+                window.cycle_debug_frame_overlay_mode();
+                debug_frame_overlay_mode_name(window.debug_frame_overlay_mode()).to_string()
+            })
+            .map_err(|e| Error::from_reason(e.to_string()))
+        })
+    }
+
+    #[napi]
+    pub fn get_debug_frame_overlay(&self) -> Result<String> {
+        with_test_state(|cx, window, _view| {
+            cx.update_window(window, |_, window, _app| {
+                debug_frame_overlay_mode_name(window.debug_frame_overlay_mode()).to_string()
+            })
+            .map_err(|e| Error::from_reason(e.to_string()))
+        })
+    }
+
+    /// Clears the last 1000 draw samples. Frame count stays.
+    #[napi]
+    pub fn reset_debug_frame_overlay_stats(&self) -> Result<()> {
+        with_test_state(|cx, window, _view| {
+            cx.update_window(window, |_, window, _app| {
+                window.reset_debug_frame_overlay_stats();
             })
             .map_err(|e| Error::from_reason(e.to_string()))?;
             Ok(())

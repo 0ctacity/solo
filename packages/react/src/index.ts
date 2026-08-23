@@ -57,7 +57,7 @@ export type { Root, FrameLoop, RenderOptions } from "./reconciler/renderer.js"
 export type { WindowSize } from "./hooks/use-window-size.js"
 
 // Re-export types
-export type { StyleDesc, NativeRenderer } from "./types/host.js"
+export type { StyleDesc, NativeRenderer, DebugFrameOverlayMode } from "./types/host.js"
 export { resetIdCounter } from "./reconciler/host-config.js"
 export { handleGpuixEvent } from "./reconciler/event-registry.js"
 

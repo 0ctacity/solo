@@ -20,7 +20,7 @@ parking_lot = "0.12"
 futures = "0.3"
 
 # Use the GPUI fork checked out in the zed submodule.
-gpui = { path = "../../zed/crates/gpui", default-features = false, features = ["font-kit"] }
+gpui = { path = "../../zed/crates/gpui", default-features = false, features = ["font-kit", "profiler"] }
 gpui_platform = { path = "../../zed/crates/gpui_platform", default-features = false, features = ["font-kit", "wayland", "x11"] }
 thiserror = "2"
 tree-sitter = "0.26.11"

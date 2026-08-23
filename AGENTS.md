@@ -396,6 +396,8 @@ belong in README. This list is only the remaining engineering work.
 - [x] Cross-element text selection
 - [x] Headless Select, Combobox, Tooltip
 - [x] `setWindowTitle`
+- [x] Window chrome (`titlebarTransparent`, `windowBackground`, traffic-light position)
+- [x] Debug frame overlay (`setDebugFrameOverlay`)
 
 ### TODO
 

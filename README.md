@@ -184,10 +184,25 @@ function App() {
   )
 }
 
-render(<App />, { title: 'My App', width: 800, height: 600 })
+render(<App />, {
+  title: 'My App',
+  width: 800,
+  height: 600,
+  titlebarTransparent: true,
+  windowBackground: 'blurred',
+  trafficLightX: 16,
+  trafficLightY: 17,
+})
 ```
 
 `render()` creates the native window, mounts React, and starts the frame loop.
+
+| Option | Values | Purpose |
+|---|---|---|
+| `titlebarTransparent` | boolean | Hide the native titlebar so the app draws chrome under the traffic lights |
+| `windowBackground` | `"opaque"` (default), `"transparent"`, `"blurred"` | Window fill. `"blurred"` is the macOS vibrancy backdrop |
+| `trafficLightX` / `trafficLightY` | pixels | Traffic-light origin. Waku uses `(16, 17)` |
+| `transparent` | boolean | Same as `windowBackground: "transparent"` when that option is unset |
 Call it again after a save and it remounts the tree on the same window.
 
 Use **`render()`**, not `createRenderer()`, in the app entry. `bun --hot`
@@ -198,6 +213,32 @@ later calls only remount React.
 `createRenderer()`, `createRoot()`, and `startFrameLoop()` stay public for
 tests and custom hosts. Pass `{ renderer }` into `render()` when you already
 have one.
+
+## Debug frame overlay
+
+GPUI paints frame-time stats into the window after layout. The overlay is not
+a React element. A React FPS label would update every frame and cause more work.
+
+```tsx
+render(<App />, { title: 'My App', debugFrameOverlay: 'full' })
+```
+
+| Mode | What you see |
+|---|---|
+| `hidden` | nothing (default) |
+| `minimal` | last draw time, e.g. `8.3 MS` |
+| `full` | `CUR`, `1%`, `10%`, `MAX`, `FRAMES` |
+
+Or call the renderer:
+
+```ts
+renderer.setDebugFrameOverlay('full')
+renderer.cycleDebugFrameOverlay()
+renderer.resetDebugFrameOverlayStats()
+renderer.getDebugFrameOverlay() // 'hidden' | 'minimal' | 'full'
+```
+
+The overlay shows **draw time**, not FPS. `8.3 MS` is about 120 Hz.
 
 ## Hot reload
 
@@ -1139,6 +1180,8 @@ The test renderer uses `VisualTestAppContext` with a `TestDispatcher` for determ
 - [x] Headless Select, Combobox, and Tooltip
 - [x] Native `hover` and `active` styles
 - [x] Window title (`setWindowTitle`)
+- [x] Window chrome (`titlebarTransparent`, `windowBackground`, traffic-light position)
+- [x] Debug frame overlay (`debugFrameOverlay` / `setDebugFrameOverlay`)
 - [ ] Canvas element
 - [ ] Multiple windows
 - [x] JS remount under `bun --hot` (`render()` keeps the native window)

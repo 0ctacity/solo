@@ -12,7 +12,7 @@
 import React from "react"
 import type { ReactNode } from "react"
 import type { EventPayload } from "@gpuix/native"
-import type { NativeRenderer } from "./types/host.js"
+import type { DebugFrameOverlayMode, NativeRenderer } from "./types/host.js"
 import type { Root } from "./reconciler/renderer.js"
 import { reconciler } from "./reconciler/reconciler.js"
 import { setNativeRenderer, resetIdCounter } from "./reconciler/host-config.js"
@@ -41,6 +41,10 @@ interface NativeTestRendererApi extends NativeRenderer {
   scrollTo(elementId: number, x: number, y: number): void
   scrollToItem(elementId: number, index: number): void
   getScrollOffset(elementId: number): number[] | null
+  setDebugFrameOverlay(mode: DebugFrameOverlayMode): string
+  getDebugFrameOverlay(): string
+  cycleDebugFrameOverlay(): string
+  resetDebugFrameOverlayStats(): void
   dragSelect(x1: number, y1: number, x2: number, y2: number): void
   getSelectedText(): string | null
   getPaintedText(): string[]
@@ -419,6 +423,22 @@ export class TestRenderer implements NativeRenderer {
   clearSelection(): void {
     this.native.clearSelection()
     this.native.flush()
+  }
+
+  setDebugFrameOverlay(mode: DebugFrameOverlayMode): string {
+    return this.native.setDebugFrameOverlay(mode)
+  }
+
+  getDebugFrameOverlay(): string {
+    return this.native.getDebugFrameOverlay()
+  }
+
+  cycleDebugFrameOverlay(): string {
+    return this.native.cycleDebugFrameOverlay()
+  }
+
+  resetDebugFrameOverlayStats(): void {
+    this.native.resetDebugFrameOverlayStats()
   }
 
   /** Capture a screenshot of the current rendered UI and save as PNG.

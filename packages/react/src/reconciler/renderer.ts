@@ -5,7 +5,7 @@ import { ConcurrentRoot } from "react-reconciler/constants.js"
 import { GpuixRenderer } from "@gpuix/native"
 import type { EventPayload, WindowOptions } from "@gpuix/native"
 import { reconciler } from "./reconciler.js"
-import type { Container, NativeRenderer } from "../types/host.js"
+import type { Container, DebugFrameOverlayMode, NativeRenderer } from "../types/host.js"
 import { clearEventHandlers, handleGpuixEvent } from "./event-registry.js"
 import { resetIdCounter, setNativeRenderer } from "./host-config.js"
 import { wrapWithBatching } from "./batch-renderer.js"
@@ -183,6 +183,8 @@ function renderSlot(): RenderSlot {
 export interface RenderOptions extends WindowOptions {
   onEvent?: (event: EventPayload) => void
   renderer?: NativeRenderer
+  /** GPUI scene overlay. Does not go through React or layout. */
+  debugFrameOverlay?: DebugFrameOverlayMode
 }
 
 export function resetRender(): void {
@@ -191,7 +193,7 @@ export function resetRender(): void {
 
 /** Mount the app. Under `bun --hot`, later calls remount on the same native window. */
 export function render(node: ReactNode, options: RenderOptions = {}): Root {
-  const { onEvent, renderer: injected, ...windowOptions } = options
+  const { onEvent, renderer: injected, debugFrameOverlay, ...windowOptions } = options
   const slot = renderSlot()
   const remount = slot.root != null
   if (!slot.renderer) {
@@ -204,12 +206,19 @@ export function render(node: ReactNode, options: RenderOptions = {}): Root {
       console.log("[gpuix] created native window")
     }
   }
+  const host = slot.renderer
+  if (!host) {
+    throw new Error("GPUIX renderer is not initialized")
+  }
+  if (debugFrameOverlay) {
+    host.setDebugFrameOverlay?.(debugFrameOverlay)
+  }
   if (slot.root) {
     console.log("[gpuix] remount: unmount previous tree")
     slot.root.unmount()
     resetIdCounter()
   }
-  const root = createRoot(slot.renderer)
+  const root = createRoot(host)
   slot.root = root
   flushSync(() => {
     root.render(node)
