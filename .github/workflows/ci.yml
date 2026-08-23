@@ -195,8 +195,6 @@ jobs:
             cd packages/native
             npm publish --access public --provenance
           fi
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
       # ── Publish @gpuix/react ───────────────────────────────────────
       - name: Build @gpuix/react
@@ -211,7 +209,12 @@ jobs:
           else
             echo "Publishing @gpuix/react@${CURRENT_VERSION}"
             cd packages/react
-            bun publish --access public
+            node -e "
+              const fs = require('fs')
+              const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'))
+              const native = require('../native/package.json').version
+              pkg.dependencies['@gpuix/native'] = '^' + native
+              fs.writeFileSync('package.json', JSON.stringify(pkg, null, 2) + '\n')
+            "
+            npm publish --access public --provenance
           fi
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
