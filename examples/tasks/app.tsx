@@ -9,6 +9,7 @@
  */
 
 import { createSignal, For, Show } from "solid-js"
+import { createStore } from "solid-js"
 import { View, Text, Button } from "@gpuix/solid"
 import type { StyleDesc } from "@gpuix/core"
 
@@ -100,22 +101,26 @@ function Checkbox(props: { checked: boolean; onToggle: () => void }) {
   )
 }
 
-function TaskRow(props: { task: Task; onToggle: () => void; onDelete: () => void }) {
+function TaskRow(props: {
+  task: () => Task
+  onToggle: () => void
+  onDelete: () => void
+}) {
   return (
     <div
       style={{ ...ROW_STYLE, hover: { backgroundColor: "#181825" } }}
-      testId={`task-${props.task.id}`}
+      testId={`task-${props.task().id}`}
     >
-      <Checkbox checked={props.task.completed} onToggle={props.onToggle} />
+      <Checkbox checked={props.task().completed} onToggle={props.onToggle} />
       <Text
         style={{
           flexGrow: 1,
           fontSize: 15,
           lineHeight: 20,
-          color: props.task.completed ? "#585b70" : "#cdd6f4",
+          color: props.task().completed ? "#585b70" : "#cdd6f4",
         }}
       >
-        {props.task.title}
+        {props.task().title}
       </Text>
       <div
         style={{
@@ -138,13 +143,17 @@ function TaskRow(props: { task: Task; onToggle: () => void; onDelete: () => void
 }
 
 export function TasksApp() {
-  const [tasks, setTasks] = createSignal<Task[]>(makeTasks())
+  // A store keeps every task object identity-stable: toggling mutates one
+  // property and only that row's style/marker updates in the native tree.
+  const [tasks, setTasks] = createStore<Task[]>(makeTasks())
   const [draft, setDraft] = createSignal("")
 
   const addTask = () => {
     const title = draft().trim()
     if (!title) return
-    setTasks((xs) => [...xs, { id: nextTaskId++, title, completed: false }])
+    setTasks((state) => {
+      state.push({ id: nextTaskId++, title, completed: false })
+    })
     setDraft("")
   }
 
@@ -175,18 +184,26 @@ export function TasksApp() {
         }}
         testId="task-list"
       >
-        <For each={tasks()}>
-          {(task) => (
-            <TaskRow
-              task={task}
-              onToggle={() =>
-                setTasks((xs) =>
-                  xs.map((t) => (t.id === task.id ? { ...t, completed: !t.completed } : t))
-                )
-              }
-              onDelete={() => setTasks((xs) => xs.filter((t) => t.id !== task.id))}
-            />
-          )}
+        {/* Keyed by id: reordering/moving moves native nodes instead of
+            rebuilding them. Key-function mode passes an accessor. */}
+        <For each={tasks} keyed={(t) => (t as Task).id}>
+          {(item) => {
+            const task = item as unknown as () => Task
+            return (
+              <TaskRow
+                task={task}
+                onToggle={() =>
+                  setTasks((state) => {
+                    const row = state.find((t) => t.id === task().id)
+                    if (row) row.completed = !row.completed
+                  })
+                }
+                onDelete={() =>
+                  setTasks((state) => state.filter((t) => t.id !== task().id))
+                }
+              />
+            )
+          }}
         </For>
       </View>
 

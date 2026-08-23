@@ -4,7 +4,8 @@
   "workspaces": [
     "packages/*",
     "examples",
-    "examples/solid-counter"
+    "examples/solid-counter",
+    "examples/tasks"
   ],
   "scripts": {
     "build": "bun run build:native && bun run build:react",

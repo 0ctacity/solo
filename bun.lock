@@ -46,6 +46,21 @@
         "vite": "^7.0.0",
       },
     },
+    "examples/tasks": {
+      "name": "tasks",
+      "dependencies": {
+        "@gpuix/core": "workspace:^",
+        "@gpuix/native": "workspace:^",
+        "@gpuix/solid": "workspace:^",
+        "@solidjs/universal": "^2.0.0-rc.1",
+        "solid-js": "^2.0.0-rc.1",
+      },
+      "devDependencies": {
+        "@babel/core": "^7.26.0",
+        "babel-preset-solid": "^2.0.0-rc.1",
+        "vite": "^7.0.0",
+      },
+    },
     "packages/core": {
       "name": "@gpuix/core",
       "version": "0.4.0",
@@ -898,6 +913,8 @@
     "style-to-object": ["style-to-object@1.0.14", "", { "dependencies": { "inline-style-parser": "0.2.7" } }, "sha512-LIN7rULI0jBscWQYaSswptyderlarFkjQ+t79nzty8tcIAceVomEVlLzH5VP4Cmsv6MtKhs7qaAiwlcp+Mgaxw=="],
 
     "tar": ["tar@7.5.7", "", { "dependencies": { "@isaacs/fs-minipass": "^4.0.0", "chownr": "^3.0.0", "minipass": "^7.1.2", "minizlib": "^3.1.0", "yallist": "^5.0.0" } }, "sha512-fov56fJiRuThVFXD6o6/Q354S7pnWMJIVlDBYijsTNx6jKSE4pvrDTs6lUnmGvNyfJwFQQwWy3owKz1ucIhveQ=="],
+
+    "tasks": ["tasks@workspace:examples/tasks"],
 
     "tinybench": ["tinybench@2.9.0", "", {}, "sha512-0+DUvqWMValLmha6lr4kD8iAMK1HzV0/aKnCtWb9v9641TnP/MFb7Pc2bxoxQjTXAErryXVgUOfv2YqNllqGeg=="],
 
