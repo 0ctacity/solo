@@ -398,10 +398,10 @@ renderer.getScrollOffset(elementId)       // returns [x, y] or null
 
 ## Virtual lists
 
-Use `<virtual-list>` for **long, variable-height collections** such as chat transcripts. React and Rust retain every row, but GPUI only builds, lays out, and paints rows near the viewport.
+Use `<virtual-list>` for **long, variable-height collections** such as message lists. React and Rust retain every row, but GPUI only builds, lays out, and paints rows near the viewport.
 
 ```tsx
-function Transcript({ messages }: { messages: Message[] }) {
+function MessageList({ messages }: { messages: Message[] }) {
   return (
     <virtual-list
       alignment="bottom"
@@ -468,7 +468,7 @@ A row can contain nested `<div>`, `<text>`, `<markdown>`, `<code>`, `<diff>`, `<
 
 ### Chat tail behavior
 
-Combine `alignment="bottom"` and `followTail` for a chat transcript:
+Combine `alignment="bottom"` and `followTail` for a chat thread:
 
 ```tsx
 <virtual-list
@@ -903,8 +903,8 @@ block's height is known before highlighting runs.
 
 ### `<diff>`
 
-A unified diff viewer. It **flows** with its parent by default, so a transcript
-can be the only scroller. Collapsing a file removes its rows rather than hiding
+A unified diff viewer. It **flows** with its parent by default, so a parent
+list can be the only scroller. Collapsing a file removes its rows rather than hiding
 them, so a collapsed 10k-line file costs one row.
 
 Use `maxLines` to keep a long patch short. Show more fires `onShowMore`. Clear

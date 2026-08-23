@@ -209,7 +209,7 @@ The centrepiece. After this, all GPUIX text is selectable and copyable.
   early; if window-level listeners do not dispatch in the test context, Stage 1's test story
   falls back to the visual screenshot renderer.
 - **Performance.** One extra canvas element per text node. Comet ships this in a virtualized
-  transcript, so it is viable, but our examples render hundreds of unvirtualized `<text>` nodes
+  list, so it is viable, but our examples render hundreds of unvirtualized `<text>` nodes
   (`examples/diff.tsx` is 927 lines of exactly that). Stage 6 (`<list>`) is the real fix.
 
 ## Tests

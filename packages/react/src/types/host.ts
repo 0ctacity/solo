@@ -310,8 +310,8 @@ export interface DiffProps extends Props {
   /** File paths rendered as a header only. Collapsed bodies cost one row. */
   collapsedPaths?: string[]
   /**
-   * Use the virtualized `list()` scroller. Off by default so a parent
-   * transcript can be the only scroll container. Requires a bounded height.
+    * Use the virtualized `list()` scroller. Off by default so a parent
+    * list can be the only scroll container. Requires a bounded height.
    */
   scroll?: boolean
   /** Paint this many line rows, then a Show more row. */
