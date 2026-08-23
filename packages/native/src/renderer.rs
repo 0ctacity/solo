@@ -11,7 +11,7 @@
 //!   renderer.appendChild(0, 1)
 //!   renderer.commitMutations()           // signal batch complete
 //!   setTimeout(function loop() {         // drive AppKit on macOS
-//!     renderer.tick()
+//!     if (!renderer.tick()) process.exit(0)
 //!     setTimeout(loop, 8)
 //!   })
 #[cfg(any(target_os = "windows", target_os = "linux", target_os = "freebsd"))]
@@ -440,6 +440,7 @@ impl GpuixRenderer {
         let width = options.width.unwrap_or(800.0);
         let height = options.height.unwrap_or(600.0);
         let title = options.title.clone().unwrap_or_else(|| "GPUIX".to_string());
+        let window_options = options.clone();
 
         let platform = Rc::new(gpui_macos::MacPlatform::new_embedded());
 
@@ -451,7 +452,10 @@ impl GpuixRenderer {
         let startup_error = Rc::new(RefCell::new(None));
         let opened_window_for_app = opened_window.clone();
         let startup_error_for_app = startup_error.clone();
-        let app = gpui::Application::with_platform(platform.clone());
+        // bun/node is not a .app. A Dock icon with no window cannot relaunch.
+        // Last window close quits AppKit; tick() returns false and JS exits.
+        let app = gpui::Application::with_platform(platform.clone())
+            .with_quit_mode(gpui::QuitMode::LastWindowClosed);
         let app_handle = app.run_embedded(move |cx: &mut gpui::App| {
             init_key_bindings(cx);
             crate::custom_elements::input::init(cx);
@@ -462,10 +466,7 @@ impl GpuixRenderer {
             );
 
             match cx.open_window(
-                gpui::WindowOptions {
-                    window_bounds: Some(gpui::WindowBounds::Windowed(bounds)),
-                    ..Default::default()
-                },
+                to_gpui_window_options(&window_options, bounds),
                 |_window, cx| {
                     cx.new(|_| {
                         GpuixView::new(tree.clone(), callback.clone(), title, selection.clone())
@@ -528,7 +529,8 @@ impl GpuixRenderer {
 
         let width = options.width.unwrap_or(800.0);
         let height = options.height.unwrap_or(600.0);
-        let title = options.title.unwrap_or_else(|| "GPUIX".to_string());
+        let title = options.title.clone().unwrap_or_else(|| "GPUIX".to_string());
+        let window_options = options.clone();
         let tree = self.tree.clone();
         let selection = self.selection.clone();
         let callback = self.event_callback_for_view();
@@ -549,10 +551,7 @@ impl GpuixRenderer {
                             cx,
                         );
                         let window = match cx.open_window(
-                            gpui::WindowOptions {
-                                window_bounds: Some(gpui::WindowBounds::Windowed(bounds)),
-                                ..Default::default()
-                            },
+                            to_gpui_window_options(&window_options, bounds),
                             |_window, cx| {
                                 cx.new(|_| GpuixView::new(tree, callback, title, selection))
                             },
@@ -745,8 +744,9 @@ impl GpuixRenderer {
 
     // ── Frame loop ───────────────────────────────────────────────────
 
+    /// Pump the native event loop. Returns false after the last window closes.
     #[napi]
-    pub fn tick(&self) -> Result<()> {
+    pub fn tick(&self) -> Result<bool> {
         let initialized = *self.initialized.lock().unwrap();
         if !initialized {
             return Err(Error::from_reason(
@@ -755,19 +755,18 @@ impl GpuixRenderer {
         }
 
         #[cfg(target_os = "macos")]
-        MAC_PLATFORM.with(|p| {
-            if let Some(ref platform) = *p.borrow() {
-                platform.pump_events();
-            }
-        });
+        {
+            let running = MAC_PLATFORM.with(|p| {
+                p.borrow()
+                    .as_ref()
+                    .map(|platform| platform.pump_events())
+                    .unwrap_or(false)
+            });
+            return Ok(running);
+        }
 
-        #[cfg(any(
-            target_os = "macos",
-            target_os = "windows",
-            target_os = "linux",
-            target_os = "freebsd"
-        ))]
-        return Ok(());
+        #[cfg(any(target_os = "windows", target_os = "linux", target_os = "freebsd"))]
+        return Ok(true);
 
         #[cfg(not(any(
             target_os = "macos",
@@ -2813,7 +2812,15 @@ pub struct WindowOptions {
     pub min_height: Option<f64>,
     pub resizable: Option<bool>,
     pub fullscreen: Option<bool>,
+    /// Plain alpha transparency. Prefer `window_background` when you need blur.
     pub transparent: Option<bool>,
+    /// Hide the native titlebar so the app can draw chrome under the traffic lights.
+    pub titlebar_transparent: Option<bool>,
+    /// `"opaque"` | `"transparent"` | `"blurred"`. `transparent: true` is the
+    /// same as `"transparent"` when this is unset.
+    pub window_background: Option<String>,
+    pub traffic_light_x: Option<f64>,
+    pub traffic_light_y: Option<f64>,
 }
 
 impl Default for WindowOptions {
@@ -2827,6 +2834,52 @@ impl Default for WindowOptions {
             resizable: Some(true),
             fullscreen: Some(false),
             transparent: Some(false),
+            titlebar_transparent: Some(false),
+            window_background: None,
+            traffic_light_x: None,
+            traffic_light_y: None,
         }
+    }
+}
+
+fn to_gpui_window_options(
+    options: &WindowOptions,
+    bounds: gpui::Bounds<gpui::Pixels>,
+) -> gpui::WindowOptions {
+    let title = options.title.clone().unwrap_or_else(|| "GPUIX".to_string());
+    let titlebar_transparent = options.titlebar_transparent.unwrap_or(false);
+    let traffic_light_position = match (options.traffic_light_x, options.traffic_light_y) {
+        (Some(x), Some(y)) => Some(gpui::point(gpui::px(x as f32), gpui::px(y as f32))),
+        _ => None,
+    };
+    let window_background = match options.window_background.as_deref() {
+        Some("transparent") => gpui::WindowBackgroundAppearance::Transparent,
+        Some("blurred") => gpui::WindowBackgroundAppearance::Blurred,
+        Some("opaque") => gpui::WindowBackgroundAppearance::Opaque,
+        _ if options.transparent.unwrap_or(false) => gpui::WindowBackgroundAppearance::Transparent,
+        _ => gpui::WindowBackgroundAppearance::Opaque,
+    };
+    let window_min_size = match (options.min_width, options.min_height) {
+        (Some(width), Some(height)) => {
+            Some(gpui::size(gpui::px(width as f32), gpui::px(height as f32)))
+        }
+        _ => None,
+    };
+    let window_bounds = if options.fullscreen.unwrap_or(false) {
+        gpui::WindowBounds::Fullscreen(bounds)
+    } else {
+        gpui::WindowBounds::Windowed(bounds)
+    };
+    gpui::WindowOptions {
+        window_bounds: Some(window_bounds),
+        titlebar: Some(gpui::TitlebarOptions {
+            title: Some(title.into()),
+            appears_transparent: titlebar_transparent,
+            traffic_light_position,
+        }),
+        is_resizable: options.resizable.unwrap_or(true),
+        window_background,
+        window_min_size,
+        ..Default::default()
     }
 }

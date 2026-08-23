@@ -196,6 +196,8 @@ render(<App />, {
 ```
 
 `render()` creates the native window, mounts React, and starts the frame loop.
+The red traffic-light button quits the process. Start the app again from the
+terminal.
 
 | Option | Values | Purpose |
 |---|---|---|
@@ -1184,6 +1186,7 @@ The test renderer uses `VisualTestAppContext` with a `TestDispatcher` for determ
 - [x] Native `hover` and `active` styles
 - [x] Window title (`setWindowTitle`)
 - [x] Window chrome (`titlebarTransparent`, `windowBackground`, traffic-light position)
+- [x] Last window close quits the process
 - [x] Debug frame overlay (`debugFrameOverlay` / `setDebugFrameOverlay`)
 - [ ] Canvas element
 - [ ] Multiple windows

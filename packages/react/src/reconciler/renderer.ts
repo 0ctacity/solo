@@ -58,10 +58,16 @@ export interface FrameLoop {
  *
  * Each frame is scheduled only after the previous one finishes, so a slow frame
  * delays the next one instead of letting timers pile up.
+ *
+ * If `tick()` already used the whole budget, wait 0ms. A fixed 8ms sleep after a
+ * 10ms frame would cap scroll at ~55fps on a 120Hz display.
+ *
+ * `tick()` returning false means the last window closed. The loop stops and
+ * `onTerminated` runs. `render()` uses that to exit the process.
  */
 export function startFrameLoop(
   renderer: Pick<GpuixRenderer, "requiresTick" | "tick">,
-  options: { frameMs?: number } = {}
+  options: { frameMs?: number; onTerminated?: () => void } = {}
 ): FrameLoop {
   if (!renderer.requiresTick()) {
     return { stop: () => {} }
@@ -71,20 +77,27 @@ export function startFrameLoop(
   let timer: ReturnType<typeof setTimeout> | null = null
   let stopped = false
 
+  const stop = (): void => {
+    stopped = true
+    if (timer !== null) clearTimeout(timer)
+    timer = null
+  }
+
   const loop = (): void => {
     if (stopped) return
-    renderer.tick()
-    timer = setTimeout(loop, frameMs)
+    const started = performance.now()
+    const running = renderer.tick()
+    if (running === false) {
+      stop()
+      options.onTerminated?.()
+      return
+    }
+    const wait = Math.max(0, frameMs - (performance.now() - started))
+    timer = setTimeout(loop, wait)
   }
   loop()
 
-  return {
-    stop: (): void => {
-      stopped = true
-      if (timer !== null) clearTimeout(timer)
-      timer = null
-    },
-  }
+  return { stop }
 }
 
 /**
@@ -226,7 +239,11 @@ export function render(node: ReactNode, options: RenderOptions = {}): Root {
   if (!injected && slot.renderer instanceof GpuixRenderer) {
     const native = slot.renderer
     slot.loop?.stop()
-    slot.loop = startFrameLoop(native)
+    slot.loop = startFrameLoop(native, {
+      onTerminated: () => {
+        process.exit(0)
+      },
+    })
   }
   console.log(remount ? "[gpuix] remount complete" : "[gpuix] mount complete")
   return root

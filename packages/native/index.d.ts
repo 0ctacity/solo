@@ -50,7 +50,8 @@ export declare class GpuixRenderer {
    * Acquires the tree mutex ONCE for the entire batch.
    */
   applyBatch(json: string): Array<number>
-  tick(): void
+  /** Pump the native event loop. Returns false after the last window closes. */
+  tick(): boolean
   isInitialized(): boolean
   /** Whether JavaScript must drive the native event loop with tick(). */
   requiresTick(): boolean
@@ -351,8 +352,9 @@ export interface EventPayload {
   hovered?: boolean
   /**
    * Element-defined string payload.
-   * Populated for: `<diff>` toggleFile (the file path) and lineClick (the
-   * line text); `<markdown>` linkClick (the URL).
+   * Populated for: `<diff>` toggleFile (the file path), showMore (the
+   * hidden line count), and lineClick (the line text); `<markdown>`
+   * linkClick (the URL).
    */
   value?: string
   /** Line number on the pre-change side. Populated for: `<diff>` lineClick. */
@@ -370,7 +372,17 @@ export interface WindowOptions {
   minHeight?: number
   resizable?: boolean
   fullscreen?: boolean
+  /** Plain alpha transparency. Prefer `window_background` when you need blur. */
   transparent?: boolean
+  /** Hide the native titlebar so the app can draw chrome under the traffic lights. */
+  titlebarTransparent?: boolean
+  /**
+   * `"opaque"` | `"transparent"` | `"blurred"`. `transparent: true` is the
+   * same as `"transparent"` when this is unset.
+   */
+  windowBackground?: string
+  trafficLightX?: number
+  trafficLightY?: number
 }
 
 export interface WindowSize {
