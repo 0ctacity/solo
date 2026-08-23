@@ -16,11 +16,29 @@
  * Run with:  cd examples && bun run chat
  */
 
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import path from 'node:path'
 import React, { useMemo, useState } from 'react'
 import { render, type StyleDesc } from '@gpuix/react'
-import { fileURLToPath } from 'node:url'
 import { SafeMdxRenderer } from 'safe-mdx'
 import { mdxParse } from 'safe-mdx/parse'
+import iconApp from './assets/icons/openai-mark.svg' with { type: 'file' }
+import iconNewChat from './assets/icons/square-pen.svg' with { type: 'file' }
+import iconSearch from './assets/icons/search.svg' with { type: 'file' }
+import iconLibrary from './assets/icons/library.svg' with { type: 'file' }
+import iconSidebar from './assets/icons/panel-left.svg' with { type: 'file' }
+import iconCopy from './assets/icons/copy.svg' with { type: 'file' }
+import iconCheck from './assets/icons/check.svg' with { type: 'file' }
+import iconRetry from './assets/icons/rotate-ccw.svg' with { type: 'file' }
+import iconThumbsUp from './assets/icons/thumbs-up.svg' with { type: 'file' }
+import iconThumbsDown from './assets/icons/thumbs-down.svg' with { type: 'file' }
+import iconShare from './assets/icons/share.svg' with { type: 'file' }
+import iconMore from './assets/icons/ellipsis.svg' with { type: 'file' }
+import iconChevronDown from './assets/icons/chevron-down.svg' with { type: 'file' }
+import iconAdd from './assets/icons/plus.svg' with { type: 'file' }
+import iconTools from './assets/icons/sliders-horizontal.svg' with { type: 'file' }
+import iconSend from './assets/icons/arrow-up.svg' with { type: 'file' }
 
 // ── Palette (ChatGPT dark) ───────────────────────────────────────────
 
@@ -38,23 +56,34 @@ const C = {
   accent: '#ffffff',
 }
 
+// GPUI reads icon paths with native fs. Bun compile stores them under
+// `/$bunfs/`, so copy those out to a real temp file first.
+function realAssetPath(virtualPath: string): string {
+  if (!virtualPath.includes('/$bunfs/')) return virtualPath
+  const destDir = path.join(tmpdir(), 'gpuix-chat-assets')
+  mkdirSync(destDir, { recursive: true })
+  const dest = path.join(destDir, path.basename(virtualPath))
+  writeFileSync(dest, readFileSync(virtualPath))
+  return dest
+}
+
 const ICONS = {
-  app: fileURLToPath(new URL('./assets/icons/openai-mark.svg', import.meta.url)),
-  newChat: fileURLToPath(new URL('./assets/icons/square-pen.svg', import.meta.url)),
-  search: fileURLToPath(new URL('./assets/icons/search.svg', import.meta.url)),
-  library: fileURLToPath(new URL('./assets/icons/library.svg', import.meta.url)),
-  sidebar: fileURLToPath(new URL('./assets/icons/panel-left.svg', import.meta.url)),
-  copy: fileURLToPath(new URL('./assets/icons/copy.svg', import.meta.url)),
-  check: fileURLToPath(new URL('./assets/icons/check.svg', import.meta.url)),
-  retry: fileURLToPath(new URL('./assets/icons/rotate-ccw.svg', import.meta.url)),
-  thumbsUp: fileURLToPath(new URL('./assets/icons/thumbs-up.svg', import.meta.url)),
-  thumbsDown: fileURLToPath(new URL('./assets/icons/thumbs-down.svg', import.meta.url)),
-  share: fileURLToPath(new URL('./assets/icons/share.svg', import.meta.url)),
-  more: fileURLToPath(new URL('./assets/icons/ellipsis.svg', import.meta.url)),
-  chevronDown: fileURLToPath(new URL('./assets/icons/chevron-down.svg', import.meta.url)),
-  add: fileURLToPath(new URL('./assets/icons/plus.svg', import.meta.url)),
-  tools: fileURLToPath(new URL('./assets/icons/sliders-horizontal.svg', import.meta.url)),
-  send: fileURLToPath(new URL('./assets/icons/arrow-up.svg', import.meta.url)),
+  app: realAssetPath(iconApp),
+  newChat: realAssetPath(iconNewChat),
+  search: realAssetPath(iconSearch),
+  library: realAssetPath(iconLibrary),
+  sidebar: realAssetPath(iconSidebar),
+  copy: realAssetPath(iconCopy),
+  check: realAssetPath(iconCheck),
+  retry: realAssetPath(iconRetry),
+  thumbsUp: realAssetPath(iconThumbsUp),
+  thumbsDown: realAssetPath(iconThumbsDown),
+  share: realAssetPath(iconShare),
+  more: realAssetPath(iconMore),
+  chevronDown: realAssetPath(iconChevronDown),
+  add: realAssetPath(iconAdd),
+  tools: realAssetPath(iconTools),
+  send: realAssetPath(iconSend),
 } as const
 
 type IconName = keyof typeof ICONS

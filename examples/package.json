@@ -7,7 +7,8 @@
     "diff": "bun --hot diff.tsx",
     "test": "vitest run",
     "native-text": "bun --hot native-text.tsx",
-    "chat": "bun --hot chat.tsx"
+    "chat": "bun --hot chat.tsx",
+    "compile": "bun compile-chat.ts"
   },
   "dependencies": {
     "@gpuix/react": "workspace:*",
