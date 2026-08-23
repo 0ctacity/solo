@@ -17,6 +17,7 @@ import {
   resetRender,
   TestRenderer,
 } from '@gpuix/react'
+import { connectTest } from '@gpuix/react/automation'
 import { ChatApp, SafeMdxTranscript } from './chat'
 
 const describeNative = hasNativeTestRenderer ? describe : describe.skip
@@ -223,19 +224,25 @@ describeNative('chat example', () => {
     expect(fs.statSync(after).size).toBeGreaterThan(0)
   }, 20_000)
 
-  it('captures reference screenshots', () => {
+  it('captures deterministic sidebar motion frames', async () => {
     const top = path.join(SHOTS, 'chat-top.png')
+    const transitioning = path.join(SHOTS, 'chat-sidebar-transition.png')
     const collapsed = path.join(SHOTS, 'chat-sidebar-collapsed.png')
 
     const { render, renderer } = createTestRoot()
     render(<ChatApp />)
     renderer.captureScreenshot(top)
 
-    renderer.nativeSimulateClick(99, 24)
-    renderer.flush()
-    renderer.captureScreenshot(collapsed)
+    const app = await connectTest(renderer)
+    const startedAt = await app.clock.pause()
+    await app.getByTestId('sidebar-collapse').click()
+    await app.clock.set(startedAt + 100)
+    await app.screenshot({ path: transitioning })
+    await app.clock.set(startedAt + 200)
+    await app.screenshot({ path: collapsed })
+    await app.clock.resume()
 
-    for (const shot of [top, collapsed]) {
+    for (const shot of [top, transitioning, collapsed]) {
       expect(fs.existsSync(shot)).toBe(true)
       expect(fs.statSync(shot).size).toBeGreaterThan(0)
     }

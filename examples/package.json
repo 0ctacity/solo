@@ -19,6 +19,7 @@
     "shiki": "^3.0.0"
   },
   "devDependencies": {
+    "@types/mdast": "^4.0.4",
     "@types/react": "^19.2.0",
     "tsx": "^4.19.0",
     "vitest": "^4.0.18"

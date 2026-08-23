@@ -18,7 +18,7 @@ cd examples && bun --hot chat.tsx
 
 | Example | Run | What it shows |
 |---|---|---|
-| **chat** | `bun --hot chat.tsx` | A Waku-style app: transparent titlebar, sidebar, message list, composer, `<markdown>` |
+| **chat** | `bun --hot chat.tsx` | A Waku-style app: transparent titlebar, animated sidebar, message list, composer, `<markdown>` |
 | **native-text** | `bun --hot native-text.tsx` | The three native text components with a tab switcher |
 | **counter** | `bun --hot counter.tsx` | The smallest possible app: state, events, hover |
 | **diff** | `bun --hot diff.tsx` | A diff viewer composed from `<div>` and `<text>` in JS, for comparison |
@@ -384,25 +384,33 @@ function SidebarFrame({
   collapsed: boolean
   children: ReactNode
 }) {
-  const sidebarWidth = 260
+  const sidebarWidth = 252
+  const dividerWidth = 1
 
   return (
     <motion.div
       initial={false}
-      animate={{ width: collapsed ? 0 : sidebarWidth }}
+      animate={{ width: collapsed ? 0 : sidebarWidth + dividerWidth }}
       transition={{ duration: 0.2, ease: 'easeOut' }}
-      style={{ height: '100%', flexShrink: 0, overflow: 'hidden' }}
+      style={{
+        display: 'flex',
+        flexDirection: 'row',
+        height: '100%',
+        flexShrink: 0,
+        overflow: 'hidden',
+      }}
     >
       <div style={{ width: sidebarWidth, height: '100%', flexShrink: 0 }}>
         {children}
       </div>
+      <div style={{ width: dividerWidth, height: '100%', flexShrink: 0 }} />
     </motion.div>
   )
 }
 ```
 
 The **chat example** uses this pattern. The sidebar remains mounted while its
-outer width moves between `260` and `0` pixels.
+outer width moves between `253` and `0` pixels.
 
 ### Capture exact frames
 

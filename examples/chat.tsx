@@ -13,6 +13,7 @@ import { tmpdir } from 'node:os'
 import path from 'node:path'
 import React, { useEffect, useMemo, useRef, useState } from 'react'
 import {
+  motion,
   render,
   Select,
   SelectContent,
@@ -24,6 +25,7 @@ import {
 } from '@gpuix/react'
 import { SafeMdxRenderer } from 'safe-mdx'
 import { mdxParse } from 'safe-mdx/parse'
+import type { Root } from 'mdast'
 import iconCompose from './assets/icons/compose.svg' with { type: 'file' }
 import iconSearch from './assets/icons/search.svg' with { type: 'file' }
 import iconSidebar from './assets/icons/panel-left.svg' with { type: 'file' }
@@ -356,14 +358,17 @@ function IconButton({
   onClick,
   dimmed,
   size = 14,
+  testId,
 }: {
   icon: IconName
   onClick?: () => void
   dimmed?: boolean
   size?: number
+  testId?: string
 }) {
   return (
     <div
+      testId={testId}
       style={{
         width: 26,
         height: 26,
@@ -517,7 +522,12 @@ function Sidebar({
         }}
       >
         <div style={{ width: TRAFFIC_LIGHT_CLEARANCE, height: '100%', flexShrink: 0 }} />
-        <IconButton icon="sidebar" size={16} onClick={onCollapse} />
+        <IconButton
+          icon="sidebar"
+          size={16}
+          testId="sidebar-collapse"
+          onClick={onCollapse}
+        />
         <div
           style={{
             display: 'flex',
@@ -777,7 +787,7 @@ function Header({
         <>
           <div style={{ width: TRAFFIC_LIGHT_CLEARANCE - 8, height: '100%', flexShrink: 0 }} />
           <div style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-            <IconButton icon="sidebar" onClick={onExpand} />
+            <IconButton icon="sidebar" testId="sidebar-expand" onClick={onExpand} />
             <div style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', gap: 2 }}>
               <IconButton icon="arrowLeft" dimmed />
               <IconButton icon="arrowRight" dimmed />
@@ -1223,6 +1233,7 @@ function Composer({
         }}
       >
         <textarea
+          testId="composer"
           value={value}
           placeholder="Do anything..."
           minRows={1}
@@ -1260,6 +1271,7 @@ function Composer({
           <ModeToggle value={mode} onChange={onModeChange} />
           <div style={{ flexGrow: 1 }} />
           <div
+            testId="send"
             style={{
               width: 26,
               height: 26,
@@ -1601,7 +1613,7 @@ const SAFE_MDX_COMPONENTS = {
   ),
 }
 
-const mdxCache = new Map<string, ReturnType<typeof mdxParse>>()
+const mdxCache = new Map<string, Root>()
 
 function parseMdx(source: string) {
   const cached = mdxCache.get(source)
@@ -1693,16 +1705,25 @@ export function ChatApp({
         color: C.text,
       }}
     >
-      {!collapsed && (
+      <motion.div
+        initial={false}
+        animate={{ width: collapsed ? 0 : SIDEBAR_WIDTH + 1 }}
+        transition={{ duration: 0.2, ease: 'easeOut' }}
+        style={{
+          display: 'flex',
+          flexDirection: 'row',
+          height: '100%',
+          flexShrink: 0,
+          overflow: 'hidden',
+        }}
+      >
         <Sidebar
           activeId={activeId}
           onSelect={setActiveId}
           onCollapse={() => setCollapsed(true)}
         />
-      )}
-      {!collapsed && (
         <div style={{ width: 1, height: '100%', flexShrink: 0, backgroundColor: C.sidebarBorder }} />
-      )}
+      </motion.div>
       <div
         style={{
           display: 'flex',
