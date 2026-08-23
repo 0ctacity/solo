@@ -3,10 +3,11 @@ import type { ReactNode } from "react"
 import type { OpaqueRoot } from "react-reconciler"
 import { ConcurrentRoot } from "react-reconciler/constants.js"
 import { GpuixRenderer } from "@gpuix/native"
+import type { EventPayload, WindowOptions } from "@gpuix/native"
 import { reconciler } from "./reconciler.js"
 import type { Container, NativeRenderer } from "../types/host.js"
 import { clearEventHandlers, handleGpuixEvent } from "./event-registry.js"
-import { setNativeRenderer } from "./host-config.js"
+import { resetIdCounter, setNativeRenderer } from "./host-config.js"
 import { wrapWithBatching } from "./batch-renderer.js"
 import { GpuixContext } from "../hooks/use-gpuix.js"
 
@@ -134,6 +135,7 @@ export function createRoot(renderer: NativeRenderer): Root {
 
   return {
     render: (node): void => {
+      setNativeRenderer(batchedRenderer)
       clearEventHandlers()
 
       reconciler.updateContainer(
@@ -158,3 +160,60 @@ const _r = reconciler as typeof reconciler & {
   flushSyncFromReconciler?: typeof reconciler.flushSync
 }
 export const flushSync = _r.flushSyncFromReconciler ?? _r.flushSync
+
+const RENDER_HOST_KEY = "__gpuixRenderHost"
+
+type RenderSlot = {
+  renderer?: NativeRenderer
+  root?: Root
+  loop?: FrameLoop
+}
+
+function renderSlot(): RenderSlot {
+  const existing = Reflect.get(globalThis, RENDER_HOST_KEY)
+  if (existing) {
+    return existing
+  }
+  const created: RenderSlot = {}
+  Reflect.set(globalThis, RENDER_HOST_KEY, created)
+  return created
+}
+
+export interface RenderOptions extends WindowOptions {
+  onEvent?: (event: EventPayload) => void
+  renderer?: NativeRenderer
+}
+
+export function resetRender(): void {
+  Reflect.deleteProperty(globalThis, RENDER_HOST_KEY)
+}
+
+/** Mount the app. Under `bun --hot`, later calls remount on the same native window. */
+export function render(node: ReactNode, options: RenderOptions = {}): Root {
+  const { onEvent, renderer: injected, ...windowOptions } = options
+  const slot = renderSlot()
+  if (!slot.renderer) {
+    if (injected) {
+      slot.renderer = injected
+    } else {
+      const renderer = createRenderer(onEvent)
+      renderer.init(windowOptions)
+      slot.renderer = renderer
+    }
+  }
+  if (slot.root) {
+    slot.root.unmount()
+    resetIdCounter()
+  }
+  const root = createRoot(slot.renderer)
+  slot.root = root
+  flushSync(() => {
+    root.render(node)
+  })
+  if (!injected && slot.renderer instanceof GpuixRenderer) {
+    const native = slot.renderer
+    slot.loop?.stop()
+    slot.loop = startFrameLoop(native)
+  }
+  return root
+}
