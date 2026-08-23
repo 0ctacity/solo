@@ -723,11 +723,11 @@ impl GpuixRenderer {
     ///   ["appendChild",      parentId, childId]
     ///   ["removeChild",      parentId, childId]
     ///   ["insertBefore",     parentId, childId, beforeId]
-    ///   ["setStyle",         id, "{styleJson}"]
+    ///   ["setStyle",         id, { ...style } | "{styleJson}"]
     ///   ["setText",          id, "content"]
     ///   ["setEventListener", id, "eventType", true|false]
     ///   ["setRoot",          id]
-    ///   ["setCustomProp",    id, "key", "{valueJson}"]
+    ///   ["setCustomProp",    id, "key", value | "{valueJson}"]
     ///
     /// Returns accumulated destroyed IDs from all destroyElement ops.
     /// Acquires the tree mutex ONCE for the entire batch.
@@ -2644,8 +2644,7 @@ fn parse_batch_ops(ops: &[serde_json::Value]) -> Result<Vec<BatchOp>> {
                 before_id: batch_id(arr, 3, i)?,
             },
             "setStyle" => {
-                let style_json = batch_str(arr, 2, i)?;
-                let style: StyleDesc = serde_json::from_str(&style_json).map_err(|e| {
+                let style: StyleDesc = batch_decode(arr, 2, i).map_err(|e| {
                     Error::from_reason(format!("Batch op {} setStyle parse error: {}", i, e))
                 })?;
                 BatchOp::SetStyle {
@@ -2676,17 +2675,11 @@ fn parse_batch_ops(ops: &[serde_json::Value]) -> Result<Vec<BatchOp>> {
             "setRoot" => BatchOp::SetRoot {
                 id: batch_id(arr, 1, i)?,
             },
-            "setCustomProp" => {
-                let value_json = batch_str(arr, 3, i)?;
-                let value: serde_json::Value = serde_json::from_str(&value_json).map_err(|e| {
-                    Error::from_reason(format!("Batch op {} setCustomProp parse error: {}", i, e))
-                })?;
-                BatchOp::SetCustomProp {
-                    id: batch_id(arr, 1, i)?,
-                    key: batch_str(arr, 2, i)?,
-                    value,
-                }
-            }
+            "setCustomProp" => BatchOp::SetCustomProp {
+                id: batch_id(arr, 1, i)?,
+                key: batch_str(arr, 2, i)?,
+                value: batch_payload(arr, 3, i)?,
+            },
             _ => {
                 return Err(Error::from_reason(format!(
                     "Batch op {} unknown operation: {:?}",
@@ -2778,6 +2771,34 @@ fn batch_id(arr: &[serde_json::Value], idx: usize, op_idx: usize) -> Result<u64>
         Error::from_reason(format!("Batch op {} missing id at index {}", op_idx, idx))
     })?;
     to_element_id(v)
+}
+
+/// A style or custom-prop payload. Objects land as JSON. Legacy batches
+/// still send a JSON string and get decoded here.
+fn batch_payload(arr: &[serde_json::Value], idx: usize, op_idx: usize) -> Result<serde_json::Value> {
+    let value = arr.get(idx).ok_or_else(|| {
+        Error::from_reason(format!(
+            "Batch op {} missing value at index {}",
+            op_idx, idx
+        ))
+    })?;
+    if let Some(encoded) = value.as_str() {
+        match serde_json::from_str(encoded) {
+            Ok(parsed) => Ok(parsed),
+            Err(_) => Ok(serde_json::Value::String(encoded.to_string())),
+        }
+    } else {
+        Ok(value.clone())
+    }
+}
+
+fn batch_decode<T: serde::de::DeserializeOwned>(
+    arr: &[serde_json::Value],
+    idx: usize,
+    op_idx: usize,
+) -> Result<T> {
+    let value = batch_payload(arr, idx, op_idx)?;
+    serde_json::from_value(value).map_err(|e| Error::from_reason(e.to_string()))
 }
 
 /// Extract a String from a batch tuple at the given index.

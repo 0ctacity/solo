@@ -363,12 +363,12 @@ export interface NativeRenderer {
   appendChild(parentId: number, childId: number): void
   removeChild(parentId: number, childId: number): void
   insertBefore(parentId: number, childId: number, beforeId: number): void
-  setStyle(id: number, styleJson: string): void
+  setStyle(id: number, styleJson: string | object): void
   setText(id: number, content: string): void
   setEventListener(id: number, eventType: string, hasHandler: boolean): void
   setRoot(id: number): void
   commitMutations(): void
-  setCustomProp(id: number, key: string, valueJson: string): void
+  setCustomProp(id: number, key: string, valueJson: string | object | number | boolean | null): void
   /** Apply a batch of mutations in a single FFI call. Returns destroyed IDs. */
   applyBatch?(json: string): Array<number>
 

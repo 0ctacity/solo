@@ -6,17 +6,22 @@ Build native GPU-accelerated desktop apps with React and TypeScript. Your compon
 
 ![A Waku-style app built with GPUIX](docs/images/chat-app.png)
 
-Everything above is GPUIX: the sidebar, the scrolling transcript, the composer,
-and native `<markdown>`. Run it with `cd examples && bun run chat`.
+Everything above is GPUIX: the sidebar, the scrolling list, the composer,
+and native `<markdown>`. Start it with **`bun --hot`** so a save remounts React
+on the same window:
+
+```bash
+cd examples && bun --hot chat.tsx
+```
 
 ## Examples
 
 | Example | Run | What it shows |
 |---|---|---|
-| **chat** | `bun run chat` | A Waku-style app: transparent titlebar, sidebar, transcript, composer, `<markdown>` |
-| **native-text** | `bun run native-text` | The three native text components with a tab switcher |
-| **counter** | `bun run counter` | The smallest possible app: state, events, hover |
-| **diff** | `bun run diff` | A diff viewer composed from `<div>` and `<text>` in JS, for comparison |
+| **chat** | `bun --hot chat.tsx` | A Waku-style app: transparent titlebar, sidebar, message list, composer, `<markdown>` |
+| **native-text** | `bun --hot native-text.tsx` | The three native text components with a tab switcher |
+| **counter** | `bun --hot counter.tsx` | The smallest possible app: state, events, hover |
+| **diff** | `bun --hot diff.tsx` | A diff viewer composed from `<div>` and `<text>` in JS, for comparison |
 
 All of them live in [`examples/`](./examples) and use hardcoded data.
 
@@ -261,11 +266,13 @@ the whole entry on save. A second `init()` would open a second window.
 
 ### 2. Start the app with `bun --hot`
 
+Prefer **`bun --hot`** over a plain `bun` or `tsx` run. Without `--hot`, a
+save starts a second process. With it, `render()` remounts React on the same
+window.
+
 ```bash
 bun --hot app.tsx
-bun --hot examples/chat.tsx
-# examples/package.json scripts already pass --hot
-bun run chat
+cd examples && bun --hot chat.tsx
 ```
 
 ### 3. Save the file
@@ -516,6 +523,28 @@ function Results({ rows }: { rows: Result[] }) {
 | Height metadata | None | One lightweight entry per row |
 
 Virtualization removes the **per-render GPUI cost**, not the memory used by React and the retained tree. For normal chat histories this is the useful tradeoff. Collections with millions of rows still need application-level paging or a data-owning native element.
+
+### Keep scroll fast
+
+A wheel event notifies the window view. GPUI then rebuilds the **visible**
+rows and Taffy lays them out again. Draw time is the cost of those rows, not
+the length of the list.
+
+Put a long list on `<virtual-list>`. Keep `overdraw` near one extra
+viewport. Put fat content in one native node (`<markdown>`, `<code>`, `<diff>`),
+not a tree of React spans.
+
+The **first mount** still creates every React child and every retained node.
+A 10,000-row list hitches once while those nodes cross FFI. After that
+a wheel only rebuilds the visible rows. Collections that large need
+application-level paging if the first paint must stay instant.
+
+`overflowX: "scroll"` on a wide child must not steal the vertical wheel.
+GPUIX sets `restrict_scroll_to_axis` on that path. Native
+`overflow_x_scroll()` must call the same method.
+
+Turn on `debugFrameOverlay: 'full'` while you scroll. The overlay is **draw
+time**. `8.3 MS` is about 120 Hz.
 
 ## Text input
 

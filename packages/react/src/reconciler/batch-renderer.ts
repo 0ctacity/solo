@@ -1,6 +1,10 @@
 /// BatchingRenderer — buffers individual napi mutation calls into a single
 /// applyBatch() FFI call, reducing N FFI boundary crossings to 1 per commit.
 ///
+/// Queue raw objects for setStyle / setCustomProp. Do not JSON.stringify them
+/// first. The outer applyBatch stringify would escape that string again, and
+/// Rust would parse twice. A 10k-row mount spent 626ms in applyBatch that way.
+///
 /// Implemented as a JS Proxy: mutation method calls on the NativeRenderer are
 /// captured as ["methodName", ...args] in a queue. On commitMutations(), the
 /// entire queue is flushed via applyBatch(json).
@@ -35,7 +39,7 @@
 import type { NativeRenderer } from "../types/host.js"
 import { unregisterEventHandlers } from "./event-registry.js"
 
-export type MutationTuple = (number | string | boolean)[]
+export type MutationTuple = (number | string | boolean | object | null)[]
 
 /// Methods that should be batched (queued instead of called immediately).
 /// Any method NOT in this set is passed through to the inner renderer directly.

@@ -112,9 +112,9 @@ function diffEventListeners(id: number, oldProps: Props, newProps: Props): void 
 // ── Style helper ─────────────────────────────────────────────────────
 
 function sendStyle(id: number, props: Props): void {
-  // Always send — handles style removal (undefined → {}) and avoids
-  // missed updates from same-reference style objects.
-  getRenderer().setStyle(id, JSON.stringify(props.style ?? {}))
+  const style = props.style
+  if (style == null || Object.keys(style).length === 0) return
+  getRenderer().setStyle(id, style)
 }
 
 // ── Custom prop forwarding ───────────────────────────────────────────
@@ -136,20 +136,19 @@ function isReservedProp(name: string): boolean {
 function serializeCustomProp(
   type: string,
   key: string,
-  value: unknown
-): string {
-  if (value === undefined) return "null"
-
+  value: object | string | number | boolean | null | undefined
+): string | object | number | boolean | null {
+  if (value === undefined) return null
+  if (typeof value === "function") return null
   try {
-    const json = JSON.stringify(value)
-    if (json === undefined) return "null"
-    return json
+    JSON.stringify(value)
+    return value
   } catch (error) {
     console.warn(
       `[gpuix] Failed to serialize custom prop ${type}.${key}; sending null`,
       error
     )
-    return "null"
+    return null
   }
 }
 
@@ -326,7 +325,7 @@ export const hostConfig = {
   ): void {
     // Always resend style — per-element JSON is small, and this avoids
     // bugs from same-reference mutations or style removal.
-    sendStyle(instance.id, newProps)
+    getRenderer().setStyle(instance.id, newProps.style ?? {})
     // Event diff
     diffEventListeners(instance.id, oldProps, newProps)
     // Custom prop diff (for non-div/text elements)
@@ -352,11 +351,11 @@ export const hostConfig = {
   },
 
   hideInstance(instance: Instance): void {
-    getRenderer().setStyle(instance.id, JSON.stringify({ visibility: "hidden" }))
+    getRenderer().setStyle(instance.id, { visibility: "hidden" })
   },
 
   unhideInstance(instance: Instance, _props: Props): void {
-    sendStyle(instance.id, instance.props)
+    getRenderer().setStyle(instance.id, instance.props.style ?? {})
   },
 
   hideTextInstance(_textInstance: TextInstance): void {},
