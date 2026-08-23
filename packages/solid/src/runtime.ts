@@ -59,21 +59,22 @@ let flushNow: (() => void) | null = null
 export function setGpuixRenderer(renderer: NativeRenderer): void {
   const batched = wrapWithBatching(renderer)
   let scheduled = false
+  let commitStep: (() => void) | null = null
   const armCommit = (): void => {
     if (scheduled) return
     scheduled = true
     queueMicrotask(() => {
       scheduled = false
-      // Solid 2 may defer reaction re-runs to a microtask; drain them first
-      // so the batch contains every op from this transaction.
-      flush()
-      batched.commitMutations()
+      commitStep?.()
     })
   }
 
   activeRenderer = new Proxy(batched, {
     get(target, prop) {
-      if (prop === "commitMutations") return () => armCommit()
+      if (prop === "commitMutations")
+        return () => {
+          armCommit()
+        }
       if (
         prop === "createElement" ||
         prop === "destroyElement" ||
@@ -96,11 +97,21 @@ export function setGpuixRenderer(renderer: NativeRenderer): void {
     },
   })
 
+  // Both commit paths drain reactions, tear down still-detached subtrees,
+  // then flush the queue in a single applyBatch.
+  const runCommit = (): void => {
+    // Solid 2 may defer reaction re-runs to a microtask; drain them first
+    // so the batch contains every op from this transaction.
+    flush()
+    destroyStillDetached()
+    batched.commitMutations()
+  }
+  commitStep = runCommit
+
   // Immediate flush bypasses (and cancels) the microtask schedule.
   flushNow = () => {
     scheduled = false
-    flush()
-    batched.commitMutations()
+    runCommit()
   }
 }
 
@@ -178,6 +189,7 @@ function replaceText(node: GpuixSolidNode, value: string | number): void {
  */
 export function insertNode(parent: GpuixSolidNode, node: GpuixSolidNode, anchor?: GpuixSolidNode): void {
   const r = getGpuixRenderer()
+  detached.delete(node)
   // Detach from any previous parent first (the retained tree requires it).
   if (node.parent) {
     const oldChildren = node.parent.children
@@ -199,15 +211,36 @@ export function insertNode(parent: GpuixSolidNode, node: GpuixSolidNode, anchor?
   node.parent = parent
 }
 
+/**
+ * Nodes detached but not yet destroyed. The universal reconciler treats
+ * removed nodes as reusable — it may re-insert the same node later within
+ * the same update (e.g. keyed-list moves). Destroying eagerly would lose
+ * such subtrees, so removal only detaches; nodes still detached when a
+ * batch commits are destroyed just before applyBatch.
+ */
+const detached = new Set<GpuixSolidNode>()
+
 function removeNode(parent: GpuixSolidNode, node: GpuixSolidNode): void {
   const r = getGpuixRenderer()
   const index = parent.children.indexOf(node)
   if (index !== -1) parent.children.splice(index, 1)
   node.parent = null
-  // destroyElement also destroys descendants; the batching layer unregisters
-  // their event handlers from the returned destroyed-ID list after flush.
   r.removeChild(parent.id, node.id)
-  r.destroyElement(node.id)
+  detached.add(node)
+}
+
+/** Destroy every node still detached at commit time. */
+function destroyStillDetached(): void {
+  if (detached.size === 0) return
+  const r = getGpuixRenderer()
+  for (const node of detached) {
+    if (node.parent == null) {
+      // destroyElement recurses over descendants; descendants that were
+      // themselves detached are covered by their own entry or by this walk.
+      r.destroyElement(node.id)
+    }
+  }
+  detached.clear()
 }
 
 function setProperty(
