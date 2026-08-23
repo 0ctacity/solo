@@ -134,22 +134,12 @@ function isReservedProp(name: string): boolean {
 }
 
 function serializeCustomProp(
-  type: string,
-  key: string,
+  _type: string,
+  _key: string,
   value: object | string | number | boolean | null | undefined
 ): string | object | number | boolean | null {
-  if (value === undefined) return null
-  if (typeof value === "function") return null
-  try {
-    JSON.stringify(value)
-    return value
-  } catch (error) {
-    console.warn(
-      `[gpuix] Failed to serialize custom prop ${type}.${key}; sending null`,
-      error
-    )
-    return null
-  }
+  if (value === undefined || typeof value === "function") return null
+  return value
 }
 
 /** Send all custom props to Rust for non-built-in element types. */

@@ -40,11 +40,12 @@ export declare class GpuixRenderer {
    *   ["appendChild",      parentId, childId]
    *   ["removeChild",      parentId, childId]
    *   ["insertBefore",     parentId, childId, beforeId]
-   *   ["setStyle",         id, "{styleJson}"]
+   *   ["setStyle",         id, { ...style } | "{styleJson}"]
    *   ["setText",          id, "content"]
    *   ["setEventListener", id, "eventType", true|false]
    *   ["setRoot",          id]
-   *   ["setCustomProp",    id, "key", "{valueJson}"]
+   *   ["setCustomProp",      id, "key", value | "{valueJson}"]
+   *   ["setCustomPropValue", id, "key", value]
    *
    * Returns accumulated destroyed IDs from all destroyElement ops.
    * Acquires the tree mutex ONCE for the entire batch.

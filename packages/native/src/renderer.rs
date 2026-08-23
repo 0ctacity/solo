@@ -727,7 +727,8 @@ impl GpuixRenderer {
     ///   ["setText",          id, "content"]
     ///   ["setEventListener", id, "eventType", true|false]
     ///   ["setRoot",          id]
-    ///   ["setCustomProp",    id, "key", value | "{valueJson}"]
+    ///   ["setCustomProp",      id, "key", value | "{valueJson}"]
+    ///   ["setCustomPropValue", id, "key", value]
     ///
     /// Returns accumulated destroyed IDs from all destroyElement ops.
     /// Acquires the tree mutex ONCE for the entire batch.
@@ -2723,6 +2724,13 @@ fn parse_batch_ops(ops: &[serde_json::Value]) -> Result<Vec<BatchOp>> {
                 id: batch_id(arr, 1, i)?,
                 key: batch_str(arr, 2, i)?,
                 value: batch_payload(arr, 3, i)?,
+            },
+            "setCustomPropValue" => BatchOp::SetCustomProp {
+                id: batch_id(arr, 1, i)?,
+                key: batch_str(arr, 2, i)?,
+                value: arr.get(3).cloned().ok_or_else(|| {
+                    Error::from_reason(format!("Batch op {} missing custom prop value", i))
+                })?,
             },
             _ => {
                 return Err(Error::from_reason(format!(

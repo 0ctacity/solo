@@ -62,10 +62,36 @@ const BATCHED_METHODS = new Set([
  *
  * If the inner renderer has applyBatch(), returns a Proxy that buffers
  * all mutation calls and flushes them in one applyBatch() per React commit.
- * Otherwise returns the inner renderer unchanged.
+ * setCustomProp is queued as setCustomPropValue so raw strings stay strings.
+ * Without applyBatch, style and custom-prop objects are stringified for the
+ * string-only napi methods.
  */
 export function wrapWithBatching(inner: NativeRenderer): NativeRenderer {
-  if (typeof inner.applyBatch !== "function") return inner
+  if (typeof inner.applyBatch !== "function") {
+    return new Proxy(inner, {
+      get(target, prop: string) {
+        if (prop === "setStyle") {
+          return (id: number, style: string | object) => {
+            target.setStyle(id, typeof style === "string" ? style : JSON.stringify(style))
+          }
+        }
+        if (prop === "setCustomProp") {
+          return (
+            id: number,
+            key: string,
+            value: string | object | number | boolean | null,
+          ) => {
+            target.setCustomProp(id, key, JSON.stringify(value ?? null))
+          }
+        }
+        const method = (target as NativeRenderer & Record<string, unknown>)[prop]
+        if (typeof method === "function") {
+          return method.bind(target)
+        }
+        return method
+      },
+    })
+  }
 
   const batchable = inner as NativeRenderer & { applyBatch(json: string): number[] }
   let queue: MutationTuple[] = []
@@ -105,9 +131,15 @@ export function wrapWithBatching(inner: NativeRenderer): NativeRenderer {
         }
       }
 
+      if (prop === "setCustomProp") {
+        return (...args: MutationTuple) => {
+          queue.push(["setCustomPropValue", ...args])
+        }
+      }
+
       // Batched mutation methods: queue as [methodName, ...args].
       if (BATCHED_METHODS.has(prop)) {
-        return (...args: any[]) => {
+        return (...args: MutationTuple) => {
           queue.push([prop, ...args])
         }
       }
