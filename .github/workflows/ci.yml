@@ -161,7 +161,6 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 24
-          registry-url: https://registry.npmjs.org/
 
       - name: Setup bun
         uses: oven-sh/setup-bun@v2
@@ -198,7 +197,7 @@ jobs:
           else
             echo "Publishing @gpuix/native@${CURRENT_VERSION}"
             cd packages/native
-            npx -y sigillo run --command 'NODE_AUTH_TOKEN=$NPM_TOKEN npm publish --access public --provenance'
+            bunx sigillo run --command 'printf "//registry.npmjs.org/:_authToken=%s\n" "$NPM_TOKEN" > /tmp/gpuix-npmrc && NPM_CONFIG_USERCONFIG=/tmp/gpuix-npmrc npm publish --access public --provenance'
           fi
 
       - name: Build @gpuix/react
@@ -224,5 +223,5 @@ jobs:
               pkg.dependencies['@gpuix/native'] = '^' + native
               fs.writeFileSync('package.json', JSON.stringify(pkg, null, 2) + '\n')
             "
-            npx -y sigillo run --command 'NODE_AUTH_TOKEN=$NPM_TOKEN npm publish --access public --provenance'
+            bunx sigillo run --command 'printf "//registry.npmjs.org/:_authToken=%s\n" "$NPM_TOKEN" > /tmp/gpuix-npmrc && NPM_CONFIG_USERCONFIG=/tmp/gpuix-npmrc npm publish --access public --provenance'
           fi
