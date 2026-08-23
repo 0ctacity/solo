@@ -33,6 +33,15 @@ export class MockNativeRenderer implements NativeRenderer {
     return found
   }
 
+  /**
+   * Mutation ops tolerate unknown ids exactly like Rust's RetainedTree,
+   * which uses `if let Some(...)` everywhere — Solid's bookkeeping may emit
+   * redundant ops for elements an earlier op in the same batch destroyed.
+   */
+  private elOrUndefined(id: number): MockElement | undefined {
+    return this.elements.get(id)
+  }
+
   createElement(id: number, elementType: string): void {
     this.record("createElement", id, elementType)
     this.elements.set(id, {
@@ -50,12 +59,13 @@ export class MockNativeRenderer implements NativeRenderer {
   destroyElement(id: number): Array<number> {
     const destroyed: number[] = []
     const walk = (current: number): void => {
-      const element = this.el(current)
+      const element = this.elOrUndefined(current)
+      if (!element) return
       for (const child of [...element.children]) walk(child)
       this.elements.delete(current)
       if (element.parentId != null) {
-        const parent = this.el(element.parentId)
-        parent.children = parent.children.filter((c) => c !== current)
+        const parent = this.elOrUndefined(element.parentId)
+        if (parent) parent.children = parent.children.filter((c) => c !== current)
       }
       element.parentId = null
       destroyed.push(current)
@@ -67,11 +77,12 @@ export class MockNativeRenderer implements NativeRenderer {
 
   appendChild(parentId: number, childId: number): void {
     this.record("appendChild", parentId, childId)
-    const parent = this.el(parentId)
-    const child = this.el(childId)
+    const parent = this.elOrUndefined(parentId)
+    const child = this.elOrUndefined(childId)
+    if (!parent || !child) return
     if (child.parentId != null) {
-      const oldParent = this.el(child.parentId)
-      oldParent.children = oldParent.children.filter((c) => c !== childId)
+      const oldParent = this.elOrUndefined(child.parentId)
+      if (oldParent) oldParent.children = oldParent.children.filter((c) => c !== childId)
     }
     child.parentId = parentId
     parent.children.push(childId)
@@ -79,18 +90,21 @@ export class MockNativeRenderer implements NativeRenderer {
 
   removeChild(parentId: number, childId: number): void {
     this.record("removeChild", parentId, childId)
-    const parent = this.el(parentId)
-    parent.children = parent.children.filter((c) => c !== childId)
-    this.el(childId).parentId = null
+    // Lenient like RetainedTree::remove_child — either end may already be gone.
+    const parent = this.elOrUndefined(parentId)
+    if (parent) parent.children = parent.children.filter((c) => c !== childId)
+    const child = this.elOrUndefined(childId)
+    if (child) child.parentId = null
   }
 
   insertBefore(parentId: number, childId: number, beforeId: number): void {
     this.record("insertBefore", parentId, childId, beforeId)
-    const parent = this.el(parentId)
-    const child = this.el(childId)
+    const parent = this.elOrUndefined(parentId)
+    const child = this.elOrUndefined(childId)
+    if (!parent || !child) return
     if (child.parentId != null) {
-      const oldParent = this.el(child.parentId)
-      oldParent.children = oldParent.children.filter((c) => c !== childId)
+      const oldParent = this.elOrUndefined(child.parentId)
+      if (oldParent) oldParent.children = oldParent.children.filter((c) => c !== childId)
     }
     child.parentId = parentId
     const index = parent.children.indexOf(beforeId)
@@ -103,19 +117,22 @@ export class MockNativeRenderer implements NativeRenderer {
 
   setStyle(id: number, styleJson: string | object): void {
     this.record("setStyle", id, styleJson)
-    const element = this.el(id)
+    const element = this.elOrUndefined(id)
+    if (!element) return
     const style = typeof styleJson === "string" ? JSON.parse(styleJson) : styleJson
     Object.assign(element.style, style)
   }
 
   setText(id: number, content: string): void {
     this.record("setText", id, content)
-    this.el(id).text = content
+    const element = this.elOrUndefined(id)
+    if (element) element.text = content
   }
 
   setEventListener(id: number, eventType: string, hasHandler: boolean): void {
     this.record("setEventListener", id, eventType, hasHandler)
-    const element = this.el(id)
+    const element = this.elOrUndefined(id)
+    if (!element) return
     if (hasHandler) {
       element.events.add(eventType)
     } else {
@@ -130,7 +147,8 @@ export class MockNativeRenderer implements NativeRenderer {
 
   setCustomProp(id: number, key: string, valueJson: string | object | number | boolean | null): void {
     this.record("setCustomProp", id, key, valueJson)
-    const element = this.el(id)
+    const element = this.elOrUndefined(id)
+    if (!element) return
     const value =
       typeof valueJson === "string" ? maybeParse(valueJson) : (valueJson ?? null)
     if (value == null) {
