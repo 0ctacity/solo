@@ -53,6 +53,7 @@ function getRenderer(): NativeRenderer {
 const EVENT_PROPS = [
   // Custom element events
   ["onToggleFile", "toggleFile"],
+  ["onShowMore", "showMore"],
   ["onLineClick", "lineClick"],
   ["onLinkClick", "linkClick"],
   ["onChange", "change"],

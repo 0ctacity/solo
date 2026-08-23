@@ -173,9 +173,68 @@ describe("<diff>", () => {
     expect(selected).not.toContain("·")
   })
 
-  it("virtualizes: a 2000-line patch paints far fewer rows", () => {
+  it("caps visible lines and paints Show more", () => {
     const { render, renderer } = createTestRoot()
-    render(<diff patch={longPatch(2000)} style={{ width: "100%", height: "100%" }} />)
+    render(
+      <diff
+        patch={TWO_FILES}
+        maxLines={1}
+        style={{ width: "100%", height: "100%" }}
+      />
+    )
+
+    const painted = renderer.getPaintedText()
+    expect(painted).toContain("# Title")
+    expect(painted).toContain("Show 5 more lines")
+    expect(painted).not.toContain("old line")
+    expect(painted).not.toContain("pub fn hello")
+  })
+
+  it("fires onShowMore with the hidden line count", () => {
+    const onShowMore = vi.fn()
+    const { render, renderer } = createTestRoot()
+    render(
+      <diff
+        patch={TWO_FILES}
+        maxLines={1}
+        onShowMore={onShowMore}
+        style={{ width: "100%", height: "100%" }}
+      />
+    )
+
+    // header 36 + hunk 28 + one line 21 = 85, so Show more starts there.
+    renderer.nativeSimulateClick(200, 96)
+    expect(onShowMore).toHaveBeenCalled()
+    expect(onShowMore.mock.calls[0][0].value).toBe("5")
+  })
+
+  it("lets a parent scroller take the wheel when scroll is off", () => {
+    const { render, renderer } = createTestRoot()
+    render(
+      <div style={{ width: "100%", height: 120, overflowY: "scroll" }}>
+        <diff patch={TWO_FILES} />
+      </div>
+    )
+
+    const container = renderer.findByType("div").find((d) => d.style.overflowY === "scroll")
+    expect(container).toBeDefined()
+    expect(renderer.getScrollOffset(container!.id)).toEqual([0, 0])
+
+    renderer.nativeSimulateScrollWheel(200, 60, 0, -80)
+    const offset = renderer.getScrollOffset(container!.id)
+    expect(offset).not.toBeNull()
+    expect(offset![1]).toBeLessThan(0)
+  })
+
+  it("virtualizes only when scroll is on", () => {
+    const { render, renderer } = createTestRoot()
+    render(
+      <diff
+        scroll
+        patch={longPatch(2000)}
+        style={{ width: "100%", height: "100%" }}
+      />
+    )
 
     const painted = renderer.getPaintedText()
     // The window is 768px tall with 21px rows, so roughly 37 rows fit. The

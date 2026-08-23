@@ -116,7 +116,7 @@ describe("native text showcase", () => {
         <Panel title="DIFF" grow>
           {/* flexGrow + minHeight 0 lets the virtualized list take the rest of
               the window instead of leaving dead space under it. */}
-          <diff patch={PATCH} wordDiff style={{ flexGrow: 1, minHeight: 0 }} />
+           <diff scroll patch={PATCH} wordDiff style={{ flexGrow: 1, minHeight: 0 }} />
         </Panel>
       </div>
     )
@@ -173,7 +173,7 @@ describe("native text showcase", () => {
       >
         <markdown source={NOTES} theme={theme} />
         <code code={SNIPPET} language="typescript" showLineNumbers theme={theme} />
-        <diff patch={PATCH} style={{ flexGrow: 1, minHeight: 0 }} theme={theme} />
+        <diff scroll patch={PATCH} style={{ flexGrow: 1, minHeight: 0 }} theme={theme} />
       </div>
     )
 
@@ -211,12 +211,12 @@ describe("native text showcase", () => {
     // measuring. If a taller row height did not reach the list state, fewer
     // rows would fit but the list would still think it showed the old count.
     const short = createTestRoot()
-    short.render(<diff patch={PATCH} style={{ height: 200 }} />)
+    short.render(<diff scroll patch={PATCH} style={{ height: 200 }} />)
     const shortRows = short.renderer.getPaintedText().length
 
     const tall = createTestRoot()
     tall.render(
-      <diff patch={PATCH} style={{ height: 200 }} theme={{ metrics: { diffLineHeight: 60 } }} />
+      <diff scroll patch={PATCH} style={{ height: 200 }} theme={{ metrics: { diffLineHeight: 60 } }} />
     )
     const tallRows = tall.renderer.getPaintedText().length
 

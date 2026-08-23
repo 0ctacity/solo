@@ -438,12 +438,18 @@ pub enum DiffRow {
     BodyPad {
         file: u32,
     },
+    /// Preview was cut by `maxLines`. `remaining` is the hidden line count.
+    ShowMore {
+        remaining: u32,
+    },
 }
 
 impl DiffRow {
     pub fn height(&self, metrics: &Metrics) -> f32 {
         match self {
-            DiffRow::FileHeader { .. } => metrics.diff_file_header_height,
+            DiffRow::FileHeader { .. } | DiffRow::ShowMore { .. } => {
+                metrics.diff_file_header_height
+            }
             DiffRow::Notice { .. } => metrics.diff_notice_height,
             DiffRow::HunkHeader { .. } => metrics.diff_hunk_header_height,
             DiffRow::Line { .. } => metrics.diff_line_height,
@@ -457,36 +463,98 @@ impl DiffRow {
 /// Collapsing REMOVES the body rows rather than hiding them, so a collapsed
 /// 10k-line file costs one row. Hiding would keep the list's height model
 /// paying for content nobody can see.
-pub fn flatten_rows(files: &[FileDiff], mut collapsed: impl FnMut(&str) -> bool) -> Vec<DiffRow> {
+///
+/// `max_lines` stops after that many `Line` rows and appends `ShowMore`.
+/// Later files are not emitted. The cap is a preview, not a per-file fold.
+pub fn flatten_rows(
+    files: &[FileDiff],
+    collapsed: impl Fn(&str) -> bool,
+    max_lines: Option<usize>,
+) -> Vec<DiffRow> {
     let mut rows = Vec::new();
-    for (file_ix, file) in files.iter().enumerate() {
-        let file_ix = file_ix as u32;
-        rows.push(DiffRow::FileHeader { file: file_ix });
+    let mut line_count = 0usize;
+
+    'files: for (file_ix, file) in files.iter().enumerate() {
+        // Cap is checked here too: a file that ends exactly on `max_lines`
+        // must not emit the next file's header before ShowMore.
+        if file_ix > 0 && max_lines.is_some_and(|max| line_count >= max) {
+            let remaining = remaining_line_rows(files, &collapsed, file_ix, 0, 0);
+            if remaining > 0 {
+                rows.push(DiffRow::ShowMore { remaining });
+            }
+            break;
+        }
+        let file_ix_u = file_ix as u32;
+        rows.push(DiffRow::FileHeader { file: file_ix_u });
         if collapsed(&file.path) {
             continue;
         }
         for notice_ix in 0..file_notices(file).len() {
             rows.push(DiffRow::Notice {
-                file: file_ix,
+                file: file_ix_u,
                 notice: notice_ix as u32,
             });
         }
         for (hunk_ix, hunk) in file.hunks.iter().enumerate() {
+            if max_lines.is_some_and(|max| line_count >= max) {
+                rows.push(DiffRow::ShowMore {
+                    remaining: remaining_line_rows(files, &collapsed, file_ix, hunk_ix, 0),
+                });
+                break 'files;
+            }
             rows.push(DiffRow::HunkHeader {
-                file: file_ix,
+                file: file_ix_u,
                 hunk: hunk_ix as u32,
             });
             for line_ix in 0..hunk.lines.len() {
+                if max_lines.is_some_and(|max| line_count >= max) {
+                    rows.push(DiffRow::ShowMore {
+                        remaining: remaining_line_rows(
+                            files, &collapsed, file_ix, hunk_ix, line_ix,
+                        ),
+                    });
+                    break 'files;
+                }
                 rows.push(DiffRow::Line {
-                    file: file_ix,
+                    file: file_ix_u,
                     hunk: hunk_ix as u32,
                     line: line_ix as u32,
                 });
+                line_count += 1;
             }
         }
-        rows.push(DiffRow::BodyPad { file: file_ix });
+        rows.push(DiffRow::BodyPad { file: file_ix_u });
     }
     rows
+}
+
+/// Line rows from `(file_ix, hunk_ix, line_ix)` to the end, skipping collapsed
+/// files. Includes the current line.
+fn remaining_line_rows(
+    files: &[FileDiff],
+    collapsed: &impl Fn(&str) -> bool,
+    file_ix: usize,
+    hunk_ix: usize,
+    line_ix: usize,
+) -> u32 {
+    let mut remaining = 0u32;
+    for (fi, file) in files.iter().enumerate().skip(file_ix) {
+        if collapsed(&file.path) {
+            continue;
+        }
+        for (hi, hunk) in file.hunks.iter().enumerate() {
+            if fi == file_ix && hi < hunk_ix {
+                continue;
+            }
+            let start = if fi == file_ix && hi == hunk_ix {
+                line_ix
+            } else {
+                0
+            };
+            remaining += hunk.lines.len().saturating_sub(start) as u32;
+        }
+    }
+    remaining
 }
 
 /// Mean row height, used to seed the virtualized list's height estimate.
@@ -700,7 +768,7 @@ mod tests {
     #[test]
     fn flatten_produces_one_row_per_line_plus_chrome() {
         let files = parse_patch(SIMPLE);
-        let rows = flatten_rows(&files, |_| false);
+        let rows = flatten_rows(&files, |_| false, None);
         // header + 1 hunk header + 4 lines + body pad
         assert_eq!(rows.len(), 7);
         assert_eq!(rows[0], DiffRow::FileHeader { file: 0 });
@@ -711,7 +779,7 @@ mod tests {
     #[test]
     fn collapsing_removes_body_rows() {
         let files = parse_patch(SIMPLE);
-        let rows = flatten_rows(&files, |_| true);
+        let rows = flatten_rows(&files, |_| true, None);
         assert_eq!(rows, vec![DiffRow::FileHeader { file: 0 }]);
     }
 
@@ -719,7 +787,7 @@ mod tests {
     fn notices_get_their_own_rows() {
         let files =
             parse_patch("diff --git a/x.rs b/x.rs\nnew file mode 100644\n@@ -0,0 +1 @@\n+hi\n");
-        let rows = flatten_rows(&files, |_| false);
+        let rows = flatten_rows(&files, |_| false, None);
         assert!(rows.contains(&DiffRow::Notice { file: 0, notice: 0 }));
     }
 
@@ -727,7 +795,7 @@ mod tests {
     fn estimated_height_sits_between_the_extremes() {
         let m = Metrics::default();
         let files = parse_patch(SIMPLE);
-        let rows = flatten_rows(&files, |_| false);
+        let rows = flatten_rows(&files, |_| false, None);
         let estimate = estimated_row_height(&rows, &m);
         assert!(
             estimate > m.diff_body_bottom_pad && estimate < m.diff_file_header_height,
@@ -753,5 +821,91 @@ mod tests {
             DiffRow::FileHeader { file: 0 }.height(&m),
             m.diff_file_header_height
         );
+    }
+
+    #[test]
+    fn max_lines_stops_and_counts_the_rest() {
+        let files = parse_patch(concat!(
+            "diff --git a/README.md b/README.md\n",
+            "--- a/README.md\n",
+            "+++ b/README.md\n",
+            "@@ -1,2 +1,2 @@\n",
+            " # Title\n",
+            "-old line\n",
+            "+new line\n",
+            "diff --git a/src/lib.rs b/src/lib.rs\n",
+            "new file mode 100644\n",
+            "--- /dev/null\n",
+            "+++ b/src/lib.rs\n",
+            "@@ -0,0 +1,3 @@\n",
+            "+pub fn hello() -> &'static str {\n",
+            "+    \"hi\"\n",
+            "+}\n",
+        ));
+        let rows = flatten_rows(&files, |_| false, Some(1));
+        assert_eq!(rows.last(), Some(&DiffRow::ShowMore { remaining: 5 }));
+        assert_eq!(
+            rows.iter()
+                .filter(|row| matches!(row, DiffRow::Line { .. }))
+                .count(),
+            1
+        );
+        assert!(!rows
+            .iter()
+            .any(|row| matches!(row, DiffRow::FileHeader { file: 1 })));
+    }
+
+    #[test]
+    fn max_lines_at_a_file_boundary_omits_later_headers() {
+        let files = parse_patch(concat!(
+            "diff --git a/README.md b/README.md\n",
+            "--- a/README.md\n",
+            "+++ b/README.md\n",
+            "@@ -1,2 +1,2 @@\n",
+            " # Title\n",
+            "-old line\n",
+            "+new line\n",
+            "diff --git a/src/lib.rs b/src/lib.rs\n",
+            "new file mode 100644\n",
+            "--- /dev/null\n",
+            "+++ b/src/lib.rs\n",
+            "@@ -0,0 +1,3 @@\n",
+            "+pub fn hello() -> &'static str {\n",
+            "+    \"hi\"\n",
+            "+}\n",
+        ));
+        let rows = flatten_rows(&files, |_| false, Some(3));
+        assert_eq!(
+            rows.iter()
+                .filter(|row| matches!(row, DiffRow::Line { .. }))
+                .count(),
+            3
+        );
+        assert_eq!(rows.last(), Some(&DiffRow::ShowMore { remaining: 3 }));
+        assert!(!rows
+            .iter()
+            .any(|row| matches!(row, DiffRow::FileHeader { file: 1 })));
+    }
+
+    #[test]
+    fn max_lines_at_a_hunk_boundary_omits_the_next_hunk_header() {
+        let files = parse_patch(concat!(
+            "diff --git a/a.ts b/a.ts\n",
+            "--- a/a.ts\n",
+            "+++ b/a.ts\n",
+            "@@ -1,1 +1,1 @@\n",
+            " keep\n",
+            "@@ -10,1 +10,1 @@\n",
+            "-old\n",
+            "+new\n",
+        ));
+        let rows = flatten_rows(&files, |_| false, Some(1));
+        assert_eq!(
+            rows.iter()
+                .filter(|row| matches!(row, DiffRow::HunkHeader { .. }))
+                .count(),
+            1
+        );
+        assert_eq!(rows.last(), Some(&DiffRow::ShowMore { remaining: 2 }));
     }
 }

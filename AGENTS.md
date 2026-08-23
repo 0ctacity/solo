@@ -179,6 +179,20 @@ only the rows GPUI requests. Never capture the root render's tree guard or
 `<diff>` still owns its parsed Rust data because one native diff node is much
 cheaper than retaining one React node per line.
 
+## Nested scrolling is not supported
+
+Never put a scroll container inside another scroll container. That includes
+`overflow: "scroll"`, `<virtual-list>`, and `<diff>` (`gpui::list()` always
+takes the wheel). GPUI delivers the same wheel event to both hitboxes. The
+inner list steals the gesture. Nested scroll looks broken and there is no
+GPUI API to turn list scroll off.
+
+Keep **one** scroll parent. Long inner content must grow with that parent, or
+collapse behind an expandable (file header, first N lines, Show more). `<diff>`
+defaults to flow layout. Pass `scroll` plus a bounded height only for a
+dedicated viewer. Do not give `<diff>` a bounded height inside a transcript
+just so it can virtualize.
+
 ## Ported code
 
 `text/`, `syntax/`, `markdown/`, `diff/`, `theme.rs`, `custom_elements/code.rs`,

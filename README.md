@@ -4,27 +4,21 @@ React bindings for [GPUI](https://github.com/zed-industries/zed/tree/main/crates
 
 Build native GPU-accelerated desktop apps with React and TypeScript. Your components render directly to the GPU via Metal, DirectX, or Vulkan. No Electron, no web views.
 
-![A ChatGPT-style app built with GPUIX](docs/images/chat-app.png)
+![A Waku-style app built with GPUIX](docs/images/chat-app.png)
 
 Everything above is GPUIX: the sidebar, the scrolling transcript, the composer,
-and the syntax-highlighted code block. Run it with
-`cd examples && bun run chat`.
+and native `<markdown>`. Run it with `cd examples && bun run chat`.
 
 ## Examples
 
 | Example | Run | What it shows |
 |---|---|---|
-| **chat** | `bun run chat` | A full ChatGPT-style app: sidebar, transcript, composer, `<markdown>`, `<code>`, `<diff>` |
+| **chat** | `bun run chat` | A Waku-style app: transparent titlebar, sidebar, transcript, composer, `<markdown>` |
 | **native-text** | `bun run native-text` | The three native text components with a tab switcher |
 | **counter** | `bun run counter` | The smallest possible app: state, events, hover |
 | **diff** | `bun run diff` | A diff viewer composed from `<div>` and `<text>` in JS, for comparison |
 
 All of them live in [`examples/`](./examples) and use hardcoded data.
-
-The chat example puts a virtualized `<diff>` and a GFM table inside an assistant
-turn, inside a scrolling transcript:
-
-![A diff and a markdown table inside a chat turn](docs/images/chat-diff.png)
 
 Markdown, code and a virtualized diff in one frame:
 
@@ -272,9 +266,35 @@ extension comes from the pinned GPUIX fork. Windows runtime validation is pendin
 
 ## Scrolling
 
-Containers with `overflow: "scroll"` become natively scrollable — GPUI handles scroll physics, clipping, and offset persistence automatically.
+Containers with `overflow: "scroll"` become natively scrollable. GPUI handles scroll physics, clipping, and offset persistence automatically.
 
 Plain scroll containers still build every child. Use `<virtual-list>` below when the collection can grow large.
+
+> [!IMPORTANT]
+> **Nested scrolling is not supported.** One parent may scroll. An inner
+> `overflow: "scroll"`, `<virtual-list>`, or `<diff>` must not. GPUI gives both
+> hitboxes the same wheel event, so the inner list steals the gesture.
+>
+> Keep long inner content in that parent. Collapse it behind an **expandable**
+> (preview plus Show more) instead of giving the child its own viewport.
+
+```tsx
+function Expandable({
+  preview,
+  children,
+}: {
+  preview: React.ReactNode
+  children: React.ReactNode
+}) {
+  const [open, setOpen] = useState(false)
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+      {open ? children : preview}
+      {!open && <div onClick={() => setOpen(true)}>Show more</div>}
+    </div>
+  )
+}
+```
 
 ```tsx
 function ScrollableList() {
@@ -388,7 +408,7 @@ Each **direct host child** is one virtual row. Give every row a stable React key
 </virtual-list>
 ```
 
-A row can contain nested `<div>`, `<text>`, `<markdown>`, `<code>`, `<diff>`, `<input>`, and `<textarea>` elements. Focusable rows stay active when they move offscreen, so keyboard input and native editor state are preserved.
+A row can contain nested `<div>`, `<text>`, `<markdown>`, `<code>`, `<diff>`, `<input>`, and `<textarea>` elements. Focusable rows stay active when they move offscreen, so keyboard input and native editor state are preserved. Those children must not scroll. Nested scrolling is not supported; see [Scrolling](#scrolling).
 
 ### Chat tail behavior
 
@@ -772,15 +792,24 @@ block's height is known before highlighting runs.
 
 ### `<diff>`
 
-A unified diff viewer, virtualized with GPUI's `list()`. Collapsing a file
-removes its rows rather than hiding them, so a collapsed 10k-line file costs one
-row.
+A unified diff viewer. It **flows** with its parent by default, so a transcript
+can be the only scroller. Collapsing a file removes its rows rather than hiding
+them, so a collapsed 10k-line file costs one row.
+
+Use `maxLines` to keep a long patch short. Show more fires `onShowMore`. Clear
+`maxLines` in that handler to reveal the rest.
+
+Pass `scroll` and a **bounded height** only for a dedicated full-window viewer.
+That path uses GPUI's `list()` and virtualizes. Do not nest it inside another
+scroller. See [Scrolling](#scrolling).
 
 ```tsx
 <diff
   patch={unifiedPatch}
   wordDiff                     // highlight only the tokens that changed
+  maxLines={open ? undefined : 24}
   collapsedPaths={['pnpm-lock.yaml']}
+  onShowMore={() => setOpen(true)}
   onToggleFile={(e) => toggle(e.value)}
   onLineClick={(e) => console.log(e.oldLine, e.newLine, e.value)}
 />
@@ -833,8 +862,8 @@ the design is a React re-render and never a native rebuild.
 />
 ```
 
-`<diff>` virtualizes from these numbers without measuring, so changing
-`diffLineHeight` also re-sizes the scroll model.
+When `scroll` is on, `<diff>` virtualizes from these numbers without measuring,
+so changing `diffLineHeight` also re-sizes the scroll model.
 
 The same three components, retuned entirely from `metrics` with no rebuild:
 
@@ -850,7 +879,7 @@ Bash, TOML, YAML, Markdown, HTML, CSS, C.
 | `div`           | Container with flexbox layout                    |
 | `text`          | Text content, selectable                         |
 | `code`          | Syntax-highlighted code block                    |
-| `diff`          | Virtualized unified diff viewer                  |
+| `diff`          | Unified diff viewer. Flows by default            |
 | `markdown`      | GitHub-flavoured markdown                        |
 | `input`         | Native single-line text editor                   |
 | `textarea`      | Native multiline, auto-growing text editor       |
@@ -917,6 +946,7 @@ simple: one `currentColor` stroke or fill works best.
 | Change | `onChange` | `value` — `<input>` and `<textarea>` only |
 | Submit | `onSubmit` | `value` — `<input>` and `<textarea>` only |
 | Toggle file | `onToggleFile` | `value` (file path) — `<diff>` only |
+| Show more | `onShowMore` | `value` (hidden line count) — `<diff>` only |
 | Line click | `onLineClick` | `value`, `oldLine`, `newLine` — `<diff>` only |
 | Link click | `onLinkClick` | `value` (URL) — `<markdown>` only |
 

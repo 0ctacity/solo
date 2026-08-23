@@ -7,13 +7,16 @@
 //! <diff
 //!   patch={unifiedPatch}
 //!   wordDiff
+//!   maxLines={24}
 //!   collapsedPaths={['pnpm-lock.yaml']}
 //!   onToggleFile={(e) => {}}
+//!   onShowMore={(e) => {}}
 //! />
 //! ```
 //!
-//! This element owns parsed diff data so its `gpui::list()` closure can capture
-//! an `Rc` and build only visible rows without retaining a React node per line.
+//! This element owns parsed diff data. The `scroll` path uses `gpui::list()`
+//! so the closure can capture an `Rc` and build only visible rows. The default
+//! flow path renders the same rows in a column so a parent can be the scroller.
 
 use std::collections::HashSet;
 use std::rc::Rc;
@@ -104,6 +107,8 @@ impl FileHighlight {
 pub struct DiffElement {
     patch: String,
     show_word_diff: bool,
+    scroll: bool,
+    max_lines: Option<usize>,
     collapsed: HashSet<String>,
     theme: Theme,
     /// Parsed data for the current patch. Rebuilt only when the props change.
@@ -134,7 +139,7 @@ impl DiffElement {
         }
         let highlights = files.iter().map(file_highlight).collect();
         let collapsed = self.collapsed.clone();
-        let rows = flatten_rows(&files, |path| collapsed.contains(path));
+        let rows = flatten_rows(&files, |path| collapsed.contains(path), self.max_lines);
 
         let data = Rc::new(DiffData {
             files,
@@ -155,6 +160,7 @@ impl DiffElement {
         let mut hasher = std::collections::hash_map::DefaultHasher::new();
         self.patch.hash(&mut hasher);
         self.show_word_diff.hash(&mut hasher);
+        self.max_lines.hash(&mut hasher);
         let mut paths: Vec<&String> = self.collapsed.iter().collect();
         paths.sort();
         paths.hash(&mut hasher);
@@ -260,40 +266,6 @@ impl CustomElement for DiffElement {
             return empty.into_any_element();
         }
 
-        // The list state must outlive the frame, otherwise the scroll offset
-        // resets on every render. It must be reset whenever the ROWS change,
-        // not merely when their count changes: gpui caches measured heights per
-        // index, and a new patch with the same row count would keep them.
-        let state = self
-            .list_state
-            .get_or_insert_with(|| {
-                gpui::ListState::new(data.rows.len(), gpui::ListAlignment::Top, px(OVERDRAW))
-            })
-            .clone();
-        let metrics_hash = {
-            use std::hash::Hasher;
-            let mut hasher = std::collections::hash_map::DefaultHasher::new();
-            metrics.hash_diff_layout_into(&mut hasher);
-            hasher.finish()
-        };
-        if rebuilt || self.list_metrics != Some(metrics_hash) {
-            // `reset_with_uniform_height` clears `logical_scroll_top`, so a live
-            // patch update or a collapse would jump the reader back to the top.
-            // Capture the anchor and put it back, clamped to the new row count.
-            let anchor = state.logical_scroll_top();
-            state.reset_with_uniform_height(
-                data.rows.len(),
-                px(crate::diff::estimated_row_height(&data.rows, &metrics)),
-            );
-            if anchor.item_ix > 0 && !data.rows.is_empty() {
-                let mut anchor = anchor;
-                anchor.item_ix = anchor.item_ix.min(data.rows.len() - 1);
-                state.scroll_to(anchor);
-            }
-            self.list_metrics = Some(metrics_hash);
-        }
-        let list_state = state;
-
         let element_id = ctx.id;
         let selection = ctx.selection.clone();
         let selectable = ctx.selectable;
@@ -301,39 +273,106 @@ impl CustomElement for DiffElement {
         let callback = ctx.event_callback.clone();
         let wants_toggle = ctx.events.contains("toggleFile");
         let wants_line_click = ctx.events.contains("lineClick");
-        let row_data = data.clone();
+        let wants_show_more = ctx.events.contains("showMore");
         let radius = ctx
             .style
             .and_then(|style| style.border_radius)
             .unwrap_or(0.0) as f32;
         let row_theme = theme.clone();
 
-        let list = gpui::list(list_state, move |ix, _window, _app| {
-            render_row(
-                &row_data,
-                ix,
-                RowContext {
-                    element_id,
-                    selection: &selection,
-                    selectable,
-                    wash,
-                    callback: &callback,
-                    wants_toggle,
-                    wants_line_click,
-                    theme: &row_theme,
-                    radius,
-                },
-            )
-        })
-        .with_sizing_behavior(gpui::ListSizingBehavior::Auto);
+        let body = if self.scroll {
+            // The list state must outlive the frame, otherwise the scroll offset
+            // resets on every render. It must be reset whenever the ROWS change,
+            // not merely when their count changes: gpui caches measured heights per
+            // index, and a new patch with the same row count would keep them.
+            let state = self
+                .list_state
+                .get_or_insert_with(|| {
+                    gpui::ListState::new(data.rows.len(), gpui::ListAlignment::Top, px(OVERDRAW))
+                })
+                .clone();
+            let metrics_hash = {
+                use std::hash::Hasher;
+                let mut hasher = std::collections::hash_map::DefaultHasher::new();
+                metrics.hash_diff_layout_into(&mut hasher);
+                hasher.finish()
+            };
+            if rebuilt || self.list_metrics != Some(metrics_hash) {
+                // `reset_with_uniform_height` clears `logical_scroll_top`, so a live
+                // patch update or a collapse would jump the reader back to the top.
+                // Capture the anchor and put it back, clamped to the new row count.
+                let anchor = state.logical_scroll_top();
+                state.reset_with_uniform_height(
+                    data.rows.len(),
+                    px(crate::diff::estimated_row_height(&data.rows, &metrics)),
+                );
+                if anchor.item_ix > 0 && !data.rows.is_empty() {
+                    let mut anchor = anchor;
+                    anchor.item_ix = anchor.item_ix.min(data.rows.len() - 1);
+                    state.scroll_to(anchor);
+                }
+                self.list_metrics = Some(metrics_hash);
+            }
+
+            let row_data = data.clone();
+            let selection = selection.clone();
+            let callback = callback.clone();
+            let row_theme = row_theme.clone();
+            gpui::list(state, move |ix, _window, _app| {
+                render_row(
+                    &row_data,
+                    ix,
+                    RowContext {
+                        element_id,
+                        selection: &selection,
+                        selectable,
+                        wash,
+                        callback: &callback,
+                        wants_toggle,
+                        wants_line_click,
+                        wants_show_more,
+                        theme: &row_theme,
+                        radius,
+                    },
+                )
+            })
+            .with_sizing_behavior(gpui::ListSizingBehavior::Auto)
+            .flex_1()
+            .into_any_element()
+        } else {
+            self.list_state = None;
+            self.list_metrics = None;
+            let mut column = gpui::div().flex().flex_col();
+            for ix in 0..data.rows.len() {
+                column = column.child(render_row(
+                    &data,
+                    ix,
+                    RowContext {
+                        element_id,
+                        selection: &selection,
+                        selectable,
+                        wash,
+                        callback: &callback,
+                        wants_toggle,
+                        wants_line_click,
+                        wants_show_more,
+                        theme: &row_theme,
+                        radius,
+                    },
+                ));
+            }
+            column.into_any_element()
+        };
 
         let mut container = gpui::div()
             .id(SharedString::from(format!("__gpuix_diff_{}", ctx.id)))
             .flex()
             .flex_col()
-            .min_h_0()
             .bg(theme.bg)
-            .child(list.flex_1());
+            .child(body);
+        if self.scroll {
+            container = container.min_h_0();
+        }
 
         container = super::code::wire_standard_events(container, &ctx);
         if let Some(style) = ctx.style {
@@ -346,6 +385,10 @@ impl CustomElement for DiffElement {
         match key {
             "patch" => self.patch = value.as_str().unwrap_or("").to_string(),
             "wordDiff" => self.show_word_diff = value.as_bool().unwrap_or(false),
+            "scroll" => self.scroll = value.as_bool().unwrap_or(false),
+            "maxLines" => {
+                self.max_lines = value.as_u64().map(|n| n as usize);
+            }
             "collapsedPaths" => {
                 self.collapsed = value
                     .as_array()
@@ -363,7 +406,14 @@ impl CustomElement for DiffElement {
     }
 
     fn supported_props(&self) -> &[&str] {
-        &["patch", "wordDiff", "collapsedPaths", "theme"]
+        &[
+            "patch",
+            "wordDiff",
+            "scroll",
+            "maxLines",
+            "collapsedPaths",
+            "theme",
+        ]
     }
 
     fn get_prop(&self, key: &str) -> Option<serde_json::Value> {
@@ -376,6 +426,7 @@ impl CustomElement for DiffElement {
     fn supported_events(&self) -> &[&str] {
         &[
             "toggleFile",
+            "showMore",
             "lineClick",
             "click",
             "mouseEnter",
@@ -400,6 +451,7 @@ struct RowContext<'a> {
     callback: &'a Option<crate::renderer::EventCallback>,
     wants_toggle: bool,
     wants_line_click: bool,
+    wants_show_more: bool,
     /// Applied while rendering, never baked into `DiffData`, so a theme change
     /// repaints without reparsing the patch.
     theme: &'a Theme,
@@ -525,7 +577,44 @@ fn render_row(data: &DiffData, ix: usize, ctx: RowContext) -> gpui::AnyElement {
             .w_full()
             .h(px(m.diff_body_bottom_pad))
             .into_any_element(),
+        DiffRow::ShowMore { remaining } => show_more_row(remaining, ix, &ctx, theme),
     }
+}
+
+fn show_more_row(remaining: u32, ix: usize, ctx: &RowContext, theme: &Theme) -> gpui::AnyElement {
+    use gpui::prelude::*;
+
+    let label = if remaining == 1 {
+        "Show 1 more line".to_string()
+    } else {
+        format!("Show {remaining} more lines")
+    };
+
+    let mut row = gpui::div()
+        .id(SharedString::from(format!("__gpuix_diff_more_{ix}")))
+        .w_full()
+        .h(px(theme.metrics.diff_file_header_height))
+        .flex_none()
+        .flex()
+        .items_center()
+        .justify_center()
+        .cursor_pointer()
+        .text_size(px(theme.metrics.diff_text_size))
+        .text_color(theme.text_dim)
+        .hover(|s| s.bg(ink(theme, 0.05)));
+
+    if ctx.wants_show_more {
+        let callback = ctx.callback.clone();
+        let element_id = ctx.element_id;
+        row = row.on_click(move |_, _window, _cx| {
+            emit_event_full(&callback, element_id, "showMore", |p| {
+                p.value = Some(remaining.to_string());
+            });
+        });
+    }
+
+    row.child(crate::text::chrome_text(SharedString::from(label), None))
+        .into_any_element()
 }
 
 fn file_header_row(

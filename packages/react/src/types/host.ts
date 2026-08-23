@@ -70,6 +70,8 @@ export interface StyleDesc {
   overflowY?: string
 
   cursor?: string
+  /** `"auto"` blocks hits behind this element. `"none"` never does. Unset blocks when the element paints a fill or is absolutely positioned. */
+  pointerEvents?: "auto" | "none"
 
   /** "none" opts this element and its subtree out of text selection.
    *  Inherited like the CSS property, so a toolbar can disable it once. */
@@ -232,6 +234,7 @@ export interface Props {
 
   // ── Native component events ─────────────────────────────────────
   onToggleFile?: (event: EventPayload) => void
+  onShowMore?: (event: EventPayload) => void
   onLineClick?: (event: EventPayload) => void
   onLinkClick?: (event: EventPayload) => void
 
@@ -294,7 +297,7 @@ export interface CodeProps extends Props {
   theme?: GpuixTheme
 }
 
-// Props for the <diff> custom element — a virtualized unified diff viewer.
+// Props for the <diff> custom element — a unified diff viewer.
 export interface DiffProps extends Props {
   /** A unified git patch (the output of `git diff`). */
   patch?: string
@@ -302,9 +305,18 @@ export interface DiffProps extends Props {
   wordDiff?: boolean
   /** File paths rendered as a header only. Collapsed bodies cost one row. */
   collapsedPaths?: string[]
+  /**
+   * Use the virtualized `list()` scroller. Off by default so a parent
+   * transcript can be the only scroll container. Requires a bounded height.
+   */
+  scroll?: boolean
+  /** Paint this many line rows, then a Show more row. */
+  maxLines?: number
   theme?: GpuixTheme
   /** Fires when a file header is clicked. `event.value` is the file path. */
   onToggleFile?: (event: EventPayload) => void
+  /** Fires when Show more is clicked. `event.value` is the hidden line count. */
+  onShowMore?: (event: EventPayload) => void
   /** Fires when a diff line is clicked. `event.value` is the line text,
    *  `event.oldLine` / `event.newLine` are its line numbers. */
   onLineClick?: (event: EventPayload) => void

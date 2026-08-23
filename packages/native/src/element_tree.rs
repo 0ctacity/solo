@@ -80,8 +80,9 @@ pub struct EventPayload {
 
     // ── Custom element payloads ──────────────────────────────────────
     /// Element-defined string payload.
-    /// Populated for: `<diff>` toggleFile (the file path) and lineClick (the
-    /// line text); `<markdown>` linkClick (the URL).
+    /// Populated for: `<diff>` toggleFile (the file path), showMore (the
+    /// hidden line count), and lineClick (the line text); `<markdown>`
+    /// linkClick (the URL).
     pub value: Option<String>,
 
     /// Line number on the pre-change side. Populated for: `<diff>` lineClick.

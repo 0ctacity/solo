@@ -114,7 +114,7 @@ function App() {
           flexGrow: 1,
           minHeight: 0,
           padding: 24,
-          overflowY: 'scroll',
+          overflowY: tab === 'diff' ? undefined : 'scroll',
         }}
       >
         {tab === 'markdown' && (
@@ -125,9 +125,10 @@ function App() {
         )}
         {tab === 'diff' && (
           <diff
+            scroll
             patch={PATCH}
             wordDiff
-            style={{ height: '100%' }}
+            style={{ flexGrow: 1, minHeight: 0 }}
             onLineClick={(e) => setStatus(`line ${e.newLine ?? e.oldLine}: ${e.value}`)}
             onToggleFile={(e) => setStatus(`toggle: ${e.value}`)}
           />
