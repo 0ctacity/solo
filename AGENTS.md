@@ -382,7 +382,9 @@ belong in README. This list is only the remaining engineering work.
 
 - [ ] **Window controls** - resize, minimize (title already works)
 - [ ] **Multiple windows** - Support multiple GPUI windows
-- [ ] **Hot reload** - Re-render on JS file changes
+- [x] **JS remount** - `render()` plus `bun --hot` remounts the React tree on the same window
+- [ ] **React Refresh** - keep `useState` across saves. Needs Bun to run the Fast Refresh transform during `bun --hot`
+- [ ] **Native hot reload** - cannot unload a `.node`. `bun run dev` rebuilds and restarts
 - [ ] **DevTools** - React DevTools integration
 - [ ] **Animations** - Interpolated style transitions
 
