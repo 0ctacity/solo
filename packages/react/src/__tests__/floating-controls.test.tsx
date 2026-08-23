@@ -3,6 +3,9 @@
 
 import React, { useState } from "react"
 import { beforeEach, describe, expect, it } from "vitest"
+import * as ComboboxPrimitive from "../components/combobox"
+import * as SelectPrimitive from "../components/select"
+import * as TooltipPrimitive from "../components/tooltip"
 import {
   Combobox,
   ComboboxContent,
@@ -64,20 +67,22 @@ describeNative("floating controls", () => {
       const [value, setValue] = useState("alpha")
       return (
         <div style={{ width: 400, height: 300, padding: 12 }}>
-          <Select value={value} onValueChange={setValue}>
-            <SelectTrigger style={triggerStyle}>
-              <SelectValue placeholder="Choose" />
-            </SelectTrigger>
-            <SelectContent side="bottom" sideOffset={4} style={contentStyle}>
-              <SelectGroup>
-                <SelectLabel style={{ height: 24 }}>Models</SelectLabel>
-                <SelectItem value="alpha" style={itemStyle}>Alpha</SelectItem>
-                <SelectItem value="disabled" disabled style={itemStyle}>Disabled</SelectItem>
-                <SelectSeparator style={{ height: 1, backgroundColor: "#475569" }} />
-                <SelectItem value="beta" style={itemStyle}>Beta</SelectItem>
-              </SelectGroup>
-            </SelectContent>
-          </Select>
+          <SelectPrimitive.Root value={value} onValueChange={setValue}>
+            <SelectPrimitive.Trigger style={triggerStyle}>
+              <SelectPrimitive.Value placeholder="Choose" />
+            </SelectPrimitive.Trigger>
+            <SelectPrimitive.Content side="bottom" sideOffset={4} style={contentStyle}>
+              <SelectPrimitive.Group>
+                <SelectPrimitive.Label style={{ height: 24 }}>Models</SelectPrimitive.Label>
+                <SelectPrimitive.Item value="alpha" style={itemStyle}>Alpha</SelectPrimitive.Item>
+                <SelectPrimitive.Item value="disabled" disabled style={itemStyle}>
+                  Disabled
+                </SelectPrimitive.Item>
+                <SelectPrimitive.Separator style={{ height: 1, backgroundColor: "#475569" }} />
+                <SelectPrimitive.Item value="beta" style={itemStyle}>Beta</SelectPrimitive.Item>
+              </SelectPrimitive.Group>
+            </SelectPrimitive.Content>
+          </SelectPrimitive.Root>
           <text>{`Value: ${value}`}</text>
         </div>
       )
@@ -169,22 +174,22 @@ describeNative("floating controls", () => {
       const [value, setValue] = useState<string | null>(null)
       return (
         <div style={{ width: 400, height: 300, padding: 12 }}>
-          <Combobox items={frameworks} value={value} onValueChange={setValue}>
-            <ComboboxInput
+          <ComboboxPrimitive.Root items={frameworks} value={value} onValueChange={setValue}>
+            <ComboboxPrimitive.Input
               placeholder="Select a framework"
               style={triggerStyle}
             />
-            <ComboboxContent sideOffset={4} style={contentStyle}>
-              <ComboboxEmpty>No items found.</ComboboxEmpty>
-              <ComboboxList>
+            <ComboboxPrimitive.Content sideOffset={4} style={contentStyle}>
+              <ComboboxPrimitive.Empty>No items found.</ComboboxPrimitive.Empty>
+              <ComboboxPrimitive.List>
                 {(item) => (
-                  <ComboboxItem key={item} value={item} style={itemStyle}>
+                  <ComboboxPrimitive.Item key={item} value={item} style={itemStyle}>
                     {item}
-                  </ComboboxItem>
+                  </ComboboxPrimitive.Item>
                 )}
-              </ComboboxList>
-            </ComboboxContent>
-          </Combobox>
+              </ComboboxPrimitive.List>
+            </ComboboxPrimitive.Content>
+          </ComboboxPrimitive.Root>
           <text>{`Selected: ${value ?? "none"}`}</text>
         </div>
       )
@@ -296,22 +301,22 @@ describeNative("floating controls", () => {
     function Demo() {
       return (
         <div style={{ width: 400, height: 240, padding: 12 }}>
-          <TooltipProvider delayDuration={0} disableHoverableContent>
-            <Tooltip>
-              <TooltipTrigger asChild>
+          <TooltipPrimitive.Provider delayDuration={0} disableHoverableContent>
+            <TooltipPrimitive.Root>
+              <TooltipPrimitive.Trigger asChild>
                 <div ref={(instance) => { triggerRef = instance }} style={triggerStyle}>
                   Hover me
                 </div>
-              </TooltipTrigger>
-              <TooltipContent
+              </TooltipPrimitive.Trigger>
+              <TooltipPrimitive.Content
                 side="bottom"
                 sideOffset={4}
                 style={{ width: 120, height: 28, padding: 6, backgroundColor: "#020617" }}
               >
                 Tooltip body
-              </TooltipContent>
-            </Tooltip>
-          </TooltipProvider>
+              </TooltipPrimitive.Content>
+            </TooltipPrimitive.Root>
+          </TooltipPrimitive.Provider>
         </div>
       )
     }

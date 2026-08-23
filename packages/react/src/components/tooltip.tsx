@@ -252,3 +252,10 @@ export const TooltipContent = forwardRef<PublicInstance, TooltipContentProps>(
     )
   }
 )
+
+export {
+  Tooltip as Root,
+  TooltipContent as Content,
+  TooltipProvider as Provider,
+  TooltipTrigger as Trigger,
+}

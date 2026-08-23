@@ -440,3 +440,17 @@ export const ComboboxSeparator = forwardRef<PublicInstance, Props>(
     return <div {...props} ref={ref} />
   }
 )
+
+export {
+  Combobox as Root,
+  ComboboxContent as Content,
+  ComboboxEmpty as Empty,
+  ComboboxGroup as Group,
+  ComboboxInput as Input,
+  ComboboxItem as Item,
+  ComboboxLabel as Label,
+  ComboboxList as List,
+  ComboboxSeparator as Separator,
+  ComboboxTrigger as Trigger,
+  ComboboxValue as Value,
+}
