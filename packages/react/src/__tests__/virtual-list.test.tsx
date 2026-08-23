@@ -198,4 +198,37 @@ describe("<virtual-list>", () => {
     expect(renderer.getPaintedText()).toContain("row-20")
     expect(renderer.getPaintedText()).not.toContain("row-0")
   })
+
+  it("lets overflow-x inside a row pan without moving the list", () => {
+    const { render, renderer } = createTestRoot()
+    render(
+      <virtual-list
+        overdraw={0}
+        estimatedItemHeight={80}
+        style={{ width: 240, height: 160 }}
+      >
+        <div style={{ width: "100%", height: 80, overflowX: "scroll" }}>
+          <div style={{ width: 800, height: 80, flexShrink: 0 }}>
+            <text>wide row</text>
+          </div>
+        </div>
+        <div style={{ height: 80 }}>
+          <text>below</text>
+        </div>
+      </virtual-list>
+    )
+
+    const list = renderer.findByType("virtual-list")[0]
+    const scroller = renderer
+      .findByType("div")
+      .find((d) => d.style.overflowX === "scroll")!
+    expect(renderer.getScrollOffset(scroller.id)?.[0] ?? 0).toBe(0)
+
+    renderer.nativeSimulateScrollWheel(80, 40, -80, 0)
+    const listOffset = renderer.getScrollOffset(list.id)
+    const rowOffset = renderer.getScrollOffset(scroller.id)
+    expect(listOffset?.[1] ?? 0, `list ${JSON.stringify(listOffset)}`).toBeCloseTo(0)
+    expect(rowOffset?.[0], `row ${JSON.stringify(rowOffset)}`).toBeLessThan(0)
+  })
+
 })

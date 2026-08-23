@@ -190,8 +190,167 @@ GPUI API to turn list scroll off.
 Keep **one** scroll parent. Long inner content must grow with that parent, or
 collapse behind an expandable (file header, first N lines, Show more). `<diff>`
 defaults to flow layout. Pass `scroll` plus a bounded height only for a
-dedicated viewer. Do not give `<diff>` a bounded height inside a transcript
-just so it can virtualize.
+dedicated viewer. Do not give `<diff>` a bounded height inside a parent
+scroller just so it can virtualize.
+
+`overflow-x: scroll` is allowed inside a vertical scroller. GPUI remaps a
+vertical wheel onto overflow-x unless `restrict_scroll_to_axis()` is set.
+Every `overflow_x_scroll()` in native code must call that, or the parent
+scroller jumps sideways when the pointer is over `<code>` or a markdown table.
+
+## Scroll cost
+
+A wheel event calls `cx.notify` on the one `GpuixView`. That rebuilds the
+tree. `gpui::list()` then re-renders every **visible** item. Cached heights
+only skip overdraw items that are off screen.
+
+```
+wheel  ►  notify GpuixView  ►  render()  ►  Taffy on visible rows  ►  paint
+```
+
+If scroll is smooth on empty padding and slow or stuck on text, a filled
+child is stealing the wheel. `occlude()` is **BlockMouse**. It stops the
+hit test. The parent list never sees the event. In-flow fills must use
+`block_mouse_except_scroll()`. Keep `occlude()` for absolute/fixed overlays
+and `pointerEvents: "auto"`.
+
+The chat "jank" over code and tables was the Y-to-X remap above, not the
+tick loop. After that fix, remaining cost is Taffy on fat visible rows.
+`<code>` is one flex row per line. Safe-mdx is ~100 host nodes. Flatten
+paint before changing the frame loop.
+
+Keep `<virtual-list>` `overdraw` modest. 820px on a short chat kept almost
+every row live. Profile with `debugFrameOverlay: 'full'`. The overlay is
+draw time, not FPS. `8.3 MS` is about 120 Hz.
+
+A long list is slow **only at start** when React maps every row. `createInstance`
+runs in the render phase. 10k rows become ~30k host nodes (row wrapper +
+inner + `<markdown>`/`<code>`/`<diff>`), then one `commitMutations`. GPUI does
+not build those rows yet. After that, scroll cost is visible Taffy only.
+
+## Profiling and optimizing
+
+Load the **profano** skill first. Fetch its README. Do not guess CLI flags.
+
+Separate **first mount** from **scroll**. They are different paths.
+
+```
+first mount
+  React maps every child
+    ►  createInstance / setStyle / setCustomProp  (queued)
+    ►  one applyBatch JSON
+    ►  Rust RetainedTree
+    ►  first paint (list builds visible rows only)
+
+scroll
+  wheel  ►  notify GpuixView  ►  render()  ►  Taffy on visible rows  ►  paint
+```
+
+### JS / mount
+
+Write a short script that mounts through `createTestRoot()` and exits. Profile
+that, not the live window. The tick loop will drown the mount.
+
+```ts
+import React from 'react'
+import { createTestRoot } from '@gpuix/react'
+import { ChatApp } from './chat'
+
+const root = createTestRoot()
+const start = performance.now()
+root.render(<ChatApp turnCount={10_000} />)
+console.log(`mount ${(performance.now() - start).toFixed(1)}ms`)
+```
+
+```bash
+cd examples
+bun --cpu-prof --cpu-prof-dir=../tmp/cpu-profiles profile-chat-mount.tsx
+npx profano ../tmp/cpu-profiles/CPU.*.cpuprofile -n 30
+npx profano ../tmp/cpu-profiles/CPU.*.cpuprofile --sort total -n 20
+```
+
+Read **self** first. That is where the CPU sat. **Total** is the caller chain.
+
+The 10k chat mount was 850ms. profano said:
+
+| Function | Self | What it was |
+|---|---|---|
+| `applyBatch` | 626ms | Rust parsing the mutation JSON |
+| `FiberNode` | 31ms | React |
+| `stringify` | 26ms | `JSON.stringify(queue)` |
+
+React was not the problem. The batch **stringified every style and theme**, then
+stringified the queue, then Rust parsed each escaped string again.
+
+Queue **raw objects**. Opcode `setCustomPropValue` carries a raw JSON value.
+`setCustomProp` still means a JSON **string** (legacy). A raw `"top"` or
+`"true"` on `setCustomProp` is parsed as JSON and throws. That is why the
+composer Selects died after the first applyBatch change: `<anchored side="top">`
+never committed.
+
+```ts
+queue.push(['setStyle', id, styleObject])
+queue.push(['setCustomPropValue', id, 'side', 'top'])
+```
+
+After a JS reconciler change, **build `@gpuix/react`**. `examples/` and
+`bun --hot chat.tsx` load `packages/react/dist`, not `src`. packages/react
+vitest uses `src`. You will think the fix works in one suite and fail in the
+app.
+
+```bash
+cd packages/react && bun run build
+```
+
+### Scroll / paint
+
+Turn on `debugFrameOverlay: 'full'`. The number is **draw time**, not FPS.
+`8.3 MS` is about 120 Hz.
+
+The chat wheel jank was **not** the tick loop. GPUI remaps a vertical wheel
+onto `overflow-x`. `<code>` and markdown tables stole the gesture. Fix is
+`restrict_scroll_to_axis()` on every `overflow_x_scroll()`.
+
+Keep `overdraw` modest. 820px on a short list keeps almost every row live.
+
+Do not flatten the frame loop to hide fat rows. Flatten the rows
+(`<markdown>` / `<code>` / `<diff>` as one native node).
+
+### Native
+
+For Rust time, `sample` the bun/node pid, or `samply`. GPUI also has
+`ZED_MEASUREMENTS=1`. That is Zed's frame log, not our overlay.
+
+A `.node` cannot unload. After a native rebuild, restart the app. `bun --hot`
+only remounts React.
+
+## Overlays and icons
+
+Menus, tooltips, and dialogs go through **`SelectContent` / `ComboboxContent` /
+`<anchored deferred>`**. Never overflow a `position: "absolute"` card out of the
+composer into a `<virtual-list>`. The list paints after the composer, so the
+list shows through the menu and clicks hit the text behind it.
+
+Do not paint `#00000000` over a blurred window. A transparent GPUI quad punches
+through Metal to the desktop. Omit the fill, or use the parent color. Overlay
+rows need a **solid** fill too, not a transparent idle state.
+
+A filled in-flow `div` uses **BlockMouseExceptScroll**. Clicks and hovers stop.
+The parent scroller still gets the wheel. `position: "absolute"` / `"fixed"`
+or `pointerEvents: "auto"` uses **BlockMouse** and steals the wheel too.
+`pointerEvents: "none"` opts out.
+
+Text **selection** still uses window mouse events and text bounds, not hitboxes.
+A drag on a menu over markdown can still start a selection. Do not skip
+selection tests to hide that.
+
+If `<svg>` icons are blank in vitest, `src` is probably a `data:image/svg+xml`
+URL from `import … with { type: 'file' }`. Native decodes that URL. Do not write
+a temp-file workaround. Prefer `fill="#000"` / `stroke="#000"` plus
+`style.color`. `currentColor` in the file is not `style.color`.
+
+macOS traffic-light clearance is **86px**. The test renderer does not draw
+traffic lights, so that gap looks empty in PNGs.
 
 ## Ported code
 

@@ -329,7 +329,10 @@ Plain scroll containers still build every child. Use `<virtual-list>` below when
 > (preview plus Show more) instead of giving the child its own viewport.
 >
 > Horizontal overflow is the exception. `overflowX: "scroll"` on a wide child
-> (a code row, a table) does not steal the vertical wheel.
+> (a code row, a table) does not steal the vertical wheel. GPUIX lays that
+> scroller out as a flex viewport with `minWidth: 0`. The wide child must not
+> shrink: set `flexShrink: 0` or a definite width. Swipe on **X** to pan.
+> A vertical wheel stays on the parent.
 
 ```tsx
 function Expandable({
@@ -1048,7 +1051,7 @@ CSS-like styling via the `style` prop:
 </div>
 ```
 
-**Layout:** `display`, `flexDirection`, `flexWrap`, `flexGrow`, `flexShrink`, `alignItems`, `alignSelf`, `justifyContent`, `gap`, `rowGap`, `columnGap`
+**Layout:** `display` (`"flex"` | `"grid"`), `flexDirection`, `flexWrap`, `flexGrow`, `flexShrink`, `alignItems`, `alignSelf`, `justifyContent`, `gap`, `rowGap`, `columnGap`, `gridTemplateColumns`, `gridTemplateRows`, `gridColumnMin`, `gridRowMin`
 
 **Sizing:** `width`, `height`, `minWidth`, `minHeight`, `maxWidth`, `maxHeight` — accepts pixels (number) or percentages (string like `"100%"`)
 
@@ -1056,7 +1059,7 @@ CSS-like styling via the `style` prop:
 
 **Position:** `position` (`"relative"` | `"absolute"`), `top`, `right`, `bottom`, `left`
 
-**Visual:** `backgroundColor`, `color`, `opacity`, `cursor`, `borderRadius`, `borderWidth`, `borderColor`
+**Visual:** `backgroundColor`, `color`, `opacity`, `cursor`, `pointerEvents`, `borderRadius`, `borderWidth`, `borderColor`
 
 **Overflow:** `overflow`, `overflowX`, `overflowY` — `"hidden"` clips content, `"scroll"` creates a native scrollable container with persistent scroll state
 

@@ -30,6 +30,15 @@ describe("<code>", () => {
     expect(renderer.getPaintedText()).toEqual(["ts", "a", "b", "c"])
   })
 
+  it("keeps JSON-looking source strings as source text", () => {
+    const cases = ["true", "null", '{"a":1}', "ordinary text"]
+    for (const code of cases) {
+      const { render, renderer } = createTestRoot()
+      render(<code code={code} language="txt" />)
+      expect(renderer.getPaintedText()).toContain(code)
+    }
+  })
+
   it("renders an empty code block without crashing", () => {
     const { render, renderer } = createTestRoot()
     render(<code code="" language="ts" />)

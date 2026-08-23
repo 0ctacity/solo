@@ -1,5 +1,5 @@
 /**
- * Visual tests for the ChatGPT-style example.
+ * Visual tests for the Waku-style chat example.
  *
  * Renders the real app through the GPU test renderer and captures screenshots
  * into `examples/screenshots/`, so the layout can be inspected after a run.
@@ -72,12 +72,27 @@ describeNative('chat example', () => {
         "Path",
         "Renderer",
         "Native Markdown element",
+        "Host nodes",
+        "Scroll",
+        "When to use",
         "safe-mdx",
-        "React tree",
+        "React tree of div and text",
         "no",
+        "many",
+        "overflow-x on this grid",
+        "Custom MDX components and React state inside a message",
         "pulldown-cmark",
-        "Rust tree",
+        "one native markdown node",
         "yes",
+        "one",
+        "overflow-x inside Rust",
+        "Default chat transcript. Cheapest paint.",
+        "grid table",
+        "one CSS grid of cells",
+        "no",
+        "one per cell",
+        "overflow-x on the flex parent",
+        "Wide comparison tables that must stay readable",
         "typescript",
         "1",
         "const tree = mdxParse(source)",
@@ -101,54 +116,66 @@ describeNative('chat example', () => {
 
     const painted = renderer.getPaintedText()
 
-    // Sidebar chrome.
-    expect(painted).toContain('New chat')
-    expect(painted).toContain('Today')
-    expect(painted).toContain('Port selection from Comet')
-    expect(painted).toContain('Tommy')
+    expect(painted).toContain('New Task')
+    expect(painted).toContain('Search')
+    expect(painted).toContain('Yesterday')
+    expect(painted).toContain('give me a quick overview')
+    expect(painted).toContain('Do anything...')
+    const icons = renderer.findByType('svg')
+    expect(icons.length).toBeGreaterThan(8)
+    expect(
+      icons.every((icon) => String(icon.customProps?.src ?? '').includes('svg'))
+    ).toBe(true)
 
-    // Top bar and composer.
-    expect(painted).toContain('GPUIX')
-    expect(painted).toContain('Ask anything')
+    expect(painted).toContain('DeepSeek V4 Flash')
+    expect(painted).toContain('Local')
+    expect(painted.some((line) => line.includes('control plane for local coding agents'))).toBe(
+      true
+    )
+  })
 
-    // Transcript content, from all three native text components.
-    expect(painted.some((line) => line.includes('cross-element text selection'))).toBe(true)
-    expect(painted.some((line) => line.includes('pub fn resolve_spans'))).toBe(true)
+  it('scrolls the transcript past the first turn', () => {
+    const { render, renderer } = createTestRoot()
+    render(<ChatApp />)
+
+    expect(renderer.getPaintedText()).not.toContain('Do I get hot reload')
+
+    const transcript = renderer.findByType('virtual-list')[0]
+    renderer.nativeSimulateScrollWheel(700, 400, 0, -1400)
+    renderer.scrollToItem(transcript.id, transcript.children.length - 1)
+    renderer.flush()
+
+    expect(renderer.getPaintedText()).toContain('Which models should I wire up?')
+    expect(
+      renderer.getPaintedText().some((line) => line.includes('control plane for local coding agents'))
+    ).toBe(false)
   })
 
   it('selects message text but never sidebar titles', () => {
     const { render, renderer } = createTestRoot()
     render(<ChatApp />)
 
-    // A drag across the sidebar must select nothing: the chrome opts out.
     expect(renderer.dragSelect(30, 300, 240, 320)).toBeNull()
 
-    // A drag across the transcript selects the message.
-    const selected = renderer.dragSelect(700, 96, 1100, 96)
+    const selected = renderer.dragSelect(980, 86, 1110, 86)
     expect(selected).not.toBeNull()
-    expect(selected).not.toContain('Port selection from Comet')
+    expect(selected).not.toContain('Native SDK vs GPUI comparison')
   })
 
-  it('scrolls the transcript', () => {
-    // Compare pixels because visible virtual rows change after the scroll.
-    const top = path.join(SHOTS, 'chat-scroll-before.png')
-    const down = path.join(SHOTS, 'chat-scroll-after.png')
-
+  it('opens the model picker and changes the selected model', () => {
     const { render, renderer } = createTestRoot()
     render(<ChatApp />)
-    expect(renderer.getPaintedText()).not.toContain('React-composed Markdown')
-    renderer.captureScreenshot(top)
 
-    renderer.nativeSimulateScrollWheel(700, 400, 0, -1400)
-    const transcript = renderer.findByType('virtual-list')[0]
-    renderer.scrollToItem(transcript.id, transcript.children.length - 1)
-    renderer.captureScreenshot(down)
+    expect(renderer.getPaintedText()).toContain('DeepSeek V4 Flash')
+    expect(renderer.getPaintedText()).not.toContain('Claude Opus 4.6')
 
-    expect(renderer.getPaintedText()).toContain('React-composed Markdown')
-    expect(
-      renderer.getPaintedText().some((line) => line.includes('cross-element text selection'))
-    ).toBe(false)
-    expect(fs.readFileSync(top).equals(fs.readFileSync(down))).toBe(false)
+    renderer.nativeSimulateClick(480, 724)
+    renderer.flush()
+    expect(renderer.getPaintedText()).toContain('Claude Opus 4.6')
+
+    const shot = path.join(SHOTS, 'chat-model-picker.png')
+    renderer.captureScreenshot(shot)
+    expect(fs.statSync(shot).size).toBeGreaterThan(0)
   })
 
   it('types into the composer and clears on enter', () => {
@@ -164,8 +191,7 @@ describeNative('chat example', () => {
     expect(renderer.getPaintedText()).toContain('h')
 
     renderer.nativeSimulateKeystrokes(textarea.id, 'enter')
-    // Cleared, so the placeholder is back.
-    expect(renderer.getPaintedText()).toContain('Ask anything')
+    expect(renderer.getPaintedText()).toContain('Do anything...')
   })
 
   it('stays painted after render() remounts the tree', async () => {
@@ -177,8 +203,8 @@ describeNative('chat example', () => {
     render(<ChatApp />, { renderer, width: 1180, height: 820 })
     renderer.flush()
     renderer.captureScreenshot(before)
-    expect(renderer.getPaintedText()).toContain('New chat')
-    expect(renderer.getPaintedText()).toContain('GPUIX')
+    expect(renderer.getPaintedText()).toContain('New Task')
+    expect(renderer.getPaintedText()).toContain('give me a quick overview')
 
     render(<ChatApp />, { renderer, width: 1180, height: 820 })
     renderer.flush()
@@ -187,39 +213,27 @@ describeNative('chat example', () => {
     renderer.captureScreenshot(after)
 
     expect(renderer.getRoot()).toBeDefined()
-    expect(renderer.getPaintedText()).toContain('New chat')
-    expect(renderer.getPaintedText()).toContain('GPUIX')
-    expect(renderer.getPaintedText().some((line) => line.includes('cross-element text selection'))).toBe(
-      true
-    )
+    expect(renderer.getPaintedText()).toContain('New Task')
+    expect(renderer.getPaintedText()).toContain('give me a quick overview')
+    expect(
+      renderer.getPaintedText().some((line) => line.includes('control plane for local coding agents'))
+    ).toBe(true)
     expect(fs.statSync(after).size).toBeGreaterThan(0)
   }, 20_000)
 
   it('captures reference screenshots', () => {
     const top = path.join(SHOTS, 'chat-top.png')
-    const table = path.join(SHOTS, 'chat-table-and-diff.png')
-    const scrolled = path.join(SHOTS, 'chat-scrolled.png')
     const collapsed = path.join(SHOTS, 'chat-sidebar-collapsed.png')
 
     const { render, renderer } = createTestRoot()
     render(<ChatApp />)
     renderer.captureScreenshot(top)
 
-    // Mid-transcript: the GFM table and the top of the diff viewer.
-    renderer.nativeSimulateScrollWheel(700, 400, 0, -780)
-    renderer.flush()
-    renderer.captureScreenshot(table)
-
-    renderer.nativeSimulateScrollWheel(700, 400, 0, -720)
-    renderer.flush()
-    renderer.captureScreenshot(scrolled)
-
-    // Collapse the sidebar with its chevron.
-    renderer.nativeSimulateClick(244, 26)
+    renderer.nativeSimulateClick(99, 24)
     renderer.flush()
     renderer.captureScreenshot(collapsed)
 
-    for (const shot of [top, table, scrolled, collapsed]) {
+    for (const shot of [top, collapsed]) {
       expect(fs.existsSync(shot)).toBe(true)
       expect(fs.statSync(shot).size).toBeGreaterThan(0)
     }

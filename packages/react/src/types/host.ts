@@ -17,6 +17,10 @@ export interface StyleDesc {
   gap?: number
   rowGap?: number
   columnGap?: number
+  gridTemplateColumns?: number
+  gridTemplateRows?: number
+  gridColumnMin?: "zero" | "min-content" | "max-content"
+  gridRowMin?: "zero" | "min-content" | "max-content"
 
   width?: DimensionValue
   height?: DimensionValue

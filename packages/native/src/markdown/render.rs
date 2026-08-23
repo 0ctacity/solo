@@ -581,9 +581,11 @@ fn render_table(
             ctx.element_id
         )))
         .w_full()
+        .flex()
+        .min_w_0()
         .overflow_x_scroll()
         .restrict_scroll_to_axis()
-        .child(inner)
+        .child(inner.flex_none())
         .into_any_element()
 }
 

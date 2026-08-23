@@ -1319,6 +1319,56 @@ describeNative("events", () => {
       expect(innerOffset).toEqual([0, 0])
     })
 
+    it("pans overflow-x when the child is wider than the viewport", () => {
+      function WideRow() {
+        return (
+          <div style={{ width: 240, height: 80 }}>
+            <div style={{ width: "100%", height: 80, overflowX: "scroll" }}>
+              <div style={{ width: 800, height: 80, flexShrink: 0 }}>
+                <text>wide row</text>
+              </div>
+            </div>
+          </div>
+        )
+      }
+
+      testRoot.render(<WideRow />)
+
+      const scroller = testRoot.renderer
+        .findByType("div")
+        .find((d) => d.style.overflowX === "scroll")!
+      expect(testRoot.renderer.getScrollOffset(scroller.id)).toEqual([0, 0])
+
+      testRoot.renderer.nativeSimulateScrollWheel(80, 40, -80, 0)
+      const offset = testRoot.renderer.getScrollOffset(scroller.id)
+      expect(offset).not.toBeNull()
+      expect(offset![0]).toBeLessThan(0)
+    })
+
+    it("lets a parent scroller take a vertical wheel over a filled child", () => {
+      function FilledColumn() {
+        return (
+          <div style={{ width: 240, height: 120, overflowY: "scroll" }}>
+            <div style={{ height: 80, width: "100%", backgroundColor: "#1e1e2e" }}>
+              <text>card</text>
+            </div>
+            <div style={{ height: 400 }}>
+              <text>below</text>
+            </div>
+          </div>
+        )
+      }
+
+      testRoot.render(<FilledColumn />)
+      const parent = testRoot.renderer
+        .findByType("div")
+        .find((d) => d.style.overflowY === "scroll")!
+      testRoot.renderer.nativeSimulateScrollWheel(80, 40, 0, -80)
+      const offset = testRoot.renderer.getScrollOffset(parent.id)
+      expect(offset).not.toBeNull()
+      expect(offset![1]).toBeLessThan(0)
+    })
+
     it("should support overflow-y scroll only", () => {
       function VerticalScroll() {
         return (

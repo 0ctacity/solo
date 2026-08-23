@@ -1946,6 +1946,20 @@ pub(crate) fn build_div(
         if let Some(ref active_style) = style.active {
             el = el.active(|refinement| apply_styles(refinement, active_style));
         }
+
+        if crate::style::should_occlude(style) {
+            // BlockMouse (occlude) stops the hit test. The parent scroller
+            // then never sees the wheel. In-flow fills must use
+            // BlockMouseExceptScroll. Keep occlude for overlays that steal
+            // the pointer: absolute, fixed, or pointerEvents: "auto".
+            let steal_scroll = matches!(style.position.as_deref(), Some("absolute") | Some("fixed"))
+                || style.pointer_events.as_deref() == Some("auto");
+            el = if steal_scroll {
+                el.occlude()
+            } else {
+                el.block_mouse_except_scroll()
+            };
+        }
     }
 
     // ── Overflow: scroll ─────────────────────────────────────────────
@@ -1954,6 +1968,11 @@ pub(crate) fn build_div(
     //
     // CSS precedence: axis-specific props (overflowX/Y) override the shorthand
     // (overflow). E.g. { overflow: "scroll", overflowY: "hidden" } → scroll X only.
+    //
+    // overflow-x only works as a flex viewport. Default display is Block, so a
+    // wide child fills the parent instead of overflowing. Zed's code-block path:
+    // flex + min_w_0 on the scroller, flex_none on the child.
+    let mut overflow_x_only = false;
     if let Some(ref style) = element.style {
         // Resolve each axis: axis-specific overrides shorthand.
         let resolved_x = style.overflow_x.as_deref().or(style.overflow.as_deref());
@@ -1965,10 +1984,12 @@ pub(crate) fn build_div(
         if needs_scroll_x && needs_scroll_y {
             el = el.overflow_scroll();
         } else if needs_scroll_x {
-            // GPUI remaps a vertical wheel onto overflow-x unless this is set.
-            // That steals the parent scroller when the pointer is over a wide
-            // child (code, tables). Match Zed's markdown code-block path.
-            el = el.overflow_x_scroll().restrict_scroll_to_axis();
+            overflow_x_only = true;
+            el = el
+                .flex()
+                .min_w_0()
+                .overflow_x_scroll()
+                .restrict_scroll_to_axis();
         } else if needs_scroll_y {
             el = el.overflow_y_scroll();
         }
@@ -2204,7 +2225,12 @@ pub(crate) fn build_div(
     // Children
     let child_ids: Vec<u64> = element.children.clone();
     for child_id in child_ids {
-        el = el.child(build_element(child_id, ctx, window, cx));
+        let child = build_element(child_id, ctx, window, cx);
+        el = if overflow_x_only {
+            el.child(gpui::div().flex_none().child(child))
+        } else {
+            el.child(child)
+        };
     }
 
     el.into_any_element()
@@ -2284,8 +2310,26 @@ pub(crate) fn apply_height<E: gpui::Styled>(el: E, dim: &crate::style::Dimension
 }
 
 pub(crate) fn apply_styles<E: gpui::Styled>(mut el: E, style: &StyleDesc) -> E {
-    if style.display.as_deref() == Some("flex") {
-        el = el.flex();
+    match style.display.as_deref() {
+        Some("flex") => el = el.flex(),
+        Some("grid") => el = el.grid(),
+        _ => {}
+    }
+    if let Some(cols) = style.grid_template_columns {
+        let count = cols.round().clamp(1.0, 64.0) as u16;
+        el = match style.grid_column_min.as_deref() {
+            Some("min-content") => el.grid_cols_min_content(count),
+            Some("max-content") => el.grid_cols_max_content(count),
+            _ => el.grid_cols(count),
+        };
+    }
+    if let Some(rows) = style.grid_template_rows {
+        let count = rows.round().clamp(1.0, 64.0) as u16;
+        el = match style.grid_row_min.as_deref() {
+            Some("min-content") => el.grid_rows_min_content(count),
+            Some("max-content") => el.grid_rows_max_content(count),
+            _ => el.grid_rows(count),
+        };
     }
     if style.flex_direction.as_deref() == Some("column") {
         el = el.flex_col();

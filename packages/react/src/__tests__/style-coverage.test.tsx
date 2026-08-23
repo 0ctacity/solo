@@ -150,6 +150,47 @@ describe("style props reach the renderer", () => {
     )
   })
 
+  it("lays out children with display grid", () => {
+    const cell = (label: string, width: number) => (
+      <div
+        style={{
+          width,
+          height: 40,
+          backgroundColor: "#3b82f6",
+          alignItems: "center",
+          justifyContent: "center",
+        }}
+      >
+        <text style={{ color: "#ffffff", fontSize: 14 }}>{label}</text>
+      </div>
+    )
+    comparePixels(
+      "display-grid",
+      <div style={{ display: "flex", backgroundColor: "#101010", height: "100%", padding: 20 }}>
+        <div style={{ display: "flex", flexDirection: "column" }}>
+          {cell("a", 80)}
+          {cell("b", 160)}
+          {cell("c", 80)}
+          {cell("d", 160)}
+        </div>
+      </div>,
+      <div style={{ display: "flex", backgroundColor: "#101010", height: "100%", padding: 20 }}>
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: 2,
+            gridColumnMin: "max-content",
+          }}
+        >
+          {cell("a", 80)}
+          {cell("b", 160)}
+          {cell("c", 80)}
+          {cell("d", 160)}
+        </div>
+      </div>
+    )
+  })
+
   it("focuses an element with autoFocus so it receives keys", () => {
     // `autoFocus` was declared in Props and dropped by the reconciler, so an
     // <input> was dead until clicked.

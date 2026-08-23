@@ -109,6 +109,10 @@ pub struct StyleDesc {
     pub gap: Option<f64>,
     pub row_gap: Option<f64>,
     pub column_gap: Option<f64>,
+    pub grid_template_columns: Option<f64>,
+    pub grid_template_rows: Option<f64>,
+    pub grid_column_min: Option<String>,
+    pub grid_row_min: Option<String>,
 
     // Sizing - now supports both numbers and strings like "100%" or "auto"
     pub width: Option<DimensionValue>,
@@ -256,4 +260,35 @@ pub fn rgba_to_hex(r: f32, g: f32, b: f32, a: f32) -> u32 {
 pub fn parse_color_hex(color: &str) -> Option<u32> {
     let (r, g, b, a) = parse_color(color)?;
     Some(rgba_to_hex(r, g, b, a))
+}
+
+/// Whether this style should insert a mouse hitbox.
+///
+/// GPUI only hit-tests elements that own a hitbox. A painted overlay without
+/// one stays visible while clicks fall through. CSS `pointer-events` maps
+/// here: `none` never blocks, `auto` always does. Unset follows the painted
+/// surface: a fill or an absolute/fixed box blocks.
+///
+/// In-flow fills use BlockMouseExceptScroll so a parent scroller still gets
+/// the wheel. `occlude()` (BlockMouse) is only for overlays that steal it.
+pub fn should_occlude(style: &StyleDesc) -> bool {
+    match style.pointer_events.as_deref() {
+        Some("none") => return false,
+        Some("auto") => return true,
+        _ => {}
+    }
+    if matches!(style.position.as_deref(), Some("absolute") | Some("fixed")) {
+        return true;
+    }
+    let fill = style
+        .background_color
+        .as_deref()
+        .or(style.background.as_deref());
+    let Some(color) = fill else {
+        return false;
+    };
+    match parse_color_hex(color) {
+        Some(hex) => hex & 0xFF > 0,
+        None => true,
+    }
 }
