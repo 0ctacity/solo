@@ -184,14 +184,16 @@ describeNative('chat example', () => {
 
     const textarea = renderer.findByType('textarea')[0]
     expect(textarea).toBeDefined()
-    renderer.nativeSimulateKeystrokes(textarea.id, 'h i')
-    expect(renderer.getPaintedText()).toContain('hi')
-
-    renderer.nativeSimulateKeystrokes(textarea.id, 'backspace')
-    expect(renderer.getPaintedText()).toContain('h')
+    renderer.nativeSimulateKeystrokes(textarea.id, 'h e l l o')
+    expect(renderer.getPaintedText()).toContain('hello')
 
     renderer.nativeSimulateKeystrokes(textarea.id, 'enter')
     expect(renderer.getPaintedText()).toContain('Do anything...')
+
+    const transcript = renderer.findByType('virtual-list')[0]
+    renderer.scrollToItem(transcript.id, transcript.children.length - 1)
+    renderer.flush()
+    expect(renderer.getPaintedText()).toContain('hello')
   })
 
   it('stays painted after render() remounts the tree', async () => {

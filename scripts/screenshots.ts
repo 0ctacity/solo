@@ -19,7 +19,6 @@ const OUT = path.join(ROOT, 'docs', 'images')
 /** `[source screenshot, committed name]`, relative to the repo root. */
 const CURATED: [string, string][] = [
   ['examples/screenshots/chat-top.png', 'chat-app.png'],
-  ['examples/screenshots/chat-table-and-diff.png', 'chat-diff.png'],
   ['packages/react/screenshots/showcase.png', 'showcase.png'],
   ['packages/react/screenshots/markdown-document.png', 'markdown.png'],
   ['packages/react/screenshots/code-typescript.png', 'code.png'],

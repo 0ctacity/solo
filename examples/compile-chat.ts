@@ -1,5 +1,5 @@
 /**
- * Compile the ChatGPT-style example into a standalone Bun binary.
+ * Compile the Waku-style chat example into a standalone Bun binary.
  * On macOS also wraps it in a .app so Finder and Dock can show a custom icon.
  */
 import { spawnSync } from 'node:child_process'
@@ -108,7 +108,7 @@ async function compileBinary(): Promise<void> {
       title: APP_NAME,
       publisher: 'GPUIX',
       version: '0.1.0',
-      description: 'ChatGPT-style desktop app built with GPUIX',
+      description: 'Waku-style desktop app built with GPUIX',
     }
   }
 

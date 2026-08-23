@@ -11,7 +11,7 @@
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
-import React, { useMemo, useState } from 'react'
+import React, { useEffect, useMemo, useRef, useState } from 'react'
 import {
   render,
   Select,
@@ -19,6 +19,7 @@ import {
   SelectItem,
   SelectLabel,
   SelectTrigger,
+  useGpuix,
   type StyleDesc,
 } from '@gpuix/react'
 import { SafeMdxRenderer } from 'safe-mdx'
@@ -709,12 +710,15 @@ function expandTurns(count: number): Turn[] {
 function Transcript({
   turns,
   includeSafeMdx = false,
+  listRef,
 }: {
   turns: Turn[]
   includeSafeMdx?: boolean
+  listRef?: React.Ref<{ id: number }>
 }) {
   return (
     <virtual-list
+      ref={listRef}
       overdraw={240}
       estimatedItemHeight={220}
       style={{ flexGrow: 1, minHeight: 0, width: '100%' }}
@@ -733,7 +737,7 @@ function Transcript({
         >
           {turn.kind === 'user' && <UserTurn text={turn.text} />}
           {turn.kind === 'fold' && <WorkedFor duration={turn.duration} />}
-          {turn.kind === 'markdown' && <markdown source={turn.source} theme={CHAT_THEME} />}
+          {turn.kind === 'markdown' && <SafeMdxContent source={turn.source} />}
           {turn.kind === 'code' && (
             <code code={turn.source} language={turn.language} showLineNumbers theme={CHAT_THEME} />
           )}
@@ -1174,7 +1178,7 @@ function Composer({
 }: {
   value: string
   onChange: (next: string) => void
-  onSend: () => void
+  onSend: (text: string) => void
   model: string
   onModelChange: (next: string) => void
   reasoning: string
@@ -1185,6 +1189,11 @@ function Composer({
   onModeChange: (next: 'build' | 'plan') => void
 }) {
   const ready = value.trim().length > 0
+  const send = (text: string) => {
+    const next = text.trim()
+    if (!next) return
+    onSend(next)
+  }
   return (
     <div
       style={{
@@ -1232,7 +1241,7 @@ function Composer({
             paddingRight: 10,
           }}
           onChange={(event) => onChange(event.value ?? '')}
-          onSubmit={() => ready && onSend()}
+          onSubmit={(event) => send(event.value ?? value)}
         />
         <div
           style={{
@@ -1262,7 +1271,7 @@ function Composer({
               backgroundColor: ready ? C.inverse : C.overlayStrong,
               hover: ready ? { opacity: 0.9 } : undefined,
             }}
-            onClick={() => ready && onSend()}
+            onClick={() => send(value)}
           >
             <Icon name="send" size={16} color={ready ? C.onInverse : C.ghost} />
           </div>
@@ -1592,8 +1601,18 @@ const SAFE_MDX_COMPONENTS = {
   ),
 }
 
+const mdxCache = new Map<string, ReturnType<typeof mdxParse>>()
+
+function parseMdx(source: string) {
+  const cached = mdxCache.get(source)
+  if (cached) return cached
+  const tree = mdxParse(source)
+  mdxCache.set(source, tree)
+  return tree
+}
+
 function SafeMdxContent({ source }: { source: string }) {
-  const mdast = useMemo(() => mdxParse(source), [source])
+  const mdast = useMemo(() => parseMdx(source), [source])
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16, width: '100%' }}>
       <SafeMdxRenderer
@@ -1646,8 +1665,22 @@ export function ChatApp({
   const [workspace, setWorkspace] = useState('local')
   const [branch, setBranch] = useState('main')
 
-  const turns = useMemo(() => expandTurns(turnCount), [turnCount])
+  const [turns, setTurns] = useState(() => expandTurns(turnCount))
+  const listRef = useRef<{ id: number } | null>(null)
+  const skipScroll = useRef(true)
+  const { renderer } = useGpuix()
   const title = CONVERSATIONS.find((conversation) => conversation.id === activeId)?.title ?? ''
+  const rowCount = turns.length + (includeSafeMdx ? 1 : 0)
+
+  useEffect(() => {
+    if (skipScroll.current) {
+      skipScroll.current = false
+      return
+    }
+    const id = listRef.current?.id
+    if (id == null || !renderer?.scrollToItem) return
+    renderer.scrollToItem(id, rowCount - 1)
+  }, [renderer, rowCount])
 
   return (
     <div
@@ -1686,11 +1719,14 @@ export function ChatApp({
           title={title}
           turnCount={turns.length}
         />
-        <Transcript turns={turns} includeSafeMdx={includeSafeMdx} />
+        <Transcript turns={turns} includeSafeMdx={includeSafeMdx} listRef={listRef} />
         <Composer
           value={draft}
           onChange={setDraft}
-          onSend={() => setDraft('')}
+          onSend={(text) => {
+            setTurns((current) => [...current, { kind: 'user', text }])
+            setDraft('')
+          }}
           model={model}
           onModelChange={setModel}
           reasoning={reasoning}
@@ -1719,8 +1755,8 @@ const isEntryPoint =
     : process.argv[1]?.endsWith('chat.tsx')
 
 if (isEntryPoint) {
-  render(<ChatApp turnCount={10_000} includeSafeMdx />, {
-    title: 'Waku · 10,000 messages',
+  render(<ChatApp turnCount={5_000} includeSafeMdx />, {
+    title: 'Waku · 5,000 messages',
     width: 1180,
     height: 820,
     titlebarTransparent: true,
