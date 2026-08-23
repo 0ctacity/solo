@@ -1,5 +1,109 @@
 # Changelog
 
+## 0.3.0
+
+1. **CSS grid on `div`** — `display: "grid"` plus `gridTemplateColumns` maps to GPUI's Taffy grid. Use `gridColumnMin: "max-content"` for tables so each column is as wide as its widest cell.
+
+   ```tsx
+   <div
+     style={{
+       display: 'grid',
+       gridTemplateColumns: 3,
+       gridColumnMin: 'max-content',
+       rowGap: 1,
+       columnGap: 1,
+     }}
+   >
+     {cells}
+   </div>
+   ```
+
+   `gridTemplateRows` and `gridRowMin` work the same on the other axis.
+
+2. **Window chrome at open time** — `render()` now honors a transparent titlebar, traffic-light position, and a blurred or transparent window background. Traffic lights can sit in a sidebar. The native titlebar does not take a strip above the app.
+
+   ```tsx
+   import { render } from '@gpuix/react'
+
+   render(<App />, {
+     title: 'Waku',
+     width: 1180,
+     height: 820,
+     titlebarTransparent: true,
+     windowBackground: 'blurred',
+     trafficLightX: 16,
+     trafficLightY: 17,
+   })
+   ```
+
+   `windowBackground` is `"opaque"` (default), `"transparent"`, or `"blurred"`. The older `transparent: true` flag still maps to a transparent background when `windowBackground` is unset.
+
+3. **`<diff>` flows with its parent** — it no longer owns a scroller unless you pass `scroll`. Nested scrolling is not supported in GPUI. A parent that already scrolls used to fight the inner `list()`. The default is now a column of rows, same as `<code>`.
+
+   Use `maxLines` to keep a long patch short. Show more fires `onShowMore` with the hidden line count. Clear `maxLines` in that handler to reveal the rest.
+
+   ```tsx
+   const [open, setOpen] = useState(false)
+
+   <diff
+     patch={unifiedPatch}
+     wordDiff
+     maxLines={open ? undefined : 24}
+     onShowMore={() => setOpen(true)}
+   />
+   ```
+
+   Pass `scroll` and a bounded height only for a dedicated full-window viewer. That path still virtualizes with GPUI's `list()`.
+
+4. **Debug frame overlay** — see draw time on a live window. The overlay paints after layout. It is not a React element.
+
+   ```tsx
+   import { render } from '@gpuix/react'
+
+   render(<App />, { title: 'My App', debugFrameOverlay: 'full' })
+   ```
+
+   Or call the renderer:
+
+   ```ts
+   renderer.setDebugFrameOverlay('full')
+   renderer.cycleDebugFrameOverlay()
+   renderer.resetDebugFrameOverlayStats()
+   renderer.getDebugFrameOverlay()
+   ```
+
+   Modes are `hidden` (default), `minimal` (last draw time), and `full` (`CUR`, `1%`, `10%`, `MAX`, `FRAMES`). The readout is **draw time**, not FPS. `8.3 MS` is about 120 Hz.
+
+5. **Quit when the last window closes** — on macOS the red traffic-light button used to destroy the window and leave the bun/Node process running. Closing the last window now quits AppKit. The next `tick()` returns `false`. `render()` exits the process, so the Dock icon goes away.
+
+6. **Overlays block hits, and `pointerEvents` works** — a filled or absolutely positioned `div` now inserts a blocking hitbox. Clicks, hovers, and scroll no longer reach controls under a Select, Combobox, or any other card.
+
+   Set `pointerEvents: "none"` to opt out. Set `pointerEvents: "auto"` to block even when the element has no fill.
+
+7. **Opaque Select, Combobox, and Tooltip surfaces** — `FloatingLayer` now defaults to `backgroundColor: "#1A1A1A"` so window blur and page content do not show through the card. Pass your own `style.backgroundColor` to override.
+
+8. **`<svg>` icons paint on the first frame** — file paths are read from disk. `data:image/svg+xml` URLs from Bun/Vitest `import … with { type: 'file' }` are percent-decoded. The icon paints with `svg().data(...)`.
+
+9. **`bun --hot` remounts no longer paint a black window** — `render()` now unmounts the previous React root with `flushSync`, so the old tree is gone before the new one is created.
+
+10. **Cmd+Delete and Cmd+Backspace in `<input>` and `<textarea>`** — on macOS these match the system text field. Cmd+Backspace deletes to the start of the line. Cmd+Delete deletes to the end of the line.
+
+11. **Vertical wheel over `overflowX: "scroll"` stays on the parent** — GPUI remaps mouse-wheel Y onto overflow-x unless `restrict_scroll_to_axis` is set. A parent that contains `<code>` or a markdown table then used to jump on both axes. Trackpad X still pans the wide child.
+
+    ```tsx
+    <div style={{ overflowY: 'scroll' }}>
+      <code code={wideSource} language="ts" />
+    </div>
+    ```
+
+12. **Parent scroller takes the wheel over a filled in-flow `div`** — a `backgroundColor` used to insert `occlude()` (BlockMouse), so `<virtual-list>` never saw the wheel over text or a card. In-flow fills now use `block_mouse_except_scroll()`. Absolute, fixed, and `pointerEvents: "auto"` still steal the wheel.
+
+13. **macOS scroll stays at the display rate on expensive frames** — `tick()` used to sleep a fixed 8ms after every pump. A 10ms scroll frame plus that sleep ran at about 55fps on a 120Hz display. The next pump now waits only the leftover budget.
+
+14. **Faster first React mount** — `applyBatch` sends styles and custom props as JSON values instead of double-encoded strings. A 10,000-row list spent most of its mount time parsing escaped strings twice. Legacy string payloads still decode.
+
+15. **Raw custom-prop values stay intact** — `setCustomProp` still treats the payload as a JSON string. After the batch started carrying objects, a raw `"top"` or `"true"` was parsed again and threw. `<anchored side="top">` never committed. The queue now uses `setCustomPropValue` for a raw JSON value.
+
 ## 0.2.0
 
 1. **Selectable text everywhere, plus `<code>`, `<diff>` and `<markdown>`** — every string GPUIX paints can be selected with a drag and copied with Cmd+C. A drag can start in a plain `<text>` and end inside a code block; the selection spans both.
