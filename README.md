@@ -195,8 +195,9 @@ const renderer = createRenderer((event) => {
   console.log('Event:', event.elementId, event.eventType)
 })
 
-// Initialize GPUI (non-blocking — returns immediately)
+// Initialize GPUI (non-blocking; returns immediately)
 renderer.init({ title: 'My App', width: 800, height: 600 })
+renderer.setWindowTitle('My App') // change the title later
 
 // Create React root and render
 const root = createRoot(renderer)
@@ -274,7 +275,7 @@ renderer.getScrollOffset(elementId)       // returns [x, y] or null
 
 ## Virtual lists
 
-Use `<virtual-list>` for long, variable-height collections such as chat transcripts. React and Rust retain every row, but GPUI only builds and lays out rows near the viewport.
+Use `<virtual-list>` for **long, variable-height collections** such as chat transcripts. React and Rust retain every row, but GPUI only builds, lays out, and paints rows near the viewport.
 
 ```tsx
 function Transcript({ messages }: { messages: Message[] }) {
@@ -293,7 +294,7 @@ function Transcript({ messages }: { messages: Message[] }) {
 }
 ```
 
-The list needs a bounded height or bounded flex space. Its direct children are the rows and can contain any GPUIX host or custom element.
+The list needs a **bounded height** or bounded flex space. Its direct children are rows and can contain any GPUIX host or custom element.
 
 | Prop | Default | Purpose |
 |---|---:|---|
@@ -301,6 +302,107 @@ The list needs a bounded height or bounded flex space. Its direct children are t
 | `followTail` | `false` | Follow appended rows until the user scrolls away |
 | `overdraw` | `512` | Extra pixels built outside the viewport |
 | `estimatedItemHeight` | none | Gives unmeasured rows an initial height estimate |
+
+### How virtualization works
+
+**React reconciliation stays normal.** The complete keyed child list crosses the mutation protocol and remains in Rust's retained tree. GPUIX defers only the expensive GPUI element construction, layout, and paint work.
+
+```text
+React Fiber + Rust RetainedTree    all row IDs, props, text, and events
+                 │
+                 ▼
+          GPUI ListState          row count and measured height cache
+                 │
+                 ▼ visible indexes plus overdraw
+          cx.processor            re-enters GpuixView after root render
+                 │
+                 ▼
+          fresh BuildCtx          builds only the requested React subtree
+                 │
+                 ▼
+       GPUI layout and paint      visible rows only
+```
+
+GPUI measures a row when it enters the viewport. `estimatedItemHeight` gives unseen rows an approximate height so the scrollbar is useful before every row has been visited. The measured height replaces the estimate automatically.
+
+When a retained descendant changes, GPUIX marks its direct row for remeasurement. Appending, removing, or reordering keyed rows keeps measurements for rows whose IDs did not change.
+
+### Row boundaries
+
+Each **direct host child** is one virtual row. Give every row a stable React key and one host root:
+
+```tsx
+<virtual-list style={{ height: 500 }}>
+  {messages.map((message) => (
+    <div key={message.id} style={{ paddingBottom: 24 }}>
+      <Message message={message} />
+    </div>
+  ))}
+</virtual-list>
+```
+
+A row can contain nested `<div>`, `<text>`, `<markdown>`, `<code>`, `<diff>`, `<input>`, and `<textarea>` elements. Focusable rows stay active when they move offscreen, so keyboard input and native editor state are preserved.
+
+### Chat tail behavior
+
+Combine `alignment="bottom"` and `followTail` for a chat transcript:
+
+```tsx
+<virtual-list
+  alignment="bottom"
+  followTail
+  estimatedItemHeight={220}
+  style={{ flexGrow: 1, minHeight: 0 }}
+>
+  {turns.map((turn) => (
+    <ChatTurn key={turn.id} turn={turn} />
+  ))}
+</virtual-list>
+```
+
+The list follows new rows while the user is at the bottom. Scrolling upward pauses tail following. Returning to the bottom enables it again. A streaming final row is remeasured as its content grows.
+
+### Programmatic scrolling
+
+Use a ref to call the same renderer scroll methods as a plain scroll container:
+
+```tsx
+function Results({ rows }: { rows: Result[] }) {
+  const renderer = useGpuixRequired()
+  const listRef = useRef<{ id: number } | null>(null)
+
+  const reveal = (index: number) => {
+    if (listRef.current) {
+      renderer.scrollToItem?.(listRef.current.id, index)
+    }
+  }
+
+  return (
+    <>
+      <virtual-list ref={listRef} style={{ height: 400 }}>
+        {rows.map((row) => (
+          <ResultRow key={row.id} row={row} />
+        ))}
+      </virtual-list>
+      <div onClick={() => reveal(rows.length - 1)}>Reveal latest</div>
+    </>
+  )
+}
+```
+
+`scrollTo`, `scrollToItem`, and `getScrollOffset` all support virtual lists.
+
+### Performance model
+
+| Work | Plain scroll container | `<virtual-list>` |
+|---|---|---|
+| React Fiber nodes | All rows | All rows |
+| Rust retained nodes | All rows | All rows |
+| GPUI row construction | All rows | Visible rows plus overdraw |
+| Layout and paint | All rows | Visible rows plus overdraw |
+| Height metadata | None | One lightweight entry per row |
+
+Virtualization removes the **per-render GPUI cost**, not the memory used by React and the retained tree. For normal chat histories this is the useful tradeoff. Collections with millions of rows still need application-level paging or a data-owning native element.
 
 ## Text input
 
@@ -331,6 +433,189 @@ inactive. Override its colour through the shared native theme:
 ```tsx
 <input theme={{ caret: '#22c55e' }} />
 ```
+
+## Focus and keyboard navigation
+
+Focus is a **native GPUI concept**. GPUIX connects stable React element IDs to
+persistent `gpui::FocusHandle` values, so focus survives React rerenders:
+
+```text
+React <div tabIndex={0}>
+            │
+            ▼
+Retained element ID ► persistent gpui::FocusHandle ► keyboard/action dispatch
+            ▲
+            │
+      React rerenders
+```
+
+Inputs and textareas join the normal tab order automatically. Add `tabIndex` to
+a `div` when it should receive keyboard focus:
+
+```tsx
+<div
+  tabIndex={0}
+  onFocus={() => setActive(true)}
+  onBlur={() => setActive(false)}
+  onKeyDown={(event) => {
+    if (event.key === 'enter') submit()
+  }}
+>
+  Submit
+</div>
+```
+
+| Prop | Behavior |
+|---|---|
+| `tabIndex={0}` | Joins the normal Tab order |
+| `tabIndex={n}` | Uses `n` as its GPUI tab-order index |
+| `tabIndex={-1}` | Skipped by Tab, but focusable by click or renderer API |
+| `autoFocus` | Takes focus once, when its native focus handle is created |
+
+`Tab` calls GPUI's `window.focus_next()`. `Shift+Tab` calls
+`window.focus_prev()`. This navigation stays in Rust and does not make a
+JavaScript round trip.
+
+Use a ref for imperative focus:
+
+```tsx
+const buttonRef = useRef<{ id: number }>(null)
+
+function focusButton() {
+  if (buttonRef.current) renderer.focusElement(buttonRef.current.id)
+}
+
+<div ref={buttonRef} tabIndex={-1}>Focused on demand</div>
+```
+
+Adding `onKeyDown`, `onKeyUp`, `onFocus`, or `onBlur` creates a persistent focus
+handle. Add `tabIndex` as well when the element must be reachable with Tab.
+Removing `tabIndex` removes the element from the tab order.
+
+## Headless controls
+
+`@gpuix/react` includes **shadcn-shaped compound components** for Select,
+Combobox, and Tooltip. They provide behavior and native GPUI placement, but no
+visual theme. Every visible part accepts normal GPUIX props and styles.
+
+### Select
+
+```tsx
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectLabel,
+  SelectTrigger,
+  SelectValue,
+} from '@gpuix/react'
+
+<Select value={model} onValueChange={setModel}>
+  <SelectTrigger style={{ width: 200, height: 36, padding: 8 }}>
+    <SelectValue placeholder="Select a model" />
+  </SelectTrigger>
+
+  <SelectContent
+    side="bottom"
+    sideOffset={6}
+    style={{ width: 200, maxHeight: 240, overflowY: 'scroll' }}
+  >
+    <SelectGroup>
+      <SelectLabel>Models</SelectLabel>
+      <SelectItem
+        value="sonnet"
+        style={({ selected, highlighted }) => ({
+          padding: 8,
+          backgroundColor: highlighted
+            ? '#334155'
+            : selected
+              ? '#1e3a5f'
+              : '#111827',
+        })}
+      >
+        Sonnet
+      </SelectItem>
+      <SelectItem value="opus">Opus</SelectItem>
+    </SelectGroup>
+  </SelectContent>
+</Select>
+```
+
+The trigger participates in normal tab navigation. Opening the Select focuses
+its content. `Up`, `Down`, `Ctrl+P`, `Ctrl+N`, `Enter`, and `Escape` control the
+menu. Closing it restores focus to the trigger. Disabled items are skipped.
+
+### Combobox
+
+Combobox uses the native GPUIX input for text editing, IME, clipboard, and
+focus. Values are strings. The default filter places prefix matches before
+substring matches and keeps the original order inside each group.
+
+```tsx
+import {
+  Combobox,
+  ComboboxContent,
+  ComboboxEmpty,
+  ComboboxInput,
+  ComboboxItem,
+  ComboboxList,
+} from '@gpuix/react'
+
+const frameworks = ['Next.js', 'SvelteKit', 'Astro']
+
+<Combobox
+  items={frameworks}
+  value={framework}
+  onValueChange={setFramework}
+>
+  <ComboboxInput
+    placeholder="Select a framework"
+    style={{ width: 220, height: 36, padding: 8 }}
+  />
+  <ComboboxContent style={{ width: 220 }}>
+    <ComboboxEmpty>No frameworks found.</ComboboxEmpty>
+    <ComboboxList>
+      {(item) => (
+        <ComboboxItem key={item} value={item}>
+          {item}
+        </ComboboxItem>
+      )}
+    </ComboboxList>
+  </ComboboxContent>
+</Combobox>
+```
+
+The input keeps focus while the menu is open. `Up` and `Down` move through the
+filtered options, `Enter` selects, and `Escape` closes the menu.
+
+### Tooltip
+
+```tsx
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@gpuix/react'
+
+<TooltipProvider delayDuration={350}>
+  <Tooltip>
+    <TooltipTrigger asChild>
+      <div tabIndex={0} style={{ padding: 8 }}>Copy</div>
+    </TooltipTrigger>
+    <TooltipContent side="top" sideOffset={6}>
+      Copy message
+    </TooltipContent>
+  </Tooltip>
+</TooltipProvider>
+```
+
+`asChild` merges tooltip behavior into one GPUIX host element and preserves its
+ref. Hover or keyboard focus opens the tooltip. Blur or `Escape` closes it.
+
+Select, Combobox, and Tooltip content use GPUI's deferred `anchored()` layer.
+Floating content snaps inside the window and occludes controls behind it.
 
 ## Text selection
 
@@ -468,29 +753,58 @@ Bash, TOML, YAML, Markdown, HTML, CSS, C.
 
 ## Supported Elements
 
-| Element     | Description                                      |
-|-------------|--------------------------------------------------|
-| `div`       | Container with flexbox layout                    |
-| `text`      | Text content, selectable                         |
-| `code`      | Syntax-highlighted code block                    |
-| `diff`      | Virtualized unified diff viewer                  |
-| `markdown`  | GitHub-flavoured markdown                        |
-| `input`     | Native single-line text editor                   |
-| `textarea`  | Native multiline, auto-growing text editor       |
-| `img`       | Images                                           |
-| `anchored`  | Positioned overlay                               |
-| `svg`       | Tintable SVGs loaded from local files            |
-| `canvas`    | Custom drawing (planned)                         |
+| Element         | Description                                      |
+|-----------------|--------------------------------------------------|
+| `div`           | Container with flexbox layout                    |
+| `text`          | Text content, selectable                         |
+| `code`          | Syntax-highlighted code block                    |
+| `diff`          | Virtualized unified diff viewer                  |
+| `markdown`      | GitHub-flavoured markdown                        |
+| `input`         | Native single-line text editor                   |
+| `textarea`      | Native multiline, auto-growing text editor       |
+| `virtual-list`  | Long collections; only visible rows are built    |
+| `img`           | Local raster or SVG images                       |
+| `svg`           | Tintable monochrome SVG icons from local files   |
+| `anchored`      | Positioned overlay                               |
+| `canvas`        | Custom drawing (planned)                         |
 
-SVGs use GPUI's monochrome icon renderer. Set the local file path with `src`,
-the size with `width` and `height`, and the tint with `color`:
+## Images and icons
+
+Both elements take a **filesystem path**, not a URL. Resolve the file with
+`fileURLToPath` or `path.join` and pass that string as `src`.
+
+### `<img>`
+
+`<img>` paints through GPUI's image element. It loads **PNG, JPEG, WebP, GIF,
+and SVG** from disk. SVG here is a full-colour image, not a tintable icon.
+
+```tsx
+<img
+  src={fileURLToPath(new URL('./photo.png', import.meta.url))}
+  objectFit="cover"
+  style={{ width: 240, height: 140, borderRadius: 12 }}
+/>
+```
+
+`objectFit` matches CSS: `"contain"` (default), `"cover"`, `"fill"`,
+`"scaleDown"`, or `"none"`. An empty `src` or a failed load shows a fallback
+placeholder instead of crashing.
+
+### `<svg>`
+
+`<svg>` uses GPUI's **monochrome icon renderer**. The file is drawn as a single
+shape and tinted with `style.color`. Use this for toolbar icons, not for
+full-colour artwork.
 
 ```tsx
 <svg
-  src="/absolute/path/to/search.svg"
+  src={fileURLToPath(new URL('./assets/icons/search.svg', import.meta.url))}
   style={{ width: 16, height: 16, color: '#b4b4b4' }}
 />
 ```
+
+The chat example builds every sidebar and composer icon this way. Keep the SVG
+simple: one `currentColor` stroke or fill works best.
 
 ## Supported Events
 
@@ -514,7 +828,9 @@ the size with `width` and `height`, and the tint with `color`:
 | Line click | `onLineClick` | `value`, `oldLine`, `newLine` — `<diff>` only |
 | Link click | `onLinkClick` | `value` (URL) — `<markdown>` only |
 
-Keyboard and focus events require the element to be focusable (has `onKeyDown`, `onKeyUp`, `onFocus`, or `onBlur` listeners). GPUI creates a `FocusHandle` automatically for these elements.
+Keyboard and focus listeners create a persistent GPUI `FocusHandle`
+automatically. A listener alone does not put a `div` in the Tab order; add
+`tabIndex={0}` for that. Inputs and textareas already use tab index `0`.
 
 ## Supported Styles
 
@@ -535,19 +851,44 @@ CSS-like styling via the `style` prop:
 </div>
 ```
 
-**Layout:** `display`, `flexDirection`, `flexGrow`, `flexShrink`, `alignItems`, `justifyContent`, `gap`
+**Layout:** `display`, `flexDirection`, `flexWrap`, `flexGrow`, `flexShrink`, `alignItems`, `alignSelf`, `justifyContent`, `gap`, `rowGap`, `columnGap`
 
 **Sizing:** `width`, `height`, `minWidth`, `minHeight`, `maxWidth`, `maxHeight` — accepts pixels (number) or percentages (string like `"100%"`)
 
 **Spacing:** `padding`, `paddingTop/Right/Bottom/Left`, `margin`, `marginTop/Right/Bottom/Left`
 
+**Position:** `position` (`"relative"` | `"absolute"`), `top`, `right`, `bottom`, `left`
+
 **Visual:** `backgroundColor`, `color`, `opacity`, `cursor`, `borderRadius`, `borderWidth`, `borderColor`
 
 **Overflow:** `overflow`, `overflowX`, `overflowY` — `"hidden"` clips content, `"scroll"` creates a native scrollable container with persistent scroll state
 
-**Text:** `fontSize`, `fontFamily`, `fontWeight`, `whiteSpace`, `textOverflow`, `lineClamp`
+**Text:** `fontSize`, `fontFamily`, `fontWeight`, `textAlign`, `lineHeight`, `whiteSpace`, `textOverflow`, `lineClamp`
 
 **Selection:** `userSelect` (`"text"` | `"none"`), `selectionColor` — both inherit down the tree
+
+### Hover and active
+
+`hover` and `active` are **nested style objects**. GPUI applies them natively
+when the pointer is over the element or the mouse is down. There is no
+JavaScript round trip.
+
+```tsx
+<div
+  style={{
+    backgroundColor: '#313244',
+    borderRadius: 8,
+    padding: 12,
+    hover: { backgroundColor: '#45475a' },
+    active: { backgroundColor: '#585b70' },
+  }}
+>
+  Press
+</div>
+```
+
+Nesting is one level deep. A `hover` object cannot contain another `hover` or
+`active`.
 
 > **Note: `white-space: pre` is not supported.** GPUI's text system only has `normal` (wraps) and `nowrap` (single line). To preserve newlines like HTML `<pre>`, split your text on `\n` in React and render each line as a separate `<text>` element in a flex column:
 >
@@ -668,7 +1009,14 @@ The test renderer uses `VisualTestAppContext` with a `TestDispatcher` for determ
 - [x] GPU-backed test renderer with screenshot capture
 - [x] Standalone build (pinned GPUI platform dependencies)
 - [x] Native text input and multiline textarea
-- [ ] Image and SVG elements
+- [x] Image and SVG elements (`<img>`, `<svg>`)
+- [x] Virtual lists (`<virtual-list>`)
+- [x] Native text components (`<code>`, `<diff>`, `<markdown>`)
+- [x] Cross-element text selection
+- [x] Headless Select, Combobox, and Tooltip
+- [x] Native `hover` and `active` styles
+- [x] Window title (`setWindowTitle`)
+- [ ] Canvas element
 - [ ] Multiple windows
 - [ ] Hot reload
 - [ ] Animations

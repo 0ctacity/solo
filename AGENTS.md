@@ -94,7 +94,7 @@ gpuix/
 │   │   │   ├── syntax/         # Tree-sitter highlighting + bounded cache
 │   │   │   ├── markdown/       # pulldown-cmark parser + gpui renderer
 │   │   │   ├── diff/           # Unified-patch parser + row flattening
-│   │   │   └── custom_elements/# input, img, anchored, code, diff, markdown
+│   │   │   └── custom_elements/# input, img, svg, anchored, code, diff, markdown
 │   │   ├── examples/
 │   │   │   └── hello.rs        # Pure GPUI test (no JS)
 │   │   ├── Cargo.toml
@@ -348,44 +348,39 @@ xcodebuild -downloadComponent MetalToolchain
 
 ## Current Status
 
+Keep this list in sync with the README **Status** section. User-facing APIs
+belong in README. This list is only the remaining engineering work.
+
 ### Completed
 
-- [x] React reconciler structure (based on opentui pattern)
-- [x] Element tree serialization (ElementDesc)
-- [x] Style mapping (CSS-like → GPUI style methods)
-- [x] napi-rs bindings structure
-- [x] GpuixRenderer with render() and run()
-- [x] build_element() - converts ElementDesc to GPUI elements
-- [x] apply_styles() - maps all common CSS properties
-- [x] Event wiring (click, mouseDown, mouseUp, mouseMove)
-- [x] ThreadsafeFunction callback to JS for events
-- [x] Pure Rust example (hello.rs) - works in zed workspace
+- [x] React reconciler with mutation-based protocol
+- [x] napi-rs FFI bindings and RetainedTree
+- [x] Style mapping, including native `hover` / `active`
+- [x] Mouse, keyboard, focus, scroll, and click-outside events
+- [x] `commitMutations()` stores the view entity and calls `cx.notify()`
+- [x] GPU-backed test renderer
+- [x] Native `<input>` and `<textarea>`
+- [x] `<img>` (local raster/SVG) and `<svg>` (tintable monochrome icons)
+- [x] `<virtual-list>`
+- [x] `<code>`, `<diff>`, `<markdown>` with Tree-sitter
+- [x] Cross-element text selection
+- [x] Headless Select, Combobox, Tooltip
+- [x] `setWindowTitle`
 
 ### TODO
 
 #### High Priority
 
-- [x] **Build native package standalone** - Resolve GPUI dependency conflicts
-- [x] **Generate TypeScript types** - Run napi build to create .d.ts files
-- [x] **Test full pipeline** - JS → native → GPUI → screen
-- [x] **Selectable text** - cross-element selection, clipboard, `userSelect`
-- [x] **Syntax highlighting** - Tree-sitter with a bounded document cache
-- [x] **`<code>`, `<diff>`, `<markdown>`** - native text components
-- [ ] **Re-render triggering** - Store Entity handle, call cx.notify() on tree update
 - [ ] **Background highlighting** - move Tree-sitter off the frame thread once
       there is a way to request a repaint from a background task
 
 #### Medium Priority
 
-- [ ] **Focus management** - Wire up FocusHandle for keyboard events
-- [ ] **onKeyDown/onKeyUp** - Keyboard event handlers
-- [ ] **onFocus/onBlur** - Focus event handlers
-- [x] **Text input** - Native input and multiline textarea
-- [ ] **More elements** - img (gpui::img), svg (gpui::svg), list (virtualized)
+- [ ] **Canvas** - custom drawing element (`<canvas>` is typed, not implemented)
 
 #### Low Priority
 
-- [ ] **Window controls** - setTitle, resize, minimize, etc.
+- [ ] **Window controls** - resize, minimize (title already works)
 - [ ] **Multiple windows** - Support multiple GPUI windows
 - [ ] **Hot reload** - Re-render on JS file changes
 - [ ] **DevTools** - React DevTools integration
