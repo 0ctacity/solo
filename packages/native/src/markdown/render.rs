@@ -582,6 +582,7 @@ fn render_table(
         )))
         .w_full()
         .overflow_x_scroll()
+        .restrict_scroll_to_axis()
         .child(inner)
         .into_any_element()
 }

@@ -157,4 +157,30 @@ describe("<code>", () => {
     expect(fs.existsSync(shot)).toBe(true)
     expect(fs.statSync(shot).size).toBeGreaterThan(0)
   })
+
+  it("lets a parent scroller take a vertical wheel over a wide block", () => {
+    const { render, renderer } = createTestRoot()
+    render(
+      <div style={{ width: 240, height: 120, overflowY: "scroll" }}>
+        <code
+          code={"const wide = '".padEnd(200, "x") + "'"}
+          language="ts"
+        />
+        <div style={{ height: 400 }}>
+          <text>below</text>
+        </div>
+      </div>
+    )
+
+    const container = renderer
+      .findByType("div")
+      .find((d) => d.style.overflowY === "scroll")
+    expect(container).toBeDefined()
+    expect(renderer.getScrollOffset(container!.id)).toEqual([0, 0])
+
+    renderer.nativeSimulateScrollWheel(80, 50, 0, -80)
+    const offset = renderer.getScrollOffset(container!.id)
+    expect(offset).not.toBeNull()
+    expect(offset![1]).toBeLessThan(0)
+  })
 })

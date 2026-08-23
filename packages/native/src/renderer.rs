@@ -1966,7 +1966,10 @@ pub(crate) fn build_div(
         if needs_scroll_x && needs_scroll_y {
             el = el.overflow_scroll();
         } else if needs_scroll_x {
-            el = el.overflow_x_scroll();
+            // GPUI remaps a vertical wheel onto overflow-x unless this is set.
+            // That steals the parent scroller when the pointer is over a wide
+            // child (code, tables). Match Zed's markdown code-block path.
+            el = el.overflow_x_scroll().restrict_scroll_to_axis();
         } else if needs_scroll_y {
             el = el.overflow_y_scroll();
         }

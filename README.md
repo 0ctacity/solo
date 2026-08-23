@@ -318,6 +318,9 @@ Plain scroll containers still build every child. Use `<virtual-list>` below when
 >
 > Keep long inner content in that parent. Collapse it behind an **expandable**
 > (preview plus Show more) instead of giving the child its own viewport.
+>
+> Horizontal overflow is the exception. `overflowX: "scroll"` on a wide child
+> (a code row, a table) does not steal the vertical wheel.
 
 ```tsx
 function Expandable({

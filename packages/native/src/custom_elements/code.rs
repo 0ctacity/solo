@@ -108,6 +108,7 @@ impl CustomElement for CodeElement {
         let mut body = gpui::div()
             .id(SharedString::from(format!("__gpuix_code_body_{}", ctx.id)))
             .overflow_x_scroll()
+            .restrict_scroll_to_axis()
             .px(px(m.code_padding_x))
             .py(px(m.code_padding_y))
             .font_family(theme.font_mono.clone())

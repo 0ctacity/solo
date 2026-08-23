@@ -1222,6 +1222,43 @@ describeNative("events", () => {
       expect(afterScrollOffset![1]).toBeLessThan(0) // scrolled down
     })
 
+    it("does not remap a vertical wheel onto overflow-x", () => {
+      function NestedAxisScroll() {
+        return (
+          <div style={{ width: 240, height: 120, overflowY: "scroll" }}>
+            <div style={{ width: 240, height: 80, overflowX: "scroll" }}>
+              <div style={{ width: 800, height: 80 }}>
+                <text>wide row</text>
+              </div>
+            </div>
+            <div style={{ height: 400 }}>
+              <text>below</text>
+            </div>
+          </div>
+        )
+      }
+
+      testRoot.render(<NestedAxisScroll />)
+
+      const parent = testRoot.renderer
+        .findByType("div")
+        .find((d) => d.style.overflowY === "scroll")!
+      const inner = testRoot.renderer
+        .findByType("div")
+        .find((d) => d.style.overflowX === "scroll")!
+
+      expect(testRoot.renderer.getScrollOffset(parent.id)).toEqual([0, 0])
+      expect(testRoot.renderer.getScrollOffset(inner.id)).toEqual([0, 0])
+
+      testRoot.renderer.nativeSimulateScrollWheel(80, 40, 0, -60)
+
+      const parentOffset = testRoot.renderer.getScrollOffset(parent.id)
+      const innerOffset = testRoot.renderer.getScrollOffset(inner.id)
+      expect(parentOffset).not.toBeNull()
+      expect(parentOffset![1]).toBeLessThan(0)
+      expect(innerOffset).toEqual([0, 0])
+    })
+
     it("should support overflow-y scroll only", () => {
       function VerticalScroll() {
         return (
