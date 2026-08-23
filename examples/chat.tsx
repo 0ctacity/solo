@@ -997,9 +997,9 @@ function Composer({
         >
           <textarea
             value={value}
-            placeholder="Ask anything"
+            placeholder="Ask anything in there"
             minRows={1}
-            maxRows={8}
+            maxRows={3}
             autoFocus
             theme={CHAT_THEME}
             style={{
