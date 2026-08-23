@@ -1028,6 +1028,14 @@ placeholder instead of crashing.
 shape and tinted with `style.color`. Use this for toolbar icons, not for
 full-colour artwork.
 
+`src` is a filesystem path **or** a `data:image/svg+xml,…` URL. Vitest and some
+Bun `import … with { type: 'file' }` bindings emit the data URL. GPUIX decodes
+both.
+
+`style.color` is required. Without it the icon does not paint. Prefer
+`fill="#000"` or `stroke="#000"` in the file. `currentColor` in the SVG is not
+the same as `style.color`.
+
 ```tsx
 <svg
   src={fileURLToPath(new URL('./assets/icons/search.svg', import.meta.url))}
@@ -1035,8 +1043,7 @@ full-colour artwork.
 />
 ```
 
-The chat example builds every sidebar and composer icon this way. Keep the SVG
-simple: one `currentColor` stroke or fill works best.
+The chat example builds every sidebar and composer icon this way.
 
 ## Supported Events
 

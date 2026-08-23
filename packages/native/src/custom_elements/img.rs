@@ -165,6 +165,46 @@ impl CustomElement for ImgElement {
 #[derive(Debug, Clone, Default)]
 pub struct SvgElement {
     src: String,
+    bytes: Option<std::sync::Arc<[u8]>>,
+}
+
+impl SvgElement {
+    fn load_src(&mut self, src: String) {
+        self.bytes = svg_bytes(&src).map(std::sync::Arc::from);
+        self.src = src;
+    }
+}
+
+fn svg_bytes(src: &str) -> Option<Vec<u8>> {
+    if let Some(payload) = src.strip_prefix("data:") {
+        let (meta, data) = payload.split_once(',')?;
+        if !meta.starts_with("image/svg+xml") {
+            return None;
+        }
+        return Some(percent_decode(data));
+    }
+    std::fs::read(src).ok()
+}
+
+fn percent_decode(input: &str) -> Vec<u8> {
+    let bytes = input.as_bytes();
+    let mut out = Vec::with_capacity(bytes.len());
+    let mut index = 0;
+    while index < bytes.len() {
+        if bytes[index] == b'%' && index + 2 < bytes.len() {
+            if let Ok(value) = u8::from_str_radix(
+                std::str::from_utf8(&bytes[index + 1..index + 3]).unwrap_or(""),
+                16,
+            ) {
+                out.push(value);
+                index += 3;
+                continue;
+            }
+        }
+        out.push(bytes[index]);
+        index += 1;
+    }
+    out
 }
 
 impl CustomElement for SvgElement {
@@ -176,15 +216,21 @@ impl CustomElement for SvgElement {
     ) -> gpui::AnyElement {
         use gpui::prelude::*;
 
-        if self.src.trim().is_empty() {
+        let Some(bytes) = self.bytes.as_deref() else {
             let mut empty = gpui::div();
             if let Some(style) = ctx.style {
                 empty = crate::renderer::apply_styles(empty, style);
             }
             return empty.into_any_element();
-        }
+        };
 
-        let mut icon = gpui::svg().external_path(self.src.clone()).flex_none();
+        let tint = ctx
+            .style
+            .and_then(|style| style.color.as_deref())
+            .and_then(crate::style::parse_color_hex)
+            .map(gpui::rgba)
+            .unwrap_or_else(|| gpui::rgb(0xe2e2e2).into());
+        let mut icon = gpui::svg().data(bytes).flex_none().text_color(tint);
         if let Some(style) = ctx.style {
             icon = crate::renderer::apply_styles(icon, style);
         }
@@ -193,7 +239,7 @@ impl CustomElement for SvgElement {
 
     fn set_prop(&mut self, key: &str, value: serde_json::Value) {
         if key == "src" {
-            self.src = value.as_str().unwrap_or_default().to_string();
+            self.load_src(value.as_str().unwrap_or_default().to_string());
         }
     }
 
