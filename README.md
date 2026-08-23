@@ -167,14 +167,14 @@ bun run build
 
 # Run example (use tmux for long-running sessions)
 cd ../../examples
-npx tsx counter.tsx
+bun --hot counter.tsx
 ```
 
 ## Usage
 
 ```tsx
 import React, { useState } from 'react'
-import { createRoot, createRenderer, flushSync, startFrameLoop } from '@gpuix/react'
+import { render } from '@gpuix/react'
 
 function App() {
   const [count, setCount] = useState(0)
@@ -190,22 +190,69 @@ function App() {
   )
 }
 
-// Create the native renderer with event callback
-const renderer = createRenderer((event) => {
-  console.log('Event:', event.elementId, event.eventType)
-})
-
-// Initialize GPUI (non-blocking; returns immediately)
-renderer.init({ title: 'My App', width: 800, height: 600 })
-renderer.setWindowTitle('My App') // change the title later
-
-// Create React root and render
-const root = createRoot(renderer)
-flushSync(() => root.render(<App />))
-
-// Drive AppKit on macOS. This is a no-op on Windows and Linux.
-startFrameLoop(renderer)
+render(<App />, { title: 'My App', width: 800, height: 600 })
 ```
+
+`render()` creates the native window, mounts React, and starts the frame loop.
+Call it again after a save and it remounts the tree on the same window.
+
+Use **`render()`**, not `createRenderer()`, in the app entry. `bun --hot`
+re-runs the whole file on save. `createRenderer()` plus `init()` would then
+build a second host. `render()` is idempotent: the first call owns the window,
+later calls only remount React.
+
+`createRenderer()`, `createRoot()`, and `startFrameLoop()` stay public for
+tests and custom hosts. Pass `{ renderer }` into `render()` when you already
+have one.
+
+## Hot reload
+
+### 1. End the file with `render()`
+
+```tsx
+import { render } from '@gpuix/react'
+
+function App() {
+  return <div style={{ padding: 16 }}>hello</div>
+}
+
+render(<App />, { title: 'My App', width: 800, height: 600 })
+```
+
+Do **not** call `createRenderer()` or `init()` in this file. `bun --hot` re-runs
+the whole entry on save. A second `init()` would open a second window.
+
+### 2. Start the app with `bun --hot`
+
+```bash
+bun --hot app.tsx
+bun --hot examples/chat.tsx
+# examples/package.json scripts already pass --hot
+bun run chat
+```
+
+### 3. Save the file
+
+```
+save .tsx  ►  bun re-evaluates the entry  ►  render() remounts React
+                     │
+                     ▼
+              GpuixRenderer, window, GPU stay
+```
+
+The first `render()` creates the native host and stores it on `globalThis`.
+Each save unmounts the React tree and mounts a new one on that same host.
+
+**Stays:** window, GPU device, native `.node` addon, GPUI scroll physics.
+
+**Resets:** `useState`, focus, React event handlers.
+
+This is a remount, not React Refresh. Keeping hook state needs Bun to inject
+`$RefreshReg$` during `--hot`. That transform exists on
+`bun build --react-fast-refresh` only. Tracked in
+[oven-sh/bun#40179](https://github.com/oven-sh/bun/issues/40179).
+
+Native `.node` edits still need a rebuild. See [Developing the Rust side](#developing-the-rust-side).
 
 On **macOS**, `startFrameLoop` calls `renderer.tick()` at a fixed rate (~125fps by
 default). This pumps AppKit on the process main thread without blocking Node. Pass
@@ -494,11 +541,97 @@ Removing `tabIndex` removes the element from the tab order.
 
 ## Headless controls
 
-`@gpuix/react` includes **shadcn-shaped compound components** for Select,
-Combobox, and Tooltip. They provide behavior and native GPUI placement, but no
-visual theme. Every visible part accepts normal GPUIX props and styles.
+The built-in controls are **unstyled primitives**, not a fixed component
+library. Use them like Radix primitives in shadcn: import a primitive namespace,
+wrap and style it in a local file, then import those local components throughout
+the app.
 
-### Select
+```text
+@gpuix/react/select ► components/ui/select.tsx ► application screens
+  native behavior       local styles/variants       product-specific use
+```
+
+Each primitive has a dedicated namespace entry point:
+
+| Import | Main parts |
+|---|---|
+| `@gpuix/react/select` | `Root`, `Trigger`, `Value`, `Content`, `Item` |
+| `@gpuix/react/combobox` | `Root`, `Input`, `Content`, `List`, `Item`, `Empty` |
+| `@gpuix/react/tooltip` | `Provider`, `Root`, `Trigger`, `Content` |
+
+### Build a local Select
+
+Create `components/ui/select.tsx`. This file is application code, so it can be
+copied and changed without waiting for GPUIX to add a theme option:
+
+```tsx
+import * as React from 'react'
+import * as SelectPrimitive from '@gpuix/react/select'
+
+export const Select = SelectPrimitive.Root
+export const SelectValue = SelectPrimitive.Value
+export const SelectGroup = SelectPrimitive.Group
+
+export const SelectTrigger = React.forwardRef<
+  React.ElementRef<typeof SelectPrimitive.Trigger>,
+  SelectPrimitive.SelectTriggerProps
+>(({ style, ...props }, ref) => (
+  <SelectPrimitive.Trigger
+    ref={ref}
+    {...props}
+    style={(state) => ({
+      width: 220,
+      height: 36,
+      padding: 8,
+      backgroundColor: state.open ? '#334155' : '#1e293b',
+      borderRadius: 8,
+      ...(typeof style === 'function' ? style(state) : style),
+    })}
+  />
+))
+
+export const SelectContent = React.forwardRef<
+  React.ElementRef<typeof SelectPrimitive.Content>,
+  SelectPrimitive.SelectContentProps
+>(({ style, ...props }, ref) => (
+  <SelectPrimitive.Content
+    ref={ref}
+    sideOffset={6}
+    {...props}
+    style={{
+      width: 220,
+      maxHeight: 240,
+      overflowY: 'scroll',
+      padding: 4,
+      backgroundColor: '#0f172a',
+      borderRadius: 8,
+      ...style,
+    }}
+  />
+))
+
+export const SelectItem = React.forwardRef<
+  React.ElementRef<typeof SelectPrimitive.Item>,
+  SelectPrimitive.SelectItemProps
+>(({ style, ...props }, ref) => (
+  <SelectPrimitive.Item
+    ref={ref}
+    {...props}
+    style={(state) => ({
+      padding: 8,
+      opacity: state.disabled ? 0.4 : 1,
+      backgroundColor: state.highlighted
+        ? '#334155'
+        : state.selected
+          ? '#1e3a5f'
+          : '#0f172a',
+      ...(typeof style === 'function' ? style(state) : style),
+    })}
+  />
+))
+```
+
+Use the styled local file with the familiar shadcn shape:
 
 ```tsx
 import {
@@ -506,36 +639,17 @@ import {
   SelectContent,
   SelectGroup,
   SelectItem,
-  SelectLabel,
   SelectTrigger,
   SelectValue,
-} from '@gpuix/react'
+} from './components/ui/select'
 
 <Select value={model} onValueChange={setModel}>
-  <SelectTrigger style={{ width: 200, height: 36, padding: 8 }}>
+  <SelectTrigger>
     <SelectValue placeholder="Select a model" />
   </SelectTrigger>
-
-  <SelectContent
-    side="bottom"
-    sideOffset={6}
-    style={{ width: 200, maxHeight: 240, overflowY: 'scroll' }}
-  >
+  <SelectContent>
     <SelectGroup>
-      <SelectLabel>Models</SelectLabel>
-      <SelectItem
-        value="sonnet"
-        style={({ selected, highlighted }) => ({
-          padding: 8,
-          backgroundColor: highlighted
-            ? '#334155'
-            : selected
-              ? '#1e3a5f'
-              : '#111827',
-        })}
-      >
-        Sonnet
-      </SelectItem>
+      <SelectItem value="sonnet">Sonnet</SelectItem>
       <SelectItem value="opus">Opus</SelectItem>
     </SelectGroup>
   </SelectContent>
@@ -546,76 +660,54 @@ The trigger participates in normal tab navigation. Opening the Select focuses
 its content. `Up`, `Down`, `Ctrl+P`, `Ctrl+N`, `Enter`, and `Escape` control the
 menu. Closing it restores focus to the trigger. Disabled items are skipped.
 
-### Combobox
+### Style Combobox and Tooltip the same way
 
-Combobox uses the native GPUIX input for text editing, IME, clipboard, and
-focus. Values are strings. The default filter places prefix matches before
-substring matches and keeps the original order inside each group.
+Start their local files from namespace imports too:
 
 ```tsx
-import {
-  Combobox,
-  ComboboxContent,
-  ComboboxEmpty,
-  ComboboxInput,
-  ComboboxItem,
-  ComboboxList,
-} from '@gpuix/react'
+// components/ui/combobox.tsx
+import * as ComboboxPrimitive from '@gpuix/react/combobox'
 
-const frameworks = ['Next.js', 'SvelteKit', 'Astro']
+// components/ui/tooltip.tsx
+import * as TooltipPrimitive from '@gpuix/react/tooltip'
+```
 
-<Combobox
-  items={frameworks}
-  value={framework}
-  onValueChange={setFramework}
->
-  <ComboboxInput
-    placeholder="Select a framework"
-    style={{ width: 220, height: 36, padding: 8 }}
-  />
-  <ComboboxContent style={{ width: 220 }}>
-    <ComboboxEmpty>No frameworks found.</ComboboxEmpty>
-    <ComboboxList>
+The application still uses compound components, not one large configuration
+object:
+
+```tsx
+<ComboboxPrimitive.Root items={['Next.js', 'SvelteKit', 'Astro']}>
+  <ComboboxPrimitive.Input style={{ width: 220, height: 36, padding: 8 }} />
+  <ComboboxPrimitive.Content style={{ width: 220 }}>
+    <ComboboxPrimitive.Empty>No frameworks found.</ComboboxPrimitive.Empty>
+    <ComboboxPrimitive.List>
       {(item) => (
-        <ComboboxItem key={item} value={item}>
+        <ComboboxPrimitive.Item key={item} value={item}>
           {item}
-        </ComboboxItem>
+        </ComboboxPrimitive.Item>
       )}
-    </ComboboxList>
-  </ComboboxContent>
-</Combobox>
+    </ComboboxPrimitive.List>
+  </ComboboxPrimitive.Content>
+</ComboboxPrimitive.Root>
 ```
-
-The input keeps focus while the menu is open. `Up` and `Down` move through the
-filtered options, `Enter` selects, and `Escape` closes the menu.
-
-### Tooltip
 
 ```tsx
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from '@gpuix/react'
-
-<TooltipProvider delayDuration={350}>
-  <Tooltip>
-    <TooltipTrigger asChild>
+<TooltipPrimitive.Provider delayDuration={350}>
+  <TooltipPrimitive.Root>
+    <TooltipPrimitive.Trigger asChild>
       <div tabIndex={0} style={{ padding: 8 }}>Copy</div>
-    </TooltipTrigger>
-    <TooltipContent side="top" sideOffset={6}>
+    </TooltipPrimitive.Trigger>
+    <TooltipPrimitive.Content side="top" sideOffset={6}>
       Copy message
-    </TooltipContent>
-  </Tooltip>
-</TooltipProvider>
+    </TooltipPrimitive.Content>
+  </TooltipPrimitive.Root>
+</TooltipPrimitive.Provider>
 ```
 
-`asChild` merges tooltip behavior into one GPUIX host element and preserves its
-ref. Hover or keyboard focus opens the tooltip. Blur or `Escape` closes it.
-
-Select, Combobox, and Tooltip content use GPUI's deferred `anchored()` layer.
-Floating content snaps inside the window and occludes controls behind it.
+Combobox uses the native input for text editing, IME, clipboard, and focus.
+Tooltip `asChild` preserves the child ref and merges trigger behavior into that
+host element. All floating content uses GPUI's deferred `anchored()` layer,
+snaps inside the window, and occludes controls behind it.
 
 ## Text selection
 
@@ -954,11 +1046,12 @@ bun scripts/screenshots.ts
 
 ## Developing the Rust side
 
-There is **no hot reload for the native half**, and there cannot be: `require()`
-of a `.node` file calls `process.dlopen`, Node has no matching unload, and the
-live state (GPUI's platform, GPU device, open window, UI thread, and selection
-registry) stays inside the loaded library. A second load would create independent
-native state while the first library remains loaded.
+JS remount is covered above. There is **no hot reload for the native half**,
+and there cannot be: `require()` of a `.node` file calls `process.dlopen`, Node
+has no matching unload, and the live state (GPUI's platform, GPU device, open
+window, UI thread, and selection registry) stays inside the loaded library. A
+second load would create independent native state while the first library
+remains loaded.
 
 The rebuild is fast enough that it does not matter. Measured on an M-series Mac
 after touching one file:
@@ -1018,7 +1111,9 @@ The test renderer uses `VisualTestAppContext` with a `TestDispatcher` for determ
 - [x] Window title (`setWindowTitle`)
 - [ ] Canvas element
 - [ ] Multiple windows
-- [ ] Hot reload
+- [x] JS remount under `bun --hot` (`render()` keeps the native window)
+- [ ] React Refresh during `bun --hot` (needs a Bun runtime transform)
+- [ ] Hot reload of the native `.node` addon. `bun run dev` rebuilds and restarts. Native modules cannot unload.
 - [ ] Animations
 
 ## Documentation
