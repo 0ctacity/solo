@@ -137,7 +137,7 @@ function applyProps(node: GpuixSolidNode, props: Record<string, unknown>): void 
   }
 }
 
-function createElement(tag: string, staticProps?: Record<string, unknown>): GpuixSolidNode {
+export function createElement(tag: string, staticProps?: Record<string, unknown>): GpuixSolidNode {
   const r = getGpuixRenderer()
   const node: GpuixSolidNode = {
     id: nextId(),
@@ -153,7 +153,7 @@ function createElement(tag: string, staticProps?: Record<string, unknown>): Gpui
   return node
 }
 
-function createTextNode(value: string | number): GpuixSolidNode {
+export function createTextNode(value: string | number): GpuixSolidNode {
   const r = getGpuixRenderer()
   const node: GpuixSolidNode = {
     id: nextId(),
@@ -176,7 +176,7 @@ function replaceText(node: GpuixSolidNode, value: string | number): void {
  * Insert `node` into `parent` before `anchor` (or appended when omitted).
  * Maps to appendChild / insertBefore on the retained tree.
  */
-function insertNode(parent: GpuixSolidNode, node: GpuixSolidNode, anchor?: GpuixSolidNode): void {
+export function insertNode(parent: GpuixSolidNode, node: GpuixSolidNode, anchor?: GpuixSolidNode): void {
   const r = getGpuixRenderer()
   // Detach from any previous parent first (the retained tree requires it).
   if (node.parent) {
@@ -261,7 +261,9 @@ export const universal = createRenderer<GpuixSolidNode>({
   getNextSibling,
 })
 
-// Re-exported under the names babel-preset-solid emits.
+// Re-exported under the exact names babel-preset-solid emits. Compiled JSX
+// does `import { createElement, insertNode, ... } from "@gpuix/solid/runtime"`
+// — these must be named exports of this module.
 export const insert = universal.insert
 export const spread = universal.spread
 export const setProp = universal.setProp
@@ -269,6 +271,8 @@ export const effect = universal.effect
 export const memo = universal.memo
 export const applyRef = universal.applyRef
 export const ref = universal.ref
+export const mergeProps = universal.mergeProps
+
 
 export function createComponent<T>(comp: (props: T) => unknown, props: T): unknown {
   return universal.createComponent(comp as never, props)

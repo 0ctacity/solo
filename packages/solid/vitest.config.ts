@@ -34,7 +34,7 @@ export default defineConfig({
     ],
   },
   test: {
-    include: ["src/**/*.test.tsx"],
+    include: ["src/**/*.test.{ts,tsx}"],
     // The mock renderer needs no DOM environment.
     environment: "node",
     // Inline the Solid packages so gpuixSolidUniversal's resolveId pinning
