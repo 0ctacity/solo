@@ -10,7 +10,13 @@ import path from 'path'
 import { fileURLToPath } from 'url'
 import React from 'react'
 import { beforeAll, describe, expect, it } from 'vitest'
-import { createTestRoot, hasNativeTestRenderer } from '@gpuix/react'
+import {
+  createTestRoot,
+  hasNativeTestRenderer,
+  render,
+  resetRender,
+  TestRenderer,
+} from '@gpuix/react'
 import { ChatApp, SafeMdxTranscript } from './chat'
 
 const describeNative = hasNativeTestRenderer ? describe : describe.skip
@@ -161,6 +167,33 @@ describeNative('chat example', () => {
     // Cleared, so the placeholder is back.
     expect(renderer.getPaintedText()).toContain('Ask anything')
   })
+
+  it('stays painted after render() remounts the tree', async () => {
+    resetRender()
+    const renderer = new TestRenderer()
+    const before = path.join(SHOTS, 'chat-remount-before.png')
+    const after = path.join(SHOTS, 'chat-remount-after.png')
+
+    render(<ChatApp />, { renderer, width: 1180, height: 820 })
+    renderer.flush()
+    renderer.captureScreenshot(before)
+    expect(renderer.getPaintedText()).toContain('New chat')
+    expect(renderer.getPaintedText()).toContain('GPUIX')
+
+    render(<ChatApp />, { renderer, width: 1180, height: 820 })
+    renderer.flush()
+    await new Promise((resolve) => setTimeout(resolve, 50))
+    renderer.flush()
+    renderer.captureScreenshot(after)
+
+    expect(renderer.getRoot()).toBeDefined()
+    expect(renderer.getPaintedText()).toContain('New chat')
+    expect(renderer.getPaintedText()).toContain('GPUIX')
+    expect(renderer.getPaintedText().some((line) => line.includes('cross-element text selection'))).toBe(
+      true
+    )
+    expect(fs.statSync(after).size).toBeGreaterThan(0)
+  }, 20_000)
 
   it('captures reference screenshots', () => {
     const top = path.join(SHOTS, 'chat-top.png')

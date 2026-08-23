@@ -495,9 +495,9 @@ export function createTestRoot(): TestRoot {
   }
 
   const unmount = () => {
-    reconciler.updateContainer(null, container, null, () => {})
-    // @ts-expect-error types not up to date
-    reconciler.flushSyncWork?.()
+    flushSync(() => {
+      reconciler.updateContainer(null, container, null, () => {})
+    })
     clearEventHandlers()
   }
 

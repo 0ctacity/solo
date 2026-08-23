@@ -104,6 +104,32 @@ describeNative("render()", () => {
     expect(renderer.getAllText()).toEqual(["second"])
   })
 
+  it("keeps the remounted tree after deferred React work", async () => {
+    render(
+      <div>
+        <text>before</text>
+      </div>,
+      { renderer }
+    )
+    renderer.flush()
+    expect(renderer.getAllText()).toEqual(["before"])
+    expect(renderer.getRoot()).toBeDefined()
+
+    render(
+      <div>
+        <text>after</text>
+      </div>,
+      { renderer }
+    )
+    renderer.flush()
+    expect(renderer.getAllText()).toEqual(["after"])
+
+    await new Promise((resolve) => setTimeout(resolve, 50))
+    renderer.flush()
+    expect(renderer.getRoot()).toBeDefined()
+    expect(renderer.getAllText()).toEqual(["after"])
+  })
+
   it("remounts under bun --hot without creating a new root", async () => {
     const file = join(srcDir, "__tests__", "hot-app.tmp.tsx")
     writeFileSync(file, hotAppSource("hello"))

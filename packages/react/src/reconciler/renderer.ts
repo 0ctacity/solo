@@ -110,9 +110,10 @@ export function createRoot(renderer: NativeRenderer): Root {
 
   const cleanup = (): void => {
     if (container) {
-      reconciler.updateContainer(null, container, null, () => {})
-      // @ts-expect-error types not up to date
-      reconciler.flushSyncWork?.()
+      // Must be sync. A late unmount destroy()s remounted ids and the window goes black.
+      flushSync(() => {
+        reconciler.updateContainer(null, container, null, () => {})
+      })
       container = null
     }
     clearEventHandlers()
@@ -192,6 +193,7 @@ export function resetRender(): void {
 export function render(node: ReactNode, options: RenderOptions = {}): Root {
   const { onEvent, renderer: injected, ...windowOptions } = options
   const slot = renderSlot()
+  const remount = slot.root != null
   if (!slot.renderer) {
     if (injected) {
       slot.renderer = injected
@@ -199,9 +201,11 @@ export function render(node: ReactNode, options: RenderOptions = {}): Root {
       const renderer = createRenderer(onEvent)
       renderer.init(windowOptions)
       slot.renderer = renderer
+      console.log("[gpuix] created native window")
     }
   }
   if (slot.root) {
+    console.log("[gpuix] remount: unmount previous tree")
     slot.root.unmount()
     resetIdCounter()
   }
@@ -215,5 +219,6 @@ export function render(node: ReactNode, options: RenderOptions = {}): Root {
     slot.loop?.stop()
     slot.loop = startFrameLoop(native)
   }
+  console.log(remount ? "[gpuix] remount complete" : "[gpuix] mount complete")
   return root
 }
