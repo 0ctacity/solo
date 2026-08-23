@@ -12,7 +12,10 @@ export {
   unregisterEventHandlers,
   clearEventHandlers,
 } from "./event-registry.js"
+export { EVENT_PROPS, gpuixEventTypeForProp, attachEventHandler } from "./events.js"
 export { wrapWithBatching } from "./batching.js"
 export type { MutationTuple } from "./batching.js"
 export { startFrameLoop } from "./frame-loop.js"
 export type { FrameLoop } from "./frame-loop.js"
+export { MockNativeRenderer } from "./mock-renderer.js"
+export type { MockElement } from "./mock-renderer.js"

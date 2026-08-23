@@ -1,0 +1,58 @@
+import type { EventPayload } from "@gpuix/native"
+import { registerEventHandler, unregisterEventHandler } from "./event-registry.js"
+
+/// Mapping from framework event prop names (onClick, onKeyDown, ...) to the
+/// native event types Rust emits in EventPayload.eventType. Shared by the
+/// React and Solid integrations so both speak the same protocol.
+
+export const EVENT_PROPS = [
+  // Custom element events
+  ["onToggleFile", "toggleFile"],
+  ["onShowMore", "showMore"],
+  ["onLineClick", "lineClick"],
+  ["onLinkClick", "linkClick"],
+  ["onChange", "change"],
+  ["onSubmit", "submit"],
+  // Mouse events
+  ["onClick", "click"],
+  ["onMouseDown", "mouseDown"],
+  ["onMouseUp", "mouseUp"],
+  ["onMouseEnter", "mouseEnter"],
+  ["onMouseLeave", "mouseLeave"],
+  ["onMouseMove", "mouseMove"],
+  ["onMouseDownOutside", "mouseDownOutside"],
+  // Keyboard events (require focus — tabIndex or autoFocus)
+  ["onKeyDown", "keyDown"],
+  ["onKeyUp", "keyUp"],
+  // Focus events
+  ["onFocus", "focus"],
+  ["onBlur", "blur"],
+  // Scroll events
+  ["onScroll", "scroll"],
+] as const
+
+const EVENT_PROP_TO_TYPE = new Map<string, string>(
+  EVENT_PROPS.map(([prop, type]) => [prop, type])
+)
+
+/** The native event type for a framework event prop name, or null. */
+export function gpuixEventTypeForProp(name: string): string | null {
+  return EVENT_PROP_TO_TYPE.get(name) ?? null
+}
+
+/** Attach one event handler through the shared registry + native listener. */
+export function attachEventHandler(
+  renderer: { setEventListener(id: number, eventType: string, hasHandler: boolean): void },
+  id: number,
+  eventType: string,
+  handler: ((event: EventPayload) => void) | null | undefined
+): void {
+  if (handler) {
+    registerEventHandler(id, eventType, handler)
+    renderer.setEventListener(id, eventType, true)
+  } else {
+    unregisterEventHandler(id, eventType)
+    renderer.setEventListener(id, eventType, false)
+  }
+}
+

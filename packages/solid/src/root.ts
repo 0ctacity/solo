@@ -1,0 +1,104 @@
+/// GPUIX Solid — render Solid apps into a native GPUIX window.
+///
+/// Mirrors the React package's render(): creates the napi GpuixRenderer,
+/// opens the window, wires native events into the shared handler registry,
+/// batches mutations, and drives the frame loop where the platform needs it.
+
+import { GpuixRenderer } from "@gpuix/native"
+import type { EventPayload, WindowOptions } from "@gpuix/native"
+import { clearEventHandlers, handleGpuixEvent, startFrameLoop } from "@gpuix/core"
+import type { FrameLoop, NativeRenderer } from "@gpuix/core"
+import type { Element as SolidElement } from "solid-js"
+import { mount, resetIdCounter } from "./runtime.js"
+
+export interface Root {
+  unmount: () => void
+}
+
+export type { FrameLoop }
+
+export interface RenderOptions extends WindowOptions {
+  onEvent?: (event: EventPayload) => void
+  /** Inject a renderer (tests). Defaults to a real GpuixRenderer window. */
+  renderer?: NativeRenderer
+}
+
+const RENDER_HOST_KEY = "__gpuixSolidRenderHost"
+
+type RenderSlot = {
+  renderer?: NativeRenderer
+  root?: Root
+  loop?: FrameLoop
+}
+
+function renderSlot(): RenderSlot {
+  const existing = Reflect.get(globalThis, RENDER_HOST_KEY)
+  if (existing) return existing
+  const created: RenderSlot = {}
+  Reflect.set(globalThis, RENDER_HOST_KEY, created)
+  return created
+}
+
+function createNativeRenderer(
+  onEvent?: (event: EventPayload) => void
+): GpuixRenderer {
+  return new GpuixRenderer((err, event) => {
+    if (err) {
+      console.error("[GPUIX] Native event error:", err)
+      return
+    }
+    if (event) {
+      handleGpuixEvent(event)
+      onEvent?.(event)
+    }
+  })
+}
+
+/** Mount the app in a GPUIX window. Later calls remount on the same window. */
+export function render(code: () => SolidElement, options: RenderOptions = {}): Root {
+  const slot = renderSlot()
+  if (options.renderer) {
+    // Injected renderer (tests): always take the fresh one.
+    slot.renderer = options.renderer
+  } else if (!slot.renderer) {
+    const renderer = createNativeRenderer(options.onEvent)
+    renderer.init(options)
+    slot.renderer = renderer
+    console.log("[gpuix] created native window")
+  }
+  const host = slot.renderer as NativeRenderer
+
+  if (slot.root) {
+    console.log("[gpuix] remount: unmount previous tree")
+    slot.root.unmount()
+  }
+  resetIdCounter()
+  clearEventHandlers()
+
+  let disposeTree: () => void = mount(code, host)
+  slot.root = {
+    unmount: () => {
+      disposeTree()
+      disposeTree = () => {}
+      slot.root = undefined
+    },
+  }
+
+  if (
+    !options.renderer &&
+    host instanceof GpuixRenderer &&
+    typeof host.requiresTick === "function" &&
+    host.requiresTick()
+  ) {
+    slot.loop?.stop()
+    slot.loop = startFrameLoop(host, {
+      onTerminated: () => process.exit(0),
+    })
+  }
+  console.log("[gpuix] mount complete")
+  return slot.root
+}
+
+export { View, Text, Button } from "./components.js"
+export type { ViewProps, TextProps, ButtonProps } from "./components.js"
+export { resetIdCounter, flushMutations } from "./runtime.js"
