@@ -44,7 +44,6 @@ export type {
   ComboboxListProps,
   ComboboxProps,
   ComboboxTriggerProps,
-  ComboboxValue,
   ComboboxValueProps,
 } from "./components/combobox.js"
 export { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "./components/tooltip.js"
