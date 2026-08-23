@@ -46,22 +46,20 @@ const C = {
 
 const ICONS = {
   app: fileURLToPath(new URL('./assets/icons/openai-mark.svg', import.meta.url)),
-  newChat: fileURLToPath(new URL('./assets/icons/pen-new-square.svg', import.meta.url)),
-  search: fileURLToPath(new URL('./assets/icons/magnifer.svg', import.meta.url)),
-  library: fileURLToPath(new URL('./assets/icons/folder-with-files.svg', import.meta.url)),
-  sidebar: fileURLToPath(
-    new URL('./assets/icons/sidebar-minimalistic-left.svg', import.meta.url)
-  ),
+  newChat: fileURLToPath(new URL('./assets/icons/square-pen.svg', import.meta.url)),
+  search: fileURLToPath(new URL('./assets/icons/search.svg', import.meta.url)),
+  library: fileURLToPath(new URL('./assets/icons/library.svg', import.meta.url)),
+  sidebar: fileURLToPath(new URL('./assets/icons/panel-left.svg', import.meta.url)),
   copy: fileURLToPath(new URL('./assets/icons/copy.svg', import.meta.url)),
   check: fileURLToPath(new URL('./assets/icons/check.svg', import.meta.url)),
-  retry: fileURLToPath(new URL('./assets/icons/restart.svg', import.meta.url)),
-  star: fileURLToPath(new URL('./assets/icons/star.svg', import.meta.url)),
-  starFilled: fileURLToPath(new URL('./assets/icons/star-bold.svg', import.meta.url)),
-  share: fileURLToPath(new URL('./assets/icons/arrow-up-right.svg', import.meta.url)),
-  more: fileURLToPath(new URL('./assets/icons/more-horizontal.svg', import.meta.url)),
-  chevronDown: fileURLToPath(new URL('./assets/icons/alt-arrow-down.svg', import.meta.url)),
-  attach: fileURLToPath(new URL('./assets/icons/paperclip.svg', import.meta.url)),
-  tools: fileURLToPath(new URL('./assets/icons/tuning.svg', import.meta.url)),
+  retry: fileURLToPath(new URL('./assets/icons/rotate-ccw.svg', import.meta.url)),
+  thumbsUp: fileURLToPath(new URL('./assets/icons/thumbs-up.svg', import.meta.url)),
+  thumbsDown: fileURLToPath(new URL('./assets/icons/thumbs-down.svg', import.meta.url)),
+  share: fileURLToPath(new URL('./assets/icons/share.svg', import.meta.url)),
+  more: fileURLToPath(new URL('./assets/icons/ellipsis.svg', import.meta.url)),
+  chevronDown: fileURLToPath(new URL('./assets/icons/chevron-down.svg', import.meta.url)),
+  add: fileURLToPath(new URL('./assets/icons/plus.svg', import.meta.url)),
+  tools: fileURLToPath(new URL('./assets/icons/sliders-horizontal.svg', import.meta.url)),
   send: fileURLToPath(new URL('./assets/icons/arrow-up.svg', import.meta.url)),
 } as const
 
@@ -552,7 +550,7 @@ function GhostButton({
 function ActionBar() {
   // Local state makes the row feel alive instead of decorative.
   const [copied, setCopied] = useState(false)
-  const [liked, setLiked] = useState(false)
+  const [feedback, setFeedback] = useState<'up' | 'down' | null>(null)
 
   return (
     <div
@@ -571,12 +569,17 @@ function ActionBar() {
         active={copied}
         onClick={() => setCopied((was) => !was)}
       />
-      <GhostButton icon="retry" />
       <GhostButton
-        icon={liked ? 'starFilled' : 'star'}
-        active={liked}
-        onClick={() => setLiked((was) => !was)}
+        icon="thumbsUp"
+        active={feedback === 'up'}
+        onClick={() => setFeedback((value) => (value === 'up' ? null : 'up'))}
       />
+      <GhostButton
+        icon="thumbsDown"
+        active={feedback === 'down'}
+        onClick={() => setFeedback((value) => (value === 'down' ? null : 'down'))}
+      />
+      <GhostButton icon="retry" />
       <GhostButton icon="share" />
       <GhostButton icon="more" />
     </div>
@@ -999,7 +1002,7 @@ function Composer({
               paddingTop: 6,
             }}
           >
-            <RoundButton icon="attach" />
+            <RoundButton icon="add" />
             <ComposerPill icon="tools" label="Tools" />
             <div style={{ flexGrow: 1 }} />
             <div

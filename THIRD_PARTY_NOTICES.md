@@ -23,11 +23,10 @@ are ported from **[Comet](https://github.com/zeronsh/comet)** (MIT, Copyright (c
 
 ## Example icons
 
-The chat example includes SVG icons ported from
-**[Comet](https://github.com/zeronsh/comet)** (MIT, Copyright (c) 2026 Wing).
-Most are **Solar Icons by 480 Design**, licensed under
-[CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). Other icons are
-Comet's original work under the MIT license or original GPUIX assets.
+The chat example uses **[Lucide](https://github.com/lucide-icons/lucide)** SVG
+icons (ISC, Copyright (c) 2026 Lucide Icons and Contributors). The OpenAI mark
+is ported from **[Comet](https://github.com/zeronsh/comet)** (MIT, Copyright (c)
+2026 Wing).
 
 ## Bundled grammars
 
