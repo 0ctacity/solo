@@ -499,23 +499,23 @@ pub struct EventPayload {
 
 ## Building
 
-### Standalone Build
+### GPUI dependency
 
-The `zed/` submodule tracks the `gpui-macos-embedded` branch of `remorses/zed`. Cargo uses path
-dependencies from that submodule so the native addon and native platforms always
-compile from the same source:
+GPUI comes from a pinned git revision of `remorses/zed` (branch
+`gpui-macos-embedded`) — no Zed checkout or submodule is needed. See
+[docs/gpui-dependency.md](./docs/gpui-dependency.md) for the full map. Key points:
 
 - macOS uses `MacPlatform::new_embedded()` and pumps AppKit on Node's main thread
 - Windows and Linux run `gpui_platform::application().run()` on a dedicated UI thread
 - `gpui_macos` is a direct macOS dependency for production and the GPU-backed test renderer
-- `core-text = 21.0.0`, `core-graphics = 0.24.0` for macOS
-
-These avoid the core-graphics 0.24 vs 0.25 conflict between `core-text` and Zed's `font-kit` fork.
+- The fork exists only for the embedded macOS loop; `crates/gpui` itself matches upstream
+- `core-text = 21.0.0`, `core-graphics = 0.24.0` for macOS, avoiding a
+  core-graphics 0.24 vs 0.25 conflict with Zed's `font-kit` fork
 
 ### Rust toolchain
 
-`rust-toolchain.toml` pins the same channel as `zed/rust-toolchain.toml`. When the
-submodule moves, update ours to match or GPUI may not compile.
+`rust-toolchain.toml` pins the same channel as the pinned GPUI revision's
+`rust-toolchain.toml`. When bumping the pin, update ours to match or GPUI may not compile.
 
 ### Metal toolchain (macOS)
 
@@ -531,8 +531,8 @@ xcodebuild -downloadComponent MetalToolchain
 
 1. Merge upstream Zed into the `gpui-macos-embedded` branch in `remorses/zed`.
 2. Resolve any embedded `gpui_macos` conflicts in a new commit; do not rewrite history.
-3. Fast-forward the `zed/` submodule to the updated `gpui-macos-embedded` branch.
-4. Match `rust-toolchain.toml` to `zed/rust-toolchain.toml`.
+3. Update `rev = "..."` in `packages/native/Cargo.toml`.
+4. Match `rust-toolchain.toml` to the new revision's.
 5. Run `cargo check --all-targets`, `bun run build`, and the test suites.
 
 ## Current Status
@@ -653,9 +653,8 @@ Note: `screencapture` and the JXA window listing may require Screen Recording pe
 
 ## Contributing
 
-1. For Rust changes, work in `zed/crates/gpuix` (easier to build)
-2. Copy changes to `gpuix/packages/native/src/` when ready
-3. TypeScript changes can be made directly in `packages/react/`
+1. Rust changes go in `packages/native/src/`
+2. TypeScript changes can be made directly in `packages/react/`, `packages/solid/` or `packages/core/`
 
 
 ## Examples using same tech as ours. To unblock on issues and compare to our code

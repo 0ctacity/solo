@@ -153,9 +153,6 @@ xcodebuild -downloadComponent MetalToolchain
 # Install dependencies
 bun install
 
-# Check out the pinned GPUI fork
-git submodule update --init --recursive
-
 # Build native package
 cd packages/native
 bun run build
