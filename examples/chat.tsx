@@ -17,13 +17,7 @@
  */
 
 import React, { useMemo, useState } from 'react'
-import {
-  createRoot,
-  createRenderer,
-  flushSync,
-  startFrameLoop,
-  type StyleDesc,
-} from '@gpuix/react'
+import { render, type StyleDesc } from '@gpuix/react'
 import { fileURLToPath } from 'node:url'
 import { SafeMdxRenderer } from 'safe-mdx'
 import { mdxParse } from 'safe-mdx/parse'
@@ -1123,28 +1117,11 @@ export function ChatApp() {
   )
 }
 
-async function main() {
-  const renderer = createRenderer(() => {})
-
-  renderer.init({
-    title: 'GPUIX Chat',
-    width: 1180,
-    height: 820,
-  })
-
-  const root = createRoot(renderer)
-  flushSync(() => root.render(<ChatApp />))
-
-  console.log('[GPUIX] Chat running')
-  startFrameLoop(renderer)
-}
-
-// Only run main() when this file is the entry point, so tests can import ChatApp.
 const isEntryPoint =
   typeof Bun !== 'undefined'
     ? Bun.main === import.meta.path
     : process.argv[1]?.endsWith('chat.tsx')
 
 if (isEntryPoint) {
-  main().catch(console.error)
+  render(<ChatApp />, { title: 'GPUIX Chat', width: 1180, height: 820 })
 }

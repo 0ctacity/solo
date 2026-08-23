@@ -13,7 +13,7 @@
  */
 
 import React, { useState } from 'react'
-import { createRoot, createRenderer, flushSync, startFrameLoop } from '@gpuix/react'
+import { render } from '@gpuix/react'
 
 const README = `# GPUIX
 
@@ -148,20 +148,4 @@ function App() {
   )
 }
 
-async function main() {
-  const renderer = createRenderer(() => {})
-
-  renderer.init({
-    title: 'GPUIX Native Text',
-    width: 900,
-    height: 700,
-  })
-
-  const root = createRoot(renderer)
-  flushSync(() => root.render(<App />))
-  startFrameLoop(renderer)
-}
-
-main().catch((error) => {
-  console.error(error)
-})
+render(<App />, { title: 'GPUIX Native Text', width: 900, height: 700 })

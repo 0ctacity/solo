@@ -9,7 +9,7 @@
     "build": "bun run build:native && bun run build:react",
     "build:native": "cd packages/native && bun run build",
     "build:react": "cd packages/react && bun run build",
-    "example:counter": "cd examples && tsx counter.tsx",
+    "example:counter": "cd examples && bun --hot counter.tsx",
     "dev": "bun scripts/dev.ts"
   },
   "devDependencies": {

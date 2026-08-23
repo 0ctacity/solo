@@ -19,7 +19,7 @@
  */
 
 import React, { useState } from "react"
-import { createRoot, createRenderer, flushSync, startFrameLoop } from "@gpuix/react"
+import { render } from "@gpuix/react"
 import { diffWords } from "diff"
 import {
   createHighlighter,
@@ -889,35 +889,11 @@ function App() {
 // ── Main ─────────────────────────────────────────────────────────────
 // Only runs when executed directly (not when imported by tests).
 
-async function main() {
-  const renderer = createRenderer((event) => {
-    // Event logging for debug
-  })
-
-  renderer.init({
-    title: "GPUIX Diff Viewer",
-    width: 900,
-    height: 600,
-  })
-
-  const root = createRoot(renderer)
-
-  flushSync(() => {
-    root.render(<App />)
-  })
-
-  console.log("[GPUIX] Diff viewer running")
-
-  startFrameLoop(renderer)
-}
-
-// Guard: only run main() when this file is the entry point.
-// Bun sets Bun.main, Node has require.main or process.argv[1].
 const isEntryPoint =
   typeof Bun !== "undefined"
     ? Bun.main === import.meta.path
     : process.argv[1]?.endsWith("diff.tsx") || process.argv[1]?.endsWith("diff.js")
 
 if (isEntryPoint) {
-  main().catch(console.error)
+  render(<App />, { title: "GPUIX Diff Viewer", width: 900, height: 600 })
 }

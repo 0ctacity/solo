@@ -3,11 +3,11 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "counter": "tsx counter.tsx",
-    "diff": "tsx diff.tsx",
+    "counter": "bun --hot counter.tsx",
+    "diff": "bun --hot diff.tsx",
     "test": "vitest run",
-    "native-text": "tsx native-text.tsx",
-    "chat": "tsx chat.tsx"
+    "native-text": "bun --hot native-text.tsx",
+    "chat": "bun --hot chat.tsx"
   },
   "dependencies": {
     "@gpuix/react": "workspace:*",

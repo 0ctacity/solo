@@ -7,7 +7,7 @@
  */
 
 import React, { useState } from 'react'
-import { createRoot, createRenderer, flushSync, startFrameLoop } from '@gpuix/react'
+import { render } from '@gpuix/react'
 
 function Counter() {
   const [count, setCount] = useState(0)
@@ -120,32 +120,4 @@ function App() {
   )
 }
 
-// Initialize GPUIX with its native platform.
-async function main() {
-  // Create the native GPUI renderer with event callback
-  const renderer = createRenderer((event) => {
-    console.log('GPUI Event:', event.elementId, event.eventType)
-  })
-
-  // macOS embeds AppKit. Windows and Linux start a Rust UI thread.
-  renderer.init({
-    title: 'GPUIX Counter',
-    width: 800,
-    height: 600,
-  })
-
-  // Create React root
-  const root = createRoot(renderer)
-
-  // Render the app synchronously to ensure tree is ready
-  flushSync(() => {
-    root.render(<App />)
-  })
-
-  console.log('[GPUIX] Initial render complete')
-
-  // Drives AppKit only on macOS. Other platforms return a no-op handle.
-  startFrameLoop(renderer)
-}
-
-main().catch(console.error)
+render(<App />, { title: 'GPUIX Counter', width: 800, height: 600 })
