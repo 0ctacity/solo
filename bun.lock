@@ -31,6 +31,21 @@
         "vitest": "^4.0.18",
       },
     },
+    "examples/solid-counter": {
+      "name": "solid-counter",
+      "dependencies": {
+        "@gpuix/core": "workspace:^",
+        "@gpuix/native": "workspace:^",
+        "@gpuix/solid": "workspace:^",
+        "@solidjs/universal": "^2.0.0-rc.1",
+        "solid-js": "^2.0.0-rc.1",
+      },
+      "devDependencies": {
+        "@babel/core": "^7.26.0",
+        "babel-preset-solid": "^2.0.0-rc.1",
+        "vite": "^7.0.0",
+      },
+    },
     "packages/core": {
       "name": "@gpuix/core",
       "version": "0.4.0",
@@ -865,6 +880,8 @@
     "siginfo": ["siginfo@2.0.0", "", {}, "sha512-ybx0WO1/8bSBLEWXZvEd7gMW3Sn3JFlW3TvX1nREbDLRNQNaeNN8WK0meBwPdAaOI7TtRRRJn/Es1zhrrCHu7g=="],
 
     "signal-exit": ["signal-exit@4.1.0", "", {}, "sha512-bzyZ1e88w9O1iNJbKnOlvYTrWPDl46O1bG0D3XInv+9tkPrxrN8jUUTiFlDkkmKWgn1M6CfIA13SuGqOa9Korw=="],
+
+    "solid-counter": ["solid-counter@workspace:examples/solid-counter"],
 
     "solid-js": ["solid-js@2.0.0-rc.1", "", { "dependencies": { "@solidjs/signals": "^2.0.0-rc.1", "csstype": "^3.1.0", "seroval": "~1.5.4", "seroval-plugins": "~1.5.4" } }, "sha512-UD+UfqfiuuOTaDw01YeT+LwsYJC2ilTlMfs6h8EC8FFLmZD0ZjeZIoJXdZEo9uMzIof2tu0Rfh3dnzI7FAmuJQ=="],
 

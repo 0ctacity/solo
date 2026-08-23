@@ -22,8 +22,7 @@ const PINNED: Record<string, string> = {
   "@solidjs/universal": `${universalDist}/dev.js`,
 }
 
-export function gpuixSolidUniversal(): Plugin {
-  return {
+export function gpuixSolidUniversal(): Plugin {  return {
     name: "gpuix:solid-universal",
     enforce: "pre",
     async resolveId(id) {

@@ -3,7 +3,8 @@
   "private": true,
   "workspaces": [
     "packages/*",
-    "examples"
+    "examples",
+    "examples/solid-counter"
   ],
   "scripts": {
     "build": "bun run build:native && bun run build:react",
