@@ -135,6 +135,75 @@ describeNative("floating controls", () => {
     expect(testRoot.renderer.getAllText()).toEqual(["One"])
   })
 
+  it("blocks clicks behind an absolute overlay with a fill", () => {
+    function Demo() {
+      const [behind, setBehind] = useState(0)
+      const [overlay, setOverlay] = useState(0)
+      return (
+        <div style={{ width: 400, height: 260, position: "relative" }}>
+          <div
+            style={{ position: "absolute", top: 40, left: 20, width: 200, height: 80, backgroundColor: "#1e3a5f" }}
+            onClick={() => setBehind((count) => count + 1)}
+          >
+            <text>Behind</text>
+          </div>
+          <div
+            style={{
+              position: "absolute",
+              top: 40,
+              left: 20,
+              width: 200,
+              height: 80,
+              backgroundColor: "#111827",
+            }}
+            onClick={() => setOverlay((count) => count + 1)}
+          >
+            <text>Overlay</text>
+          </div>
+          <text>{`Behind: ${behind} Overlay: ${overlay}`}</text>
+        </div>
+      )
+    }
+
+    testRoot.render(<Demo />)
+    testRoot.renderer.nativeSimulateClick(80, 70)
+    expect(testRoot.renderer.getAllText()).toContain("Behind: 0 Overlay: 1")
+  })
+
+  it("lets pointerEvents none pass clicks through", () => {
+    function Demo() {
+      const [behind, setBehind] = useState(0)
+      return (
+        <div style={{ width: 400, height: 260, position: "relative" }}>
+          <div
+            style={{ position: "absolute", top: 40, left: 20, width: 200, height: 80, backgroundColor: "#1e3a5f" }}
+            onClick={() => setBehind((count) => count + 1)}
+          >
+            <text>Behind</text>
+          </div>
+          <div
+            style={{
+              position: "absolute",
+              top: 40,
+              left: 20,
+              width: 200,
+              height: 80,
+              backgroundColor: "#111827",
+              pointerEvents: "none",
+            }}
+          >
+            <text>Ghost</text>
+          </div>
+          <text>{`Behind: ${behind}`}</text>
+        </div>
+      )
+    }
+
+    testRoot.render(<Demo />)
+    testRoot.renderer.nativeSimulateClick(80, 70)
+    expect(testRoot.renderer.getAllText()).toContain("Behind: 1")
+  })
+
   it("occludes controls behind SelectContent", () => {
     function Demo() {
       const [clicks, setClicks] = useState(0)

@@ -175,6 +175,9 @@ pub struct StyleDesc {
 
     // Cursor
     pub cursor: Option<String>,
+    /// `"auto"` blocks mouse hits behind this element. `"none"` never does.
+    /// Unset: block when this element paints a fill or is absolutely positioned.
+    pub pointer_events: Option<String>,
 
     // Text selection. "none" opts an element and its subtree out of the
     // selection registry, so buttons and toolbars never start a drag.
