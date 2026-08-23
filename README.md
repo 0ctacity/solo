@@ -807,6 +807,39 @@ Tooltip `asChild` preserves the child ref and merges trigger behavior into that
 host element. All floating content uses GPUI's deferred `anchored()` layer,
 snaps inside the window, and occludes controls behind it.
 
+### Overlay menus
+
+Menus, tooltips, and dialogs must use **`SelectContent`**, **`ComboboxContent`**,
+or `<anchored deferred>`. Those paint in a later pass, on top of
+`<virtual-list>` and the rest of the page.
+
+A `position: "absolute"` card that overflows out of the composer sits **under**
+the virtual list. The list paints after the composer, so you still see the
+markdown through the menu, and clicks hit the text behind it.
+
+```tsx
+<Select value={model} onValueChange={setModel}>
+  <div style={{ position: 'relative' }}>
+    <SelectTrigger>
+      <SelectValue />
+    </SelectTrigger>
+    <SelectContent side="top" sideOffset={4} style={{ backgroundColor: '#232323' }}>
+      <SelectItem value="flash">DeepSeek V4 Flash</SelectItem>
+    </SelectContent>
+  </div>
+</Select>
+```
+
+Give every overlay an **opaque** fill (`#232323`, not `#23232399`).
+`FloatingLayer` defaults to `#1A1A1A`. Item rows should use the same solid
+color, or a solid hover color. A `#00000000` child on a blurred window punches
+through Metal to the desktop.
+
+A filled in-flow `div` blocks clicks and hovers behind it. The parent
+scroller still gets the wheel. `position: "absolute"` / `"fixed"` or
+`pointerEvents: "auto"` also steals the wheel. Set `pointerEvents: "none"`
+to pass hits through.
+
 ## Text selection
 
 Every text GPUIX paints is **selectable and copyable**, including text inside

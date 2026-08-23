@@ -293,6 +293,19 @@ impl CustomElement for AnchoredElement {
         if let Some(style) = ctx.style {
             content = crate::renderer::apply_styles(content, style);
         }
+        // Deferred overlays paint over the window blur. A missing fill lets the
+        // page show through the card. Force an opaque surface when JS omitted one.
+        let has_fill = ctx.style.is_some_and(|style| {
+            style
+                .background_color
+                .as_ref()
+                .or(style.background.as_ref())
+                .and_then(|color| crate::style::parse_color_hex(color))
+                .is_some_and(|hex| hex & 0xFF > 0)
+        });
+        if !has_fill {
+            content = content.bg(gpui::rgb(0x1A1A1A));
+        }
         if self.occlude {
             content = content.occlude();
         }

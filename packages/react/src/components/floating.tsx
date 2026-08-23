@@ -183,7 +183,13 @@ export const FloatingLayer = forwardRef<PublicInstance, FloatingContentProps>(
         priority={1}
         occlude
       >
-        <div {...props} ref={ref}>{children}</div>
+        <div
+          {...props}
+          ref={ref}
+          style={mergeStyles({ backgroundColor: "#1A1A1A" }, props.style)}
+        >
+          {children}
+        </div>
       </anchored>
     )
   }
