@@ -314,6 +314,125 @@ extension comes from the pinned GPUIX fork. Windows runtime validation is pendin
 > ticks per second and burns **73% CPU on a completely idle app**, versus **1%** when
 > paced.
 
+## Native animations
+
+Use **`motion.div`** to animate from an initial style to a target style. React
+sends the target once. Rust calculates intermediate values and requests GPUI
+frames until the transition finishes, without a React render or N-API call for
+each frame.
+
+### Animate a target
+
+```tsx
+import { motion } from '@gpuix/react'
+
+function WelcomeCard() {
+  return (
+    <motion.div
+      initial={{ width: 0, opacity: 0 }}
+      animate={{ width: 320, opacity: 1 }}
+      transition={{ duration: 0.25, ease: 'easeOut' }}
+      style={{ overflow: 'hidden' }}
+    >
+      <text style={{ color: '#ffffff' }}>Welcome</text>
+    </motion.div>
+  )
+}
+```
+
+Set **`initial={false}`** when the element must mount at its first `animate`
+target. Later `animate` changes still transition normally. If a target changes
+while motion is active, the next transition starts from the current visible
+value, so reversing an animation does not jump.
+
+### Targets and timing
+
+Motion currently accepts these **numeric targets**:
+
+| Target | Range or unit |
+|---|---|
+| `width`, `height` | pixels, zero or greater |
+| `top`, `right`, `bottom`, `left` | pixels |
+| `opacity` | `0` through `1` |
+| `borderRadius` | pixels, zero or greater |
+
+The **transition** uses seconds, like Motion for React:
+
+| Option | Default | Values |
+|---|---:|---|
+| `duration` | `0.3` | Non-negative seconds |
+| `delay` | `0` | Non-negative seconds |
+| `ease` | `"easeOut"` | `"linear"`, `"ease"`, `"easeIn"`, `"easeOut"`, `"easeInOut"`, or `[x1, y1, x2, y2]` |
+
+Springs, keyframes, variants, exit transitions, and shared layout animations
+are not available yet.
+
+### Animate a sidebar
+
+Animate an **outer clipping container** and keep the inner sidebar at a fixed
+width. This reveals or hides the content without reflowing its text on every
+frame.
+
+```tsx
+import { motion } from '@gpuix/react'
+import type { ReactNode } from 'react'
+
+function SidebarFrame({
+  collapsed,
+  children,
+}: {
+  collapsed: boolean
+  children: ReactNode
+}) {
+  const sidebarWidth = 260
+
+  return (
+    <motion.div
+      initial={false}
+      animate={{ width: collapsed ? 0 : sidebarWidth }}
+      transition={{ duration: 0.2, ease: 'easeOut' }}
+      style={{ height: '100%', flexShrink: 0, overflow: 'hidden' }}
+    >
+      <div style={{ width: sidebarWidth, height: '100%', flexShrink: 0 }}>
+        {children}
+      </div>
+    </motion.div>
+  )
+}
+```
+
+The **chat example** uses this pattern. The sidebar remains mounted while its
+outer width moves between `260` and `0` pixels.
+
+### Capture exact frames
+
+The [automation API](#automation) can freeze the native motion clock and render
+specific timestamps. This avoids timer sleeps and gives CI the same frames on
+every run.
+
+```tsx
+import { connectTest } from '@gpuix/react/automation'
+import { createTestRoot } from '@gpuix/react/testing'
+import { ChatApp } from './chat'
+
+const { render, renderer } = createTestRoot()
+render(<ChatApp />)
+const app = await connectTest(renderer)
+
+const startedAt = await app.clock.pause()
+await app.getByTestId('sidebar-collapse').click()
+
+await app.captureFrames('review/sidebar', [
+  startedAt,
+  startedAt + 50,
+  startedAt + 100,
+  startedAt + 150,
+  startedAt + 200,
+])
+
+await app.clock.resume()
+```
+
 ## Scrolling
 
 Containers with `overflow: "scroll"` become natively scrollable. GPUI handles scroll physics, clipping, and offset persistence automatically.
@@ -1142,9 +1261,103 @@ Nesting is one level deep. A `hover` object cannot contain another `hover` or
 
 > **Note: GPUI defaults text color to black, not white.** Unlike CSS, GPUI does not inherit `color` from parent elements. Every `<text>` element that doesn't set an explicit `color` style will render as black — invisible on dark backgrounds. Always set `color` on your text elements or on a parent `<div>` (which applies `text_color` to all children in that subtree via GPUI's `Styled` trait).
 
+## Automation
+
+Mark elements with **`testId`**, then drive them like Playwright. The same
+client works in vitest and against a child process.
+
+```tsx
+<div testId="sidebar-collapse" onClick={onCollapse}>‹</div>
+<textarea testId="composer" value={draft} onChange={...} />
+<div testId="send" onClick={onSend}>↑</div>
+```
+
+```ts
+import { createTestRoot } from '@gpuix/react'
+import { connectTest } from '@gpuix/react/automation'
+import { ChatApp } from './chat'
+
+const { render, renderer } = createTestRoot()
+render(<ChatApp />)
+const app = await connectTest(renderer)
+
+await app.screenshot({ path: 'open.png' })
+
+await app.clock.pause()
+await app.getByTestId('sidebar-collapse').click()
+await app.clock.fastForward(200)
+await app.screenshot({ path: 'collapsed.png' })
+
+await app.getByTestId('composer').fill('hello gpuix')
+await app.getByTestId('send').click()
+await app.screenshot({ path: 'sent.png' })
+```
+
+That is the chat example. The real test lives in
+[`examples/chat.test.tsx`](./examples/chat.test.tsx).
+
+```
+createTestRoot()                 launch({ command, args })
+       │                                    │
+       ▼                                    ▼
+ connectTest(renderer)              child stdin / stdout
+       │                                    │
+       └────────── App / Locator ───────────┘
+                    click, fill, screenshot
+```
+
+### Locators
+
+| Call | Matches |
+|---|---|
+| `app.getByTestId('send')` | The `testId` prop |
+| `app.getByText('New chat')` | A node's own text |
+| `app.getByType('textarea')` | The host element type |
+| `locator.getByText('...')` | A descendant of another locator |
+
+`click()` hits the center of the last painted bounds. `fill(text)` replaces the
+focused editor contents. `press('enter')` sends one key. `waitFor()` polls until
+exactly one match exists.
+
+### Screenshots and clock
+
+`app.screenshot({ path })` writes the current GPU frame as a PNG.
+
+`app.clock.pause()`, `set(ms)`, and `fastForward(ms)` freeze native motion time.
+Use that to capture a sidebar animation at known timestamps:
+
+```ts
+const startedAt = await app.clock.pause()
+await app.getByTestId('sidebar-collapse').click()
+await app.captureFrames('review/sidebar', [
+  startedAt,
+  startedAt + 100,
+  startedAt + 200,
+])
+```
+
+### Live apps
+
+`launch({ command, args })` starts the app and speaks the same commands
+over stdin as SSE `data:` lines. The app listens only when stdin is a **pipe**,
+so a normal terminal run is unchanged. Lines without a `data:` prefix are
+ignored; `console.log` cannot break a message.
+
+```ts
+import { launch } from '@gpuix/react/automation'
+
+const app = await launch({ command: 'bun', args: ['examples/chat.tsx'] })
+await app.getByTestId('composer').fill('hello')
+await app.screenshot({ path: 'live.png' })
+await app.close()
+```
+
 ## Testing
 
-GPUIX includes a **GPU-backed test renderer** (`TestGpuixRenderer`) that runs the full GPUI rendering pipeline — same `GpuixView`, `build_element()`, `apply_styles()`, and event handlers as production. Windows are positioned offscreen but fully rendered by Metal.
+The locators above sit on a **GPU-backed test renderer** (`TestGpuixRenderer`).
+It runs the same `GpuixView`, `build_element()`, `apply_styles()`, and event
+handlers as production. Windows are positioned offscreen but fully rendered by
+Metal. The methods below are the lower-level API when a locator is not enough.
 
 ```ts
 import { createTestRoot } from '@gpuix/react/testing'
@@ -1265,7 +1478,7 @@ The test renderer uses `VisualTestAppContext` with a `TestDispatcher` for determ
 - [x] JS remount under `bun --hot` (`render()` keeps the native window)
 - [ ] React Refresh during `bun --hot` (needs a Bun runtime transform)
 - [ ] Hot reload of the native `.node` addon. `bun run dev` rebuilds and restarts. Native modules cannot unload.
-- [ ] Animations
+- [x] Native `motion.div` transitions with deterministic frame capture
 
 ## Documentation
 
