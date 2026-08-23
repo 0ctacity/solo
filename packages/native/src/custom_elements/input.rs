@@ -47,6 +47,8 @@ actions!(
         SelectWordRight,
         DeleteWordLeft,
         DeleteWordRight,
+        DeleteToLineStart,
+        DeleteToLineEnd,
         Copy,
         Cut,
         Paste,
@@ -105,6 +107,8 @@ fn text_editor_bindings(context: &'static str, multiline: bool) -> Vec<KeyBindin
         KeyBinding::new("shift-end", SelectEnd, context),
         KeyBinding::new("cmd-left", Home, context),
         KeyBinding::new("cmd-right", End, context),
+        KeyBinding::new("cmd-backspace", DeleteToLineStart, context),
+        KeyBinding::new("cmd-delete", DeleteToLineEnd, context),
         KeyBinding::new("cmd-up", DocStart, context),
         KeyBinding::new("cmd-down", DocEnd, context),
         KeyBinding::new("shift-cmd-left", SelectHome, context),
@@ -762,6 +766,44 @@ impl TextEditorState {
         self.replace_text_in_range(None, "", window, cx);
     }
 
+    fn delete_to_line_start(
+        &mut self,
+        _: &DeleteToLineStart,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        if self.read_only {
+            return;
+        }
+        if self.selected_range.is_empty() {
+            let start = self.line_range_at(self.cursor_offset()).start;
+            if start == self.cursor_offset() {
+                return;
+            }
+            self.select_to(start, cx);
+        }
+        self.replace_text_in_range(None, "", window, cx);
+    }
+
+    fn delete_to_line_end(
+        &mut self,
+        _: &DeleteToLineEnd,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        if self.read_only {
+            return;
+        }
+        if self.selected_range.is_empty() {
+            let end = self.line_range_at(self.cursor_offset()).end;
+            if end == self.cursor_offset() {
+                return;
+            }
+            self.select_to(end, cx);
+        }
+        self.replace_text_in_range(None, "", window, cx);
+    }
+
     fn copy(&mut self, _: &Copy, _: &mut Window, cx: &mut Context<Self>) {
         if !self.selected_range.is_empty() {
             cx.write_to_clipboard(ClipboardItem::new_string(
@@ -1258,6 +1300,8 @@ impl gpui::Render for TextEditorState {
             .on_action(cx.listener(Self::select_word_right))
             .on_action(cx.listener(Self::delete_word_left))
             .on_action(cx.listener(Self::delete_word_right))
+            .on_action(cx.listener(Self::delete_to_line_start))
+            .on_action(cx.listener(Self::delete_to_line_end))
             .on_action(cx.listener(Self::copy))
             .on_action(cx.listener(Self::cut))
             .on_action(cx.listener(Self::paste))

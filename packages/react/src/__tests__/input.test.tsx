@@ -79,6 +79,50 @@ describeNative("native text editors", () => {
     expect(testRoot.renderer.getAllText()).toContain("Submits: 1")
   })
 
+  it("deletes to the start of the line with cmd-backspace", () => {
+    function Textarea() {
+      const [text, setText] = useState("keep\nhello world")
+      return (
+        <div style={{ width: 400, height: 160 }}>
+          <textarea
+            value={text}
+            style={{ width: 300 }}
+            onChange={(event: EventPayload) => setText(event.value ?? "")}
+          />
+          <text>{`Value: ${JSON.stringify(text)}`}</text>
+        </div>
+      )
+    }
+
+    testRoot.render(<Textarea />)
+    const textarea = testRoot.renderer.findByType("textarea")[0]
+    testRoot.renderer.nativeSimulateKeystrokes(textarea.id, "cmd-backspace")
+
+    expect(testRoot.renderer.getAllText()).toContain('Value: "keep\\n"')
+  })
+
+  it("deletes to the end of the line with cmd-delete", () => {
+    function Textarea() {
+      const [text, setText] = useState("keep\nhello world")
+      return (
+        <div style={{ width: 400, height: 160 }}>
+          <textarea
+            value={text}
+            style={{ width: 300 }}
+            onChange={(event: EventPayload) => setText(event.value ?? "")}
+          />
+          <text>{`Value: ${JSON.stringify(text)}`}</text>
+        </div>
+      )
+    }
+
+    testRoot.render(<Textarea />)
+    const textarea = testRoot.renderer.findByType("textarea")[0]
+    testRoot.renderer.nativeSimulateKeystrokes(textarea.id, "cmd-left cmd-delete")
+
+    expect(testRoot.renderer.getAllText()).toContain('Value: "keep\\n"')
+  })
+
   it("deletes one complete grapheme", () => {
     function TextInput() {
       const [text, setText] = useState("A🙂")
