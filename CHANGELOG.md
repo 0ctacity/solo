@@ -1,5 +1,55 @@
 # Changelog
 
+## 0.4.0
+
+1. **Native `motion.div` animations** — animate from an initial style to a target style. React sends the targets once. Rust interpolates the presentation style and requests GPUI frames. The React tree is not reconciled on each frame.
+
+   ```tsx
+   import { motion } from '@gpuix/react'
+
+   <motion.div
+     initial={{ width: 0, opacity: 0 }}
+     animate={{ width: 260, opacity: 1 }}
+     transition={{ duration: 0.2, ease: 'easeOut' }}
+   >
+     Sidebar content
+   </motion.div>
+   ```
+
+   Numeric targets: `width`, `height`, `top`, `right`, `bottom`, `left`, `opacity`, `borderRadius`. Timing uses seconds. `ease` is `"linear"`, `"ease"`, `"easeIn"`, `"easeOut"`, `"easeInOut"`, or a cubic-bezier `[x1, y1, x2, y2]`.
+
+   Set `initial={false}` to mount at the first `animate` target. A running animation can reverse or change target without a jump, because the next transition starts from the current visible value.
+
+   Springs, keyframes, variants, exit transitions, and shared layout animations are not available yet.
+
+2. **Playwright-like automation API** — mark elements with `testId`, then drive them from tests or from another process. Ordinary log lines are ignored.
+
+   ```ts
+   import { connectTest } from '@gpuix/react/automation'
+
+   const app = await connectTest(renderer)
+   await app.getByTestId('inc').click()
+   await app.getByText('Count: 1').waitFor()
+   await app.getByTestId('composer').fill('hello gpuix')
+   await app.getByTestId('composer').press('enter')
+   await app.captureFrames('review/sidebar', [0, 150, 300])
+   ```
+
+   Locators: `getByTestId`, `getByText`, `getByType`. `click()` hits the center of the last painted bounds. `fill(text)` replaces the focused editor. `press('enter')` sends one key. `waitFor()` polls until exactly one match exists.
+
+   `app.clock.pause()`, `set(ms)`, and `fastForward(ms)` freeze native motion time so CI can capture the same frames every run.
+
+   A live app listens on stdin when stdin is a pipe, not a TTY. A terminal run is unchanged. `launch({ command, args })` pipes stdin and speaks SSE `data:` lines:
+
+   ```ts
+   import { launch } from '@gpuix/react/automation'
+
+   const app = await launch({ command: 'bun', args: ['examples/chat.tsx'] })
+   await app.getByTestId('composer').fill('hello')
+   await app.screenshot({ path: 'live.png' })
+   await app.close()
+   ```
+
 ## 0.3.0
 
 1. **CSS grid on `div`** — `display: "grid"` plus `gridTemplateColumns` maps to GPUI's Taffy grid. Use `gridColumnMin: "max-content"` for tables so each column is as wide as its widest cell.
