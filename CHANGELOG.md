@@ -1,5 +1,256 @@
 # Changelog
 
+## 0.2.0
+
+1. **Selectable text everywhere, plus `<code>`, `<diff>` and `<markdown>`** — every string GPUIX paints can be selected with a drag and copied with Cmd+C. A drag can start in a plain `<text>` and end inside a code block; the selection spans both.
+
+   ```tsx
+   <div style={{ display: 'flex', flexDirection: 'column' }}>
+     <text>drag from here</text>
+     <code code={'and into this code block'} language="ts" />
+   </div>
+   ```
+
+   Chrome opts out the same way CSS does, and it inherits:
+
+   ```tsx
+   <div style={{ userSelect: 'none' }}>
+     <text>toolbar label, never selected</text>
+   </div>
+   ```
+
+   Read it from the renderer with `renderer.getSelectedText()` and clear it with `renderer.clearSelection()`.
+
+   **`<code>`** is a syntax-highlighted block. One row per line at an exact line height, so its height is known before highlighting runs and a late highlight never reflows it.
+
+   ```tsx
+   <code code={source} language="typescript" showLineNumbers />
+   <code code={source} path="src/app.ts" />   {/* detect from the extension */}
+   ```
+
+   **`<diff>`** is a unified diff viewer virtualized with GPUI's `list()`, so a 2000-line patch paints only the rows on screen. Collapsing a file removes its rows rather than hiding them.
+
+   ```tsx
+   <diff
+     patch={unifiedPatch}
+     wordDiff
+     collapsedPaths={['pnpm-lock.yaml']}
+     onToggleFile={(e) => toggle(e.value)}
+     onLineClick={(e) => console.log(e.oldLine, e.newLine, e.value)}
+   />
+   ```
+
+   `wordDiff` highlights only the tokens that changed inside paired `+`/`-` lines.
+
+   **`<markdown>`** is GitHub-flavoured markdown: headings, lists, tables, block quotes, fenced code, strikethrough, task lists, and autolinked bare URLs.
+
+   ```tsx
+   <markdown source={readme} onLinkClick={(e) => open(e.value)} />
+   ```
+
+   All three take the same `theme` prop. Fields layer on top of the built-in dark theme:
+
+   ```tsx
+   <code
+     code={source}
+     language="rust"
+     theme={{
+       appearance: 'light',
+       accent: '#7c86ff',
+       syntax: { keyword: '#f38ba8', string: '#a6e3a1' },
+     }}
+   />
+   ```
+
+   Bundled languages: Rust, TypeScript, TSX, JavaScript, JSX, Python, Go, JSON, Bash, TOML, YAML, Markdown, HTML, CSS, C.
+
+   Row heights, gutter widths, paddings and the heading scale live in `theme.metrics`, so tuning the design is a React re-render and never a native rebuild.
+
+   ```tsx
+   <diff
+     patch={patch}
+     theme={{
+       metrics: {
+         diffLineHeight: 26,
+         diffGutterWidth: 48,
+         mdHeadingSizes: [24, 19, 16, 14],
+       },
+     }}
+   />
+   ```
+
+   New style props: `userSelect` (`"text"` | `"none"`, inherited), `selectionColor`, and `lineHeight` is now applied.
+
+   New test helpers: `renderer.getPaintedText()`, `renderer.dragSelect(x1, y1, x2, y2)`, and `renderer.getSyntaxCacheStats()`.
+
+   Ported from [Comet](https://github.com/zeronsh/comet) (MIT). See `THIRD_PARTY_NOTICES.md`.
+
+2. **Native `<input>` and `<textarea>`** — single-line and multiline editors backed by GPUI's platform input handler.
+
+   ```tsx
+   <textarea
+     value={draft}
+     minRows={1}
+     maxRows={8}
+     onChange={(event) => setDraft(event.value ?? '')}
+     onSubmit={send}
+   />
+   ```
+
+   Both support a native caret, mouse selection, IME composition, clipboard actions, undo/redo, caret movement and grapheme-safe deletion. `Enter` submits and `Shift+Enter` inserts a newline in a textarea.
+
+3. **`render()` remounts React on the same native window** — a `bun --hot` save remounts the tree without creating a second window.
+
+   ```tsx
+   import { render } from '@gpuix/react'
+
+   function App() {
+     return <div style={{ padding: 16 }}>hello</div>
+   }
+
+   render(<App />, { title: 'My App', width: 800, height: 600 })
+   ```
+
+   ```bash
+   bun --hot app.tsx
+   ```
+
+   The first call creates the GPUI renderer, window, React root, and frame loop. Later calls reuse that host and remount the tree. `useState` resets. The native `.node` addon stays loaded.
+
+   `createRoot`, `createRenderer`, and `startFrameLoop` still exist for tests and custom hosts. Pass `{ renderer }` into `render()` to drive the test renderer.
+
+   React Refresh (keep hook state across saves) is not included.
+
+4. **Headless Select, Combobox, and Tooltip** — unstyled primitives with the same compound composition used by shadcn. Import a namespace, wrap it in a local `components/ui/*.tsx`, and use those styled components in the app.
+
+   ```tsx
+   import * as SelectPrimitive from '@gpuix/react/select'
+
+   <SelectPrimitive.Root value={model} onValueChange={setModel}>
+     <SelectPrimitive.Trigger>
+       <SelectPrimitive.Value placeholder="Select a model" />
+     </SelectPrimitive.Trigger>
+     <SelectPrimitive.Content>
+       <SelectPrimitive.Item value="sonnet">Sonnet</SelectPrimitive.Item>
+     </SelectPrimitive.Content>
+   </SelectPrimitive.Root>
+   ```
+
+   Dedicated entry points:
+
+   | Import | Main parts |
+   |---|---|
+   | `@gpuix/react/select` | `Root`, `Trigger`, `Value`, `Content`, `Item` |
+   | `@gpuix/react/combobox` | `Root`, `Input`, `Content`, `List`, `Item`, `Empty` |
+   | `@gpuix/react/tooltip` | `Provider`, `Root`, `Trigger`, `Content` |
+
+   The barrel `@gpuix/react` still exports the prefixed names (`Select`, `SelectTrigger`, and the rest).
+
+   Each part accepts GPUIX styles, including state-based item style functions. Menus support native focus, keyboard navigation, outside-click dismissal, window-edge snapping, and click occlusion. Comboboxes use the native text input and rank prefix matches before substring matches.
+
+5. **`<virtual-list>`** — long, variable-height React collections. GPUI builds and lays out only rows near the viewport while React and the native retained tree keep the complete collection.
+
+   ```tsx
+   <virtual-list
+     alignment="bottom"
+     followTail
+     estimatedItemHeight={180}
+     style={{ flexGrow: 1, minHeight: 0 }}
+   >
+     {messages.map((message) => (
+       <Message key={message.id} message={message} />
+     ))}
+   </virtual-list>
+   ```
+
+   Rows can contain any GPUIX host or custom element. Appended rows preserve list measurements, changed rows are remeasured, and existing `scrollTo`, `scrollToItem`, and `getScrollOffset` methods work with virtual lists.
+
+6. **Tintable local SVG icons** — `<svg>` uses GPUI's monochrome SVG renderer.
+
+   ```tsx
+   <svg
+     src="/absolute/path/to/search.svg"
+     style={{ width: 16, height: 16, color: '#b4b4b4' }}
+   />
+   ```
+
+   `width` and `height` control layout. `color` controls the icon tint.
+
+7. **`startFrameLoop()`** — stop burning CPU on idle apps. The old `setImmediate` loop spun at roughly 27,000 ticks per second and measured **73.5% CPU** on an idle counter. `startFrameLoop` paces at ~125fps (~1% CPU).
+
+   ```tsx
+   import { startFrameLoop } from '@gpuix/react'
+
+   startFrameLoop(renderer)
+   ```
+
+   ```tsx
+   const loop = startFrameLoop(renderer, { frameMs: 16 })
+   loop.stop()
+   ```
+
+   Each frame is scheduled only after the previous one finishes. Rendering is unchanged: one draw per React commit, and no draws at all while idle.
+
+8. **Native GPUI platform** — Node applications use GPUI's native platform, window, renderer, and event pipeline on macOS, Windows, and Linux.
+
+   On macOS, Node drives an embedded AppKit event pump from the pinned GPUIX fork on the process main thread. On Windows and Linux, GPUI runs its normal blocking event loop on a dedicated Rust UI thread while Node sends in-process render and window commands. Windows runtime validation is still pending.
+
+9. **GPUI upgrade to zed `d5dc01f2`** — picks up several months of GPUI work, including `Application::run_embedded()`. GPUIX now holds the returned `ApplicationHandle` for the lifetime of the process.
+
+   Scroll events can now report a cancelled phase. Previously a cancelled scroll gesture was reported to JS as `"ended"`.
+
+   ```tsx
+   <div
+     style={{ overflow: 'scroll' }}
+     onScroll={(e) => {
+       if (e.touchPhase === 'cancelled') return
+     }}
+   />
+   ```
+
+   Building from source now requires **Rust 1.97.1**, pinned in `rust-toolchain.toml`. On macOS you also need the Metal compiler:
+
+   ```bash
+   xcodebuild -downloadComponent MetalToolchain
+   ```
+
+   Prebuilt binaries from npm are unaffected.
+
+10. **Style props that were declared and dropped now work** — `<text>` takes the full style set (padding, width, backgroundColor, borderRadius, flex). `fontSize` works on `<div>` and custom elements. `textAlign`, `rowGap`, `columnGap`, and `lineHeight` are applied. `borderWidth: 0` can clear a border.
+
+    ```tsx
+    <text style={{ paddingLeft: 40, width: 300, backgroundColor: '#7c86ff', borderRadius: 12 }}>
+      now works
+    </text>
+    ```
+
+11. **`autoFocus` works and `<input>` is unstyled** — `autoFocus` was declared and dropped by the reconciler, so an `<input>` never held keyboard focus unless the user clicked it. It now works on every element type.
+
+    ```tsx
+    <input value={text} autoFocus onKeyDown={(e) => e.keyChar && setText(t => t + e.keyChar)} />
+    ```
+
+    `<input>` no longer hardcodes a background, border, or radius. Only the placeholder dims. Style the element or its wrapper:
+
+    ```tsx
+    <input
+      value={text}
+      style={{ backgroundColor: '#00000000', borderWidth: 0, color: '#ececec', fontSize: 15 }}
+    />
+    ```
+
+    `<input>` is **controlled**: it paints `value` and reports keystrokes.
+
+12. **Blinking caret** — the native input and textarea caret blinks every 500ms while focused and idle. Editing or moving the caret makes it immediately solid. Blurring the field stops its repaint timer.
+
+    ```tsx
+    <input theme={{ caret: '#22c55e' }} />
+    ```
+
+13. **Clipboard and natural scroll** — `Cmd+C` writes to the system clipboard via `arboard`. Wheel deltas keep the sign the OS already applied, so natural scrolling matches System Settings.
+
+14. **React 19 JSX components** — the GPUIX JSX runtime accepts any valid `ReactNode` return type, so libraries such as `safe-mdx` can render parsed content into GPUIX host elements.
+
 ## 2026-03-02 23:30 UTC
 
 - **Add hover/active pseudo-selector style support** — styles applied natively by GPUI with zero JS round-trips.

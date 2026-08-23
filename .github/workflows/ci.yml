@@ -209,7 +209,7 @@ jobs:
           else
             echo "Publishing @gpuix/react@${CURRENT_VERSION}"
             cd packages/react
-            npm publish --access public --provenance
+            bun publish --access public
           fi
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
