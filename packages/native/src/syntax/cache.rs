@@ -216,7 +216,10 @@ mod tests {
                 fence_tag: None,
             })
             .unwrap();
-            cache.insert(DocumentKey::new(LanguageId::Rust, &source), Arc::new(document));
+            cache.insert(
+                DocumentKey::new(LanguageId::Rust, &source),
+                Arc::new(document),
+            );
         }
         assert!(cache.stats().documents <= MAX_DOCUMENTS);
     }

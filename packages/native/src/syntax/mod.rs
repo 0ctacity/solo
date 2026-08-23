@@ -371,7 +371,8 @@ fn injected_languages(parent: LanguageId) -> Vec<LanguageId> {
     match parent {
         Html => vec![JavaScript, Css, Json],
         Markdown => vec![
-            Rust, JavaScript, Jsx, TypeScript, Tsx, Python, Go, Json, Bash, Toml, Html, Css, Yaml, C,
+            Rust, JavaScript, Jsx, TypeScript, Tsx, Python, Go, Json, Bash, Toml, Html, Css, Yaml,
+            C,
         ],
         _ => Vec::new(),
     }

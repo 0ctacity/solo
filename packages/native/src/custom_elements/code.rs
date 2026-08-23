@@ -62,16 +62,16 @@ impl CodeElement {
     /// Resolve the highlight for the current props, reusing the last result
     /// when nothing changed.
     fn resolve_highlight(&mut self) -> Option<Arc<HighlightedDocument>> {
-        let key = (self.code.len(), fingerprint(&self.code, &self.language, &self.path));
+        let key = (
+            self.code.len(),
+            fingerprint(&self.code, &self.language, &self.path),
+        );
         if self.highlight_key == Some(key) {
             return self.highlight.clone();
         }
         self.highlight_key = Some(key);
-        self.highlight = highlight_cached(
-            &self.code,
-            self.path.as_deref(),
-            self.language.as_deref(),
-        );
+        self.highlight =
+            highlight_cached(&self.code, self.path.as_deref(), self.language.as_deref());
         self.highlight.clone()
     }
 
@@ -287,8 +287,7 @@ pub(crate) fn wire_standard_events(
 /// code column never shifts as the block scrolls.
 fn gutter_width(line_count: usize, m: &Metrics) -> f32 {
     let digits = line_count.max(1).to_string().len() as f32;
-    (digits * m.code_gutter_digit_width + m.code_gutter_padding_right)
-        .max(m.code_gutter_min_width)
+    (digits * m.code_gutter_digit_width + m.code_gutter_padding_right).max(m.code_gutter_min_width)
 }
 
 /// Translucent white on dark, translucent black on light — Comet's `ink`.

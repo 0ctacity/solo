@@ -84,7 +84,10 @@ impl FileHighlight {
     /// Spans for one diff line. Context lines prefer the post-change side,
     /// which is what the reader is looking at.
     fn spans_for(&self, line: &DiffLine) -> &[HighlightSpan] {
-        fn pick<'a>(lines: &'a [Vec<HighlightSpan>], no: Option<u32>) -> Option<&'a [HighlightSpan]> {
+        fn pick<'a>(
+            lines: &'a [Vec<HighlightSpan>],
+            no: Option<u32>,
+        ) -> Option<&'a [HighlightSpan]> {
             let ix = no?.saturating_sub(1) as usize;
             lines.get(ix).map(Vec::as_slice)
         }
@@ -371,7 +374,13 @@ impl CustomElement for DiffElement {
     }
 
     fn supported_events(&self) -> &[&str] {
-        &["toggleFile", "lineClick", "click", "mouseEnter", "mouseLeave"]
+        &[
+            "toggleFile",
+            "lineClick",
+            "click",
+            "mouseEnter",
+            "mouseLeave",
+        ]
     }
 
     fn destroy(&mut self) {
@@ -547,9 +556,7 @@ fn file_header_row(
         .hover(|s| s.bg(ink(theme, 0.05)));
 
     if first && ctx.radius > 0.0 {
-        header = header
-            .rounded_tl(px(ctx.radius))
-            .rounded_tr(px(ctx.radius));
+        header = header.rounded_tl(px(ctx.radius)).rounded_tr(px(ctx.radius));
     }
 
     if ctx.wants_toggle {
@@ -624,7 +631,10 @@ fn diff_line_row(
             .flex_none()
             .flex()
             .items_center()
-            .pl(px(m.diff_accent_bar_width + 2.0 * gutter_px + m.diff_marker_width + 12.0))
+            .pl(px(m.diff_accent_bar_width
+                + 2.0 * gutter_px
+                + m.diff_marker_width
+                + 12.0))
             .text_size(px(10.5))
             .text_color(theme.text_faint)
             .italic()
@@ -748,7 +758,10 @@ fn diff_line_row(
         // Accent bar: solid on +/− rows, an invisible spacer on context rows so
         // the columns always line up.
         .child({
-            let mut bar = gpui::div().w(px(m.diff_accent_bar_width)).h_full().flex_none();
+            let mut bar = gpui::div()
+                .w(px(m.diff_accent_bar_width))
+                .h_full()
+                .flex_none();
             if let Some(color) = accent {
                 bar = bar.bg(color);
             }

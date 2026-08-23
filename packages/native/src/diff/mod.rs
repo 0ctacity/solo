@@ -418,12 +418,26 @@ fn split_words(line: &str) -> Vec<Range<usize>> {
 /// to find its own data without walking the tree.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DiffRow {
-    FileHeader { file: u32 },
-    Notice { file: u32, notice: u32 },
-    HunkHeader { file: u32, hunk: u32 },
-    Line { file: u32, hunk: u32, line: u32 },
+    FileHeader {
+        file: u32,
+    },
+    Notice {
+        file: u32,
+        notice: u32,
+    },
+    HunkHeader {
+        file: u32,
+        hunk: u32,
+    },
+    Line {
+        file: u32,
+        hunk: u32,
+        line: u32,
+    },
     /// Bottom padding under an expanded file body.
-    BodyPad { file: u32 },
+    BodyPad {
+        file: u32,
+    },
 }
 
 impl DiffRow {
@@ -543,9 +557,8 @@ mod tests {
         )[0];
         assert_eq!(deleted.status, FileStatus::Deleted);
 
-        let renamed = &parse_patch(
-            "diff --git a/old.rs b/new.rs\nrename from old.rs\nrename to new.rs\n",
-        )[0];
+        let renamed =
+            &parse_patch("diff --git a/old.rs b/new.rs\nrename from old.rs\nrename to new.rs\n")[0];
         assert_eq!(renamed.status, FileStatus::Renamed);
         assert_eq!(renamed.path, "new.rs");
         assert_eq!(renamed.old_path.as_deref(), Some("old.rs"));
@@ -562,9 +575,9 @@ mod tests {
 
     #[test]
     fn keeps_no_newline_markers_as_meta_rows() {
-        let file = &parse_patch(
-            "diff --git a/a b/a\n@@ -1 +1 @@\n-x\n+y\n\\ No newline at end of file\n",
-        )[0];
+        let file =
+            &parse_patch("diff --git a/a b/a\n@@ -1 +1 @@\n-x\n+y\n\\ No newline at end of file\n")
+                [0];
         let last = file.hunks[0].lines.last().unwrap();
         assert_eq!(last.kind, LineKind::Meta);
         assert_eq!(last.text, "No newline at end of file");
@@ -676,8 +689,7 @@ mod tests {
         assert_eq!(&lines[2].text[lines[2].word_ranges[0].clone()], "3");
 
         // 1 deletion against 2 additions must not be paired by index.
-        let mut uneven =
-            parse_patch("diff --git a/a b/a\n@@ -1,1 +1,2 @@\n-x\n+y\n+z\n");
+        let mut uneven = parse_patch("diff --git a/a b/a\n@@ -1,1 +1,2 @@\n-x\n+y\n+z\n");
         annotate_word_diffs(&mut uneven);
         assert!(uneven[0].hunks[0]
             .lines
@@ -705,14 +717,10 @@ mod tests {
 
     #[test]
     fn notices_get_their_own_rows() {
-        let files = parse_patch(
-            "diff --git a/x.rs b/x.rs\nnew file mode 100644\n@@ -0,0 +1 @@\n+hi\n",
-        );
+        let files =
+            parse_patch("diff --git a/x.rs b/x.rs\nnew file mode 100644\n@@ -0,0 +1 @@\n+hi\n");
         let rows = flatten_rows(&files, |_| false);
-        assert!(rows.contains(&DiffRow::Notice {
-            file: 0,
-            notice: 0
-        }));
+        assert!(rows.contains(&DiffRow::Notice { file: 0, notice: 0 }));
     }
 
     #[test]
@@ -733,7 +741,12 @@ mod tests {
         let mut m = Metrics::default();
         m.diff_line_height = 40.0;
         assert_eq!(
-            DiffRow::Line { file: 0, hunk: 0, line: 0 }.height(&m),
+            DiffRow::Line {
+                file: 0,
+                hunk: 0,
+                line: 0
+            }
+            .height(&m),
             40.0
         );
         assert_eq!(

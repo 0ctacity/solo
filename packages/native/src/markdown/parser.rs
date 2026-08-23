@@ -89,8 +89,9 @@ fn options() -> Options {
 
 /// Parse a whole source into a [`BlockTree`].
 pub fn parse(source: &str) -> BlockTree {
-    let events: Vec<(Event, Range<usize>)> =
-        Parser::new_ext(source, options()).into_offset_iter().collect();
+    let events: Vec<(Event, Range<usize>)> = Parser::new_ext(source, options())
+        .into_offset_iter()
+        .collect();
     let mut cur = Cursor {
         events: &events,
         ix: 0,
@@ -545,7 +546,9 @@ mod tests {
         assert!(runs.iter().any(|r| r.style.bold && r.text == "bold"));
         assert!(runs.iter().any(|r| r.style.italic && r.text == "em"));
         assert!(runs.iter().any(|r| r.style.code && r.text == "code"));
-        assert!(runs.iter().any(|r| r.style.strikethrough && r.text == "gone"));
+        assert!(runs
+            .iter()
+            .any(|r| r.style.strikethrough && r.text == "gone"));
     }
 
     #[test]

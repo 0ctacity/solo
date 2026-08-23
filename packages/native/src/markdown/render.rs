@@ -350,7 +350,6 @@ fn text_element(
 
 /// Selectable text with the inline-code wash painted underneath.
 fn flat_text_element(flat: &FlatText, ctx: &mut MdContext) -> AnyElement {
-
     let sub = ctx.take_sub();
     let code_ranges = flat.code_ranges.clone();
     let wash = ctx.theme.code_wash;
@@ -640,7 +639,10 @@ mod tests {
             FontWeight::NORMAL,
         );
         assert_eq!(flat.text, "go here now");
-        assert_eq!(flat.runs.iter().map(|r| r.len).sum::<usize>(), flat.text.len());
+        assert_eq!(
+            flat.runs.iter().map(|r| r.len).sum::<usize>(),
+            flat.text.len()
+        );
         assert_eq!(flat.links, vec![(3..7, "https://x.dev".to_string())]);
         // Links stay monochrome with an underline, never accent-tinted.
         assert_eq!(flat.runs[1].color, theme.text);
@@ -691,7 +693,10 @@ mod tests {
     #[test]
     fn empty_runs_are_skipped() {
         let flat = flatten_runs(
-            &[run("", InlineStyle::default()), run("x", InlineStyle::default())],
+            &[
+                run("", InlineStyle::default()),
+                run("x", InlineStyle::default()),
+            ],
             &Theme::dark(),
             FontWeight::NORMAL,
         );
