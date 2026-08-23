@@ -203,6 +203,22 @@ To update the TypeScript API surface, edit the Rust source files in `packages/na
 
 After completing a fix or feature, add a `.changeset/*.md` file at the repo root instead of editing CHANGELOG.md. Never edit CHANGELOG.md directly; it is generated at publish time. Never bump `package.json` version manually. Load the `changesets` skill for format and rules.
 
+## Publishing
+
+**Never publish from a local machine.** CI is the only release path.
+
+`.github/workflows/ci.yml` builds `@gpuix/native` for every napi target (macOS arm64/x64, Linux x64/arm64, Windows x64/arm64), uploads the `.node` artifacts, then the `publish` job downloads them, runs `napi create-npm-dirs` + `napi artifacts`, and publishes `@gpuix/native` and `@gpuix/react`.
+
+Publish order is required. `@gpuix/react` depends on `@gpuix/native` (`workspace:^`). If React publishes first, an install in that window cannot resolve native.
+
+1. `napi pre-publish` publishes the per-platform packages (`darwin-arm64`, `linux-x64-gnu`, …)
+2. `npm publish` publishes `@gpuix/native`
+3. `npm publish` publishes `@gpuix/react`
+
+A local `npm publish` / `bun publish` would ship only the host binary and break every other platform. `prepublishOnly` exits if `CI` is unset.
+
+To release: bump versions via changesets, push to `main`. The publish job skips versions already on npm.
+
 ## Communication Flow
 
 ### Render Flow (JS → Rust)
