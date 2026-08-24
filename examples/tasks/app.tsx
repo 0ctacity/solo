@@ -2,10 +2,15 @@
  * GPUIX Tasks — a small native task manager built entirely from Solid 2.
  *
  * Dogfood app for the @gpuix/solid runtime: list, add, toggle and delete
- * tasks. In-memory mock data only. All state is ordinary Solid signals;
+ * tasks. In-memory mock data only. All state is ordinary Solid primitives;
  * every interaction must reach GPUI as fine-grained native mutations.
  *
- * Run: bun run build && node dist/index.js
+ * Layout notes (learned by dogfooding):
+ * - Every flex container sets `display: "flex"` explicitly. GPUI's default
+ *   display is Block, which ignores flexDirection/flexGrow entirely.
+ * - The scrollable list relies on build_div's min-height 0 so it can shrink
+ *   below its content inside a flex column (Taffy's automatic minimum size
+ *   would otherwise pin it to content height → nothing to scroll).
  */
 
 import { createSignal, For, Show } from "solid-js"
@@ -85,16 +90,16 @@ const CHECKBOX_HOVER: StyleDesc = {
   backgroundColor: "#313244",
 }
 
-function Checkbox(props: { checked: boolean; onToggle: () => void }) {
+function Checkbox(props: { checked: () => boolean; onToggle: () => void }) {
   return (
     <div
-      style={props.checked
+      style={props.checked()
         ? { ...CHECKBOX_HOVER, backgroundColor: "#a6e3a1", borderColor: "#a6e3a1" }
         : { ...CHECKBOX_STYLE, hover: CHECKBOX_HOVER }}
       onClick={() => props.onToggle()}
-      testId={`checkbox-${props.checked ? "on" : "off"}`}
+      testId={`checkbox-${props.checked() ? "on" : "off"}`}
     >
-      <Show when={props.checked}>
+      <Show when={props.checked()}>
         <Text style={{ color: "#1e1e2e", fontSize: 14 }}>✓</Text>
       </Show>
     </div>
@@ -111,7 +116,7 @@ function TaskRow(props: {
       style={{ ...ROW_STYLE, hover: { backgroundColor: "#181825" } }}
       testId={`task-${props.task().id}`}
     >
-      <Checkbox checked={props.task().completed} onToggle={props.onToggle} />
+      <Checkbox checked={() => props.task().completed} onToggle={props.onToggle} />
       <Text
         style={{
           flexGrow: 1,
@@ -144,7 +149,7 @@ function TaskRow(props: {
 
 export function TasksApp() {
   // A store keeps every task object identity-stable: toggling mutates one
-  // property and only that row's style/marker updates in the native tree.
+  // property in place so only that row's style/marker updates natively.
   const [tasks, setTasks] = createStore<Task[]>(makeTasks())
   const [draft, setDraft] = createSignal("")
 
@@ -160,6 +165,7 @@ export function TasksApp() {
   return (
     <View
       style={{
+        display: "flex",
         flexDirection: "column",
         width: "100%",
         height: "100%",
@@ -178,16 +184,19 @@ export function TasksApp() {
       {/* Scrollable task list */}
       <View
         style={{
+          display: "flex",
           flexGrow: 1,
           overflow: "scroll",
           flexDirection: "column",
         }}
         testId="task-list"
       >
-        {/* Keyed by id: reordering/moving moves native nodes instead of
-            rebuilding them. Key-function mode passes an accessor. */}
+        {/* Keyed by id: reordering moves native nodes instead of rebuilding.
+            Key-function mode hands the children an accessor. */}
         <For each={tasks} keyed={(t) => (t as Task).id}>
           {(item) => {
+            // Key-function mode hands us an accessor; read it lazily so every
+            // property read lands in a tracking scope.
             const task = item as unknown as () => Task
             return (
               <TaskRow
@@ -210,6 +219,7 @@ export function TasksApp() {
       {/* Composer */}
       <View
         style={{
+          display: "flex",
           flexDirection: "row",
           alignItems: "center",
           gap: 8,
@@ -233,4 +243,3 @@ export function TasksApp() {
     </View>
   )
 }
-

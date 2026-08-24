@@ -14,9 +14,25 @@
 ///       -> loss is hit-test gating or scroll-handle wiring in GPUIX.
 
 import { spawn } from "node:child_process"
+import { readFileSync, readdirSync } from "node:fs"
 import { connectStdio } from "@gpuix/react/automation"
 
 const ENTRY = new URL("./dist/index.js", import.meta.url).pathname
+
+// Fail fast when the loaded native addon predates the scroller min-size fix.
+{
+  const nativeDir = new URL("../../packages/native/", import.meta.url).pathname;
+  const binPath = readdirSync(nativeDir).find((f) => f.startsWith("gpuix-native.") && f.endsWith(".node"));
+  if (!binPath) throw new Error("native addon not found");
+  const bin = readFileSync(nativeDir + binPath);
+  if (!bin.includes("root-size-full-v2")) {
+    console.error(
+      "STALE NATIVE ADDON: this binary predates the scroller min-size fix.\n" +
+        "Run: git pull && bun run build:native   — then re-run diagnose."
+    );
+    process.exit(1);
+  }
+}
 
 const child = spawn(process.execPath, [ENTRY], {
   cwd: new URL(".", import.meta.url).pathname,
@@ -24,6 +40,15 @@ const child = spawn(process.execPath, [ENTRY], {
   stdio: ["pipe", "pipe", "pipe"],
 })
 child.stderr.on("data", (b: Buffer) => process.stderr.write(`[app] ${b}`))
+
+let sawPositiveScrollMax = false
+let sawAppliedDelta = false
+child.stderr.on("data", (b: Buffer) => {
+  const line = b.toString()
+  if (line.includes("scroll_max=(") && !line.includes("scroll_max=(0.00,0.00)")) sawPositiveScrollMax = true
+  if (line.includes("applied dy=")) sawAppliedDelta = true
+  process.stderr.write(`[app] ${line}`)
+})
 
 const app = await connectStdio({
   write: (chunk) => child.stdin.write(chunk),
@@ -62,6 +87,14 @@ for (let i = 0; i < 6; i++) {
   await new Promise((r) => setTimeout(r, 150))
   const after = await app.call("getScrollOffset", { elementId: list.id })
   console.log(`offset t+${(i + 1) * 150}ms:`, JSON.stringify(after.offset))
+}
+
+if (!painted) {
+  console.log("inconclusive: no paint")
+} else if (sawPositiveScrollMax && sawAppliedDelta && before.offset![1]! < 0) {
+  console.log("VERDICT: scrolling pipeline healthy (scroll_max > 0, deltas applied and retained).")
+} else {
+  console.log(`VERDICT: still broken — scrollMax>0=${sawPositiveScrollMax}, applied=${sawAppliedDelta}, offsetNow=${JSON.stringify(before.offset)}`)
 }
 
 console.log("\n>>> Now scroll PHYSICALLY over the task list. [scroll-trace] lines")
