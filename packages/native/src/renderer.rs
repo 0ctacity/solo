@@ -2253,6 +2253,9 @@ pub(crate) fn build_div(
     // to content height and its scroll containers never overflow.
     if ctx.root_id == Some(element.id) {
         el = el.size_full();
+        if std::env::var("GPUIX_SCROLL_TRACE").as_deref() == Ok("1") {
+            eprintln!("[scroll-trace] root sized to window (root-size-full-v2, scroller min-size fix)");
+        }
     }
 
     if let Some(style) = style {
@@ -2303,8 +2306,17 @@ pub(crate) fn build_div(
         let needs_scroll_x = resolved_x == Some("scroll");
         let needs_scroll_y = resolved_y == Some("scroll");
 
+        // Scroll containers must be allowed to shrink BELOW their content
+        // size. Taffy's automatic minimum size (min-height/min-width: auto)
+        // otherwise pins a flex item to its content extent, so the viewport
+        // grows with the children, nothing overflows, and every wheel delta
+        // clamps straight back to zero (observed on Linux: bounds ==
+        // content_size, scroll_max = 0).
         if needs_scroll_x && needs_scroll_y {
-            el = el.overflow_scroll();
+            el = el
+                .overflow_scroll()
+                .min_w(gpui::px(0.))
+                .min_h(gpui::px(0.));
         } else if needs_scroll_x {
             overflow_x_only = true;
             el = el
@@ -2313,7 +2325,9 @@ pub(crate) fn build_div(
                 .overflow_x_scroll()
                 .restrict_scroll_to_axis();
         } else if needs_scroll_y {
-            el = el.overflow_y_scroll();
+            el = el
+                .overflow_y_scroll()
+                .min_h(gpui::px(0.));
         }
 
         // Attach a persistent ScrollHandle when scrolling is enabled.
