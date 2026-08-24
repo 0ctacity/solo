@@ -951,16 +951,26 @@ impl TextEditorState {
         _: &mut Window,
         cx: &mut Context<Self>,
     ) {
+        // .on_scroll_wheel listeners receive every wheel event in the window.
+        // Only consume events that actually target this input — without a
+        // position check an input with any scrollable overflow swallows
+        // scrolling for the whole app (bubble order runs this handler before
+        // other elements' scroll handlers).
         let Some(bounds) = self.last_bounds else {
             return;
         };
-        let viewport_height = f32::from(bounds.size.height);
-        let max_scroll = (self.content_height - viewport_height).max(0.0);
-        if max_scroll == 0.0 {
+        let delta = event.delta.pixel_delta(self.line_height);
+        let Some(new_scroll_top) = input_wheel_target(
+            bounds,
+            self.content_height,
+            f32::from(self.line_height),
+            self.scroll_top,
+            event.position,
+            f32::from(delta.y),
+        ) else {
             return;
-        }
-        let delta = f32::from(event.delta.pixel_delta(self.line_height).y);
-        self.scroll_top = (self.scroll_top - delta).clamp(0.0, max_scroll);
+        };
+        self.scroll_top = new_scroll_top;
         self.follow_cursor = false;
         cx.stop_propagation();
         cx.notify();
@@ -1569,5 +1579,81 @@ mod tests {
         let mut input = TextEditorElement::new(false);
         input.set_prop("theme", serde_json::json!({ "caret": "#22c55e" }));
         assert_eq!(input.theme.caret, gpui::rgba(0x22c55eff).into());
+    }
+}
+
+/// Decide whether a wheel event belongs to this input and compute its new
+/// scroll top. Returns None when the event must NOT be consumed: it targets
+/// something else (position outside bounds) or there is nothing to scroll.
+///
+/// A free function so the guard has a direct unit test — this is exactly the
+/// logic that previously swallowed wheel events app-wide on Linux.
+fn input_wheel_target(
+    bounds: gpui::Bounds<Pixels>,
+    content_height: f32,
+    line_height_px: f32,
+    scroll_top: f32,
+    position: gpui::Point<Pixels>,
+    delta_y_pixels: f32,
+) -> Option<f32> {
+    if !bounds.contains(&position) {
+        return None;
+    }
+    let viewport_height = f32::from(bounds.size.height);
+    let max_scroll = (content_height - viewport_height).max(0.0);
+    if max_scroll == 0.0 {
+        return None;
+    }
+    Some((scroll_top - delta_y_pixels).clamp(0.0, max_scroll))
+}
+
+#[cfg(test)]
+mod wheel_guard_tests {
+    use super::input_wheel_target;
+    use gpui::{point, px, Bounds, Pixels, Point};
+
+    fn bounds(w: f32, h: f32) -> Bounds<Pixels> {
+        Bounds {
+            origin: point(px(100.0), px(100.0)),
+            size: gpui::Size { width: px(w), height: px(h) },
+        }
+    }
+
+    #[test]
+    fn ignores_events_outside_the_input() {
+        let b = bounds(200.0, 32.0);
+        let far: Point<Pixels> = point(px(10.0), px(10.0));
+        assert_eq!(
+            input_wheel_target(b, 64.0, 20.0, 0.0, far, -60.0),
+            None,
+            "wheel over other elements must not be consumed"
+        );
+    }
+
+    #[test]
+    fn consumes_events_inside_a_scrollable_input() {
+        let b = bounds(200.0, 32.0);
+        let inside: Point<Pixels> = point(px(150.0), px(110.0));
+        assert_eq!(input_wheel_target(b, 92.0, 20.0, 0.0, inside, -60.0), Some(60.0));
+    }
+
+    #[test]
+    fn ignores_events_when_there_is_nothing_to_scroll() {
+        let b = bounds(200.0, 32.0);
+        let inside: Point<Pixels> = point(px(150.0), px(110.0));
+        assert_eq!(
+            input_wheel_target(b, 32.0, 20.0, 0.0, inside, -60.0),
+            None,
+            "single-line input has no scrollable overflow"
+        );
+    }
+
+    #[test]
+    fn clamps_to_scroll_range() {
+        let b = bounds(200.0, 32.0);
+        let inside: Point<Pixels> = point(px(150.0), px(110.0));
+        // content 92, viewport 32 -> max scroll 60.
+        assert_eq!(input_wheel_target(b, 92.0, 20.0, 50.0, inside, -600.0), Some(60.0));
+        assert_eq!(input_wheel_target(b, 92.0, 20.0, 0.0, inside, 600.0), Some(0.0));
     }
 }

@@ -189,6 +189,13 @@ enum UiCommand {
         id: u64,
         index: usize,
     },
+    /// Inject a scroll-wheel event at the GPUI event boundary (automation).
+    SimulateScrollWheel {
+        x: f32,
+        y: f32,
+        delta_x: f32,
+        delta_y: f32,
+    },
     GetScrollOffset {
         id: u64,
         response: SyncSender<Option<[f64; 2]>>,
@@ -261,6 +268,11 @@ async fn run_ui_commands(
                     });
                 }
                 refresh_ui_window(window, cx)
+            }
+            UiCommand::SimulateScrollWheel { x, y, delta_x, delta_y } => {
+                window.update(cx, move |_view, window, cx| {
+                    crate::automation::dispatch_scroll_wheel(window, cx, x as f64, y as f64, delta_x as f64, delta_y as f64);
+                })
             }
             UiCommand::ScrollToItem { id, index } => {
                 if !VIRTUAL_LIST_STATES.with(|cell| {
@@ -1211,13 +1223,21 @@ impl GpuixRenderer {
             crate::automation::dispatch_scroll_wheel(window, cx, x, y, delta_x, delta_y);
         });
 
-        #[cfg(not(target_os = "macos"))]
-        {
-            let _ = (x, y, delta_x, delta_y);
-            Err(Error::from_reason(
-                "simulateScrollWheel is only implemented on macOS",
-            ))
-        }
+        #[cfg(any(target_os = "windows", target_os = "linux", target_os = "freebsd"))]
+        return self.send_ui_command(UiCommand::SimulateScrollWheel {
+            x: x as f32,
+            y: y as f32,
+            delta_x: delta_x as f32,
+            delta_y: delta_y as f32,
+        });
+
+        #[cfg(not(any(
+            target_os = "macos",
+            target_os = "windows",
+            target_os = "linux",
+            target_os = "freebsd"
+        )))]
+        Err(Error::from_reason("Unsupported operating system"))
     }
 
     #[napi]
@@ -1836,6 +1856,27 @@ impl gpui::Render for GpuixView {
         cx: &mut gpui::Context<Self>,
     ) -> impl gpui::IntoElement {
         use gpui::IntoElement;
+
+        // TEMPORARY scroll tracing (GPUIX_SCROLL_TRACE=1): logs every
+        // ScrollWheelEvent GPUI dispatches, at both dispatch phases. Remove
+        // once the Linux physical-scroll investigation is closed.
+        if std::env::var("GPUIX_SCROLL_TRACE").as_deref() == Ok("1") {
+            window.on_mouse_event(
+                |event: &gpui::ScrollWheelEvent,
+                 phase: gpui::DispatchPhase,
+                 _window: &mut gpui::Window,
+                 _cx: &mut gpui::App| {
+                    eprintln!(
+                        "[scroll-trace] gpui ScrollWheelEvent phase={:?} pos=({:.0},{:.0}) delta={:?} touch={:?}",
+                        phase,
+                        f64::from(event.position.x),
+                        f64::from(event.position.y),
+                        event.delta,
+                        event.touch_phase,
+                    );
+                },
+            );
+        }
 
         window.set_window_title(&self.window_title);
 

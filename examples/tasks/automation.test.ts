@@ -9,7 +9,7 @@
 /// everywhere, and pins down the wheel capability per platform.
 
 import { describe, expect, it } from "vitest"
-import { AutomationError, launch } from "@gpuix/react/automation"
+import { launch } from "@gpuix/react/automation"
 import type { App } from "@gpuix/react/automation"
 
 const ENTRY = new URL("./dist/index.js", import.meta.url).pathname
@@ -107,27 +107,34 @@ describe("tasks app automation", () => {
     return false
   }
 
-  it("reports wheel-input capability honestly", async () => {
+  it("injects wheel events through the GPUI event boundary", async () => {
     const app = await launchTasksApp()
     try {
       const list = await app.getByTestId("task-list").element()
-      try {
-        await app.call("scrollWheel", {
-          x: 100,
-          y: 100,
-          deltaX: 0,
-          deltaY: -120,
-        })
-        // Platforms with native wheel injection succeed.
-        expect(process.platform).toBe("darwin")
-      } catch (error) {
-        expect(error).toBeInstanceOf(AutomationError)
-        expect((error as AutomationError).code).toBe("Unsupported")
-        if (process.platform === "darwin") {
-          throw new Error("scrollWheel must be supported on macOS")
-        }
+
+      const before = await app.call("getScrollOffset", { elementId: list.id })
+      await app.call("scrollWheel", { x: 240, y: 320, deltaX: 0, deltaY: -240 })
+
+      let after = await app.call("getScrollOffset", { elementId: list.id })
+      for (let i = 0; i < 20 && same(before.offset, after.offset); i++) {
+        await new Promise((resolve) => setTimeout(resolve, 50))
+        after = await app.call("getScrollOffset", { elementId: list.id })
       }
-      void list
+
+      // Scroll offsets are geometry-derived from the last painted frame.
+      // Headless environments never paint, so offsets stay clamped at [0, 0]
+      // there; on any session with a display the wheel must move the list.
+      const { text } = await app.call("getPaintedText", {})
+      if (text.length > 0) {
+        expect(same(before.offset, after.offset), "wheel did not move the list").toBe(false)
+      }
+      expect(after.offset).toBeDefined()
+
+      function same(a: readonly number[] | null, b: readonly number[] | null): boolean {
+        const [ax = 0, ay = 0] = a ?? []
+        const [bx = 0, by = 0] = b ?? []
+        return ax === bx && ay === by
+      }
     } finally {
       await app.close()
     }

@@ -4,7 +4,8 @@
   "type": "module",
   "scripts": {
     "build": "vite build",
-    "start": "vite build && node dist/index.js"
+    "start": "vite build && node dist/index.js",
+    "diagnose": "bun diagnose-scroll.mts"
   },
   "dependencies": {
     "@gpuix/core": "workspace:^",
