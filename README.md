@@ -1,8 +1,13 @@
 # GPUIX
 
-React bindings for [GPUI](https://github.com/zed-industries/zed/tree/main/crates/gpui) - Zed's GPU-accelerated UI framework.
+> **⚠️ React support was removed.** GPUIX is now Solid-first: use
+> [`@gpuix/solid`](https://github.com/professional-tester/gpuix). Sections
+> below that show `@gpuix/react` imports describe the removed API and are
+> kept only as historical reference until the docs are fully rewritten.
 
-Build native GPU-accelerated desktop apps with React and TypeScript. Your components render directly to the GPU via Metal, DirectX, or Vulkan. No Electron, no web views.
+Solid bindings for [GPUI](https://github.com/zed-industries/zed/tree/main/crates/gpui) - Zed's GPU-accelerated UI framework. for [GPUI](https://github.com/zed-industries/zed/tree/main/crates/gpui) - Zed's GPU-accelerated UI framework.
+
+Build native GPU-accelerated desktop apps with Solid and TypeScript. Your components render directly to the GPU via Metal, DirectX, or Vulkan. No Electron, no web views.
 
 ![A Waku-style app built with GPUIX](docs/images/chat-app.png)
 
@@ -136,7 +141,7 @@ Event handlers are stored in a JS-side registry keyed by `(elementId, eventType)
 ## Packages
 
 - **`@gpuix/native`** — Rust/napi-rs bindings to GPUI. Contains `GpuixRenderer`, `RetainedTree`, `build_element()`, `apply_styles()`, and the event wiring.
-- **`@gpuix/react`** — React reconciler, event registry, and TypeScript types. Implements the `react-reconciler` host config using the mutation API.
+- **`@gpuix/solid`** — Solid custom renderer over the native mutation protocol, semantic primitives (`View`, `Text`, `Button`), automation parity, and a GPU-backed test harness.
 
 ## Building
 

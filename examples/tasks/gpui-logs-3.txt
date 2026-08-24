@@ -1,0 +1,56 @@
+[app] 15)
+[app] [scroll-trace] root sized to window (root-size-full-v2, scroller min-size fix)
+[app] [scroll-trace] root sized to window (root-size-full-v2, scroller min-size fix)
+[app] [gpui-scroll] measure children=28 content_size=(1644.2,966.1)
+[gpui-scroll] clamp bounds=(1644.2,782.0) content=(1644.2,966.1) scroll_max=(0.[app] [gpui-scroll] measure children=28 content_size=(1644.2,966.1)
+[gpui-scroll] clamp bounds=(1644.2,782.0) content=(1644.2,966.1) scroll_max=(0.[app] 00,184.15) before=(0.00,-184.15) after=(0.00,-184.15)
+[app] 00,184.15) before=(0.00,-184.15) after=(0.00,-184.15)
+[app] [scroll-trace] root sized to window (root-size-full-v2, scroller min-size fix)
+[app] [scroll-trace] root sized to window (root-size-full-v2, scroller min-size fix)
+[app] [gpui-scroll] measure children=28 content_size=(1644.2,966.1)
+[gpui-scroll] clamp bounds=(1644.2,782.0) content=(1644.2,966.1) scroll_max=(0.00,184.15) before=(0.00,-184.15) after=(0.00,[app] [gpui-scroll] measure children=28 content_size=(1644.2,966.1)
+[gpui-scroll] clamp bounds=(1644.2,782.0) content=(1644.2,966.1) scroll_max=(0.00,184.15) before=(0.00,-184.15) after=(0.00,[app] -184.15)
+[app] -184.15)
+[app] [scroll-trace] root sized to window (root-size-full-v2, scroller min-size fix)
+[app] [scroll-trace] root sized to window (root-size-full-v2, scroller min-size fix)
+[app] [gpui-scroll] measure children=28 content_size=(1644.2,966.1)
+[gpui-scroll] clamp bounds=(1644.2,782.0) content=(1644.2,966.1) scroll_max=(0.00,184.15[app] [gpui-scroll] measure children=28 content_size=(1644.2,966.1)
+[gpui-scroll] clamp bounds=(1644.2,782.0) content=(1644.2,966.1) scroll_max=(0.00,184.15[app] ) before=(0.00,-184.15) after=(0.00,-184.15)
+[app] ) before=(0.00,-184.15) after=(0.00,-184.15)
+[app] [scroll-trace] root sized to window (root-size-full-v2, scroller min-size fix)
+[app] [scroll-trace] root sized to window (root-size-full-v2, scroller min-size fix)
+[app] [gpui-scroll] measure children=28 content_size=(1644.2,966.1)
+[app] [gpui-scroll] measure children=28 content_size=(1644.2,966.1)
+[app] [gpui-scroll] clamp bounds=(1644.2,782.0) content=(1644.2,966.1[app] [gpui-scroll] clamp bounds=(1644.2,782.0) content=(1644.2,966.1[app] ) scroll_max=(0.[app] ) scroll_max=(0.[app] 00[app] 00[app] ,[app] ,[app] 184.15) before=(0.00,-184.15) after=(0.00,-184.15)
+[app] 184.15) before=(0.00,-184.15) after=(0.00,-184.15)
+[app] [scroll-trace] root sized to window (root-size-full-v2, scroller min-size fix)
+[app] [scroll-trace] root sized to window (root-size-full-v2, scroller min-size fix)
+[app] [gpui-scroll] measure children=28 content_size=(1644.2,966.1)
+[gpui-scroll] clamp bounds=(1644.2,782.0) content=(1644.2,966.1) scroll_max=(0.00,[app] [gpui-scroll] measure children=28 content_size=(1644.2,966.1)
+[gpui-scroll] clamp bounds=(1644.2,782.0) content=(1644.2,966.1) scroll_max=(0.00,[app] 184.15) before=(0.00,-184.15) after=(0.00,-184.15)
+[app] 184.15) before=(0.00,-184.15) after=(0.00,-184.15)
+[app] [scroll-trace] root sized to window (root-size-full-v2, scroller min-size fix)
+[app] [scroll-trace] root sized to window (root-size-full-v2, scroller min-size fix)
+[app] [gpui-scroll] measure children=28 content_size=(1644.2,966.1)
+[gpui-scroll] clamp bounds=(1644.2,782.[app] [gpui-scroll] measure children=28 content_size=(1644.2,966.1)
+[gpui-scroll] clamp bounds=(1644.2,782.[app] 0) content=(1644.2,966.1) scroll_max=(0.00,184[app] 0) content=(1644.2,966.1) scroll_max=(0.00,184[app] .[app] .[app] 15[app] 15[app] ) before=([app] ) before=([app] 0.[app] 0.[app] 00[app] 00[app] ,[app] ,[app] -[app] -[app] 184[app] 184[app] .15) after=(0.00,-184.15)
+[app] .15) after=(0.00,-184.15)
+[app] [scroll-trace] root sized to window (root-size-full-v2, scroller min-size fix)
+[app] [scroll-trace] root sized to window (root-size-full-v2, scroller min-size fix)
+[app] [gpui-scroll] measure children=28 content_size=(1644.2,966.1)
+[gpui-scroll] clamp bounds=(1644.2,782.0) content=(1644.2,966.1) scroll_max=(0.00,184.15) before=(0.00,[app] [gpui-scroll] measure children=28 content_size=(1644.2,966.1)
+[gpui-scroll] clamp bounds=(1644.2,782.0) content=(1644.2,966.1) scroll_max=(0.00,184.15) before=(0.00,[app] -184.15) after=(0.00,-184.15)
+[app] -184.15) after=(0.00,-184.15)
+[app] 
+thread 'gpuix-ui' (78230) panicked at /home/atawirtz/.cargo/git/checkouts/zed-89baeef0abeb3cc5/db0820f/crates/gpui/src/app/entity_map.rs:1116:9:
+Exited with leaked handles:
+Leaked handle for entity gpuix_native::custom_elements::input::TextEditorState (EntityId(2v1)): (export LEAK_BACKTRACE to find allocation site)
+
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+[app] 
+thread 'gpuix-ui' (78230) panicked at /home/atawirtz/.cargo/git/checkouts/zed-89baeef0abeb3cc5/db0820f/crates/gpui/src/app/entity_map.rs:1116:9:
+Exited with leaked handles:
+Leaked handle for entity gpuix_native::custom_elements::input::TextEditorState (EntityId(2v1)): (export LEAK_BACKTRACE to find allocation site)
+
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+^C

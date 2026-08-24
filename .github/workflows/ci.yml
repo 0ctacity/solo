@@ -139,10 +139,6 @@ jobs:
           name: bindings-aarch64-apple-darwin
           path: packages/native/
 
-      - name: Run tests
-        run: bun test
-        working-directory: packages/react
-
   publish:
     name: publish
     runs-on: ubuntu-latest
@@ -195,31 +191,5 @@ jobs:
           else
             echo "Publishing @gpuix/native@${CURRENT_VERSION}"
             cd packages/native
-            bunx sigillo run --command 'printf "//registry.npmjs.org/:_authToken=%s\n" "$NPM_TOKEN" > /tmp/gpuix-npmrc && NPM_CONFIG_USERCONFIG=/tmp/gpuix-npmrc npm publish --access public --provenance'
-          fi
-
-      - name: Build @gpuix/react
-        run: bun run build
-        working-directory: packages/react
-
-      - name: Publish @gpuix/react
-        env:
-          SIGILLO_TOKEN: ${{ secrets.SIGILLO_TOKEN }}
-          SIGILLO_PROJECT: ${{ vars.SIGILLO_PROJECT }}
-          SIGILLO_ENVIRONMENT: prod
-        run: |
-          CURRENT_VERSION=$(node -p "require('./packages/react/package.json').version")
-          if npm view "@gpuix/react@${CURRENT_VERSION}" version 2>/dev/null; then
-            echo "@gpuix/react@${CURRENT_VERSION} already published, skipping"
-          else
-            echo "Publishing @gpuix/react@${CURRENT_VERSION}"
-            cd packages/react
-            node -e "
-              const fs = require('fs')
-              const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'))
-              const native = require('../native/package.json').version
-              pkg.dependencies['@gpuix/native'] = '^' + native
-              fs.writeFileSync('package.json', JSON.stringify(pkg, null, 2) + '\n')
-            "
             bunx sigillo run --command 'printf "//registry.npmjs.org/:_authToken=%s\n" "$NPM_TOKEN" > /tmp/gpuix-npmrc && NPM_CONFIG_USERCONFIG=/tmp/gpuix-npmrc npm publish --access public --provenance'
           fi

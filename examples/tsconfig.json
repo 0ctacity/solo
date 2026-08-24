@@ -4,7 +4,7 @@
     "module": "ESNext",
     "moduleResolution": "bundler",
     "jsx": "react-jsx",
-    "jsxImportSource": "@gpuix/react",
+    "jsxImportSource": "@gpuix/solid",
     "strict": true,
     "esModuleInterop": true,
     "skipLibCheck": true

@@ -7,7 +7,7 @@ import {
   handleAutomationRequest,
   InProcessBackend,
   PROTOCOL_VERSION,
-} from "../automation/index.js"
+} from "@gpuix/core/automation"
 import type { TestAutomationRenderer } from "@gpuix/core/automation"
 
 function fakeRenderer(): TestAutomationRenderer {

@@ -3,19 +3,12 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "counter": "bun --hot counter.tsx",
-    "diff": "bun --hot diff.tsx",
     "test": "vitest run",
-    "native-text": "bun --hot native-text.tsx",
-    "chat": "bun --hot chat.tsx",
-    "compile": "bun compile-chat.ts",
     "solid-counter": "bun run --cwd solid-counter start"
   },
   "dependencies": {
-    "@gpuix/react": "workspace:*",
     "@kmamal/sdl": "^0.11.12",
     "diff": "^7.0.0",
-    "react": "^19.2.4",
     "safe-mdx": "1.14.0",
     "shiki": "^3.0.0"
   },

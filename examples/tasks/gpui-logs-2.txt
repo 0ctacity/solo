@@ -1,0 +1,59 @@
+󰂑 65% at 14:33:56 ❯ bun run diagnose
+$ bun diagnose-scroll.mts
+[app] [gpui-scroll] measure children=26 content_size=(448.6,894.5)
+[gpui-scroll] clamp bounds=(448.6,894.5) content=(448.6,894.5) scroll_max=(0.00,0.00) before=(0.00,0.00) after=(0.00,0.00)
+[app] [gpui-scroll] measure children=26 content_size=(448.6,894.5)
+[gpui-scroll] clamp bounds=(448.6,894.5) content=(448.6,894.5) scroll_max=(0.00[app] ,0.00) before=(0.00,0.00) after=(0.00,0.00)
+[app] [gpui-scroll] measure children=26 content_size=(448.6,894.5)
+[gpui-scroll] clamp bounds=(448.6,894.5) content=(448.6,894.5) scroll_max=(0.00,0.00) before=(0.[app] 00,0.00) after=(0.00,0.00)
+[app] [gpui-scroll] measure children=26 content_size=(448.6,894.5)
+[gpui-scroll] clamp bounds=(448.6,894.5) content=(448.6,894.5) scroll_max=(0.00,0.00) before=([app] 0.00,0.00) after=(0.00,0.00)
+[app] [gpui-scroll] measure children=26 content_size=(448.6,894.5)
+[gpui-scroll] clamp bounds=(448.6,894.5) content=(448.6,894.5) scroll_max=(0.00,0.00) before=(0.00,0.00) after=(0.00,0.00)
+[app] [gpui-scroll] measure children=26 content_size=(448.6,894.5)
+[app] [gpui-scroll] clamp bounds=(448.6,894.5) content=(448.6,894.5) scroll_max=(0.00,0.00) before=(0.00,0.00) after=(0.00,0.00)
+[app] [gpui-scroll] measure children=26 content_size=(448.6,894.5)
+[gpui-scroll] clamp bounds=(448.6,894.5) content=(448.6,894.5) scroll_max=(0.00[app] ,0.00) before=(0.00,0.00) after=(0.00,0.00)
+[app] [scroll-trace] gpui ScrollWheelEvent phase=Capture pos=(298,180) delta=Lines(Point { x: 0.0[app] , y: -3.0 }) touch=Moved
+[gpui-scroll] applied dx=(0.0) dy=(-78.0) old=(0.00,0.00) new=(0.00,-78.00)
+[scroll-trace] gpui ScrollWheelEvent phase=Bubble pos=(298,180) delta=Lines[app] (Point { x: 0.0, y: -3.0 }) touch=Moved
+[app] [gpui-scroll] measure children=26 content_size=(448.6,894.5)
+[gpui-scroll] clamp bounds=(448.6,894.5) content=([app] 448.6,894.5) scroll_max=(0.00,0.00) before=(0.00,-78.00) after=(0.00,-0.00)
+[app] [scroll-trace] gpui ScrollWheelEvent phase=Capture pos=(295,180) delta=Lines(Point { x[app] : 0.0, y: -3.0 }) touch=Moved
+[gpui-scroll] applied dx=(0.0) dy=(-78.0) old=(0.00,-0.00) new=(0.00,-78.00[app] )
+[scroll-trace] gpui ScrollWheelEvent phase=Bubble pos=(295,180) delta=Lines(Point { [app] x: 0.0, y: -3.[app] 0 }) touch=Moved
+[app] [gpui-scroll] measure children=26 content_size=(448.6,894.5)
+[gpui-scroll] clamp bounds=(448.[app] 6,894.5) content=(448.6,894.5) scroll_max=(0.00,0.00) before=(0.00,-78.00) after=(0.00,-0.00)
+[app] [gpui-scroll] measure children=26 content_size=(448.6,894.5)
+[gpui-scroll] clamp bounds=(448.6,894.5) content=(448.6,894[app] .5) scroll_max=(0.00,0.00) before=(0.00,-0.00) after=(0.00,-0.00)
+[app] [scroll-trace] gpui ScrollWheelEvent phase=Capture pos=(273,218) delta=Lines(Point { x: 0.0, y: 3.0 }) touch=[app] Moved
+[gpui-scroll] applied dx=(0.0) dy=(78.0) old=(0.00,-0.00) new=(0.00,78.00)
+[scroll-trace] gpui ScrollWheelEvent phase=[app] Bubble pos=(273,218) delta=Lines(Point { x: 0.0, y: 3.0 })[app]  touch=Moved
+[app] [gpui-scroll] measure children=26 content_size=(448.6,894.5)
+[gpui-scroll] clamp bounds=(448.6,894.5) content=([app] 448.6,894.5) scroll_max=(0.00,0.00) before=(0.00,78.00) after=(0.00,0.[app] 00)
+[app] [scroll-trace] gpui ScrollWheelEvent phase=Capture pos=(273,219) delta=Lines(Point { x[app] : 0.0, y: 3.0 }) touch=Moved
+[gpui-scroll] applied dx=(0.0) dy=(78.0) old=(0.00,[app] 0.00) new=(0.00,78.00)
+[app] [scroll-trace] gpui ScrollWheelEvent phase=Bubble pos=(273[app] ,219) delta=Lines(Point { [app] x: 0.0, y: [app] 3.0 }[app] ) touch=Moved
+[app] [gpui-scroll] measure children=26 content_size=(448.6,894.5[app] )
+[gpui-scroll] clamp bounds=(448.6,894.5) content=(448.6,894.5) scroll_max=(0.00,0.00) before=(0.00,78.00) after=(0.00[app] ,0.00)
+[app] [scroll-trace] gpui ScrollWheelEvent phase=Capture pos=(271,217) delta=Lines(Point { x: [app] 0.0, y: -3.0 }) touch=Moved
+[gpui-scroll] applied dx=(0.0) dy=(-78.0) old=(0.00,0.00) new=(0.00,-78[app] .00)
+[scroll-trace] gpui ScrollWheelEvent phase=Bubble pos=([app] 271,217) delta=Lines(Point { x[app] : 0.[app] 0, [app] y: [app] -3.0 }[app] ) touch=[app] Moved
+[app] [gpui-scroll] measure children=26 content_size=(448.6,894.5)
+[gpui-scroll] clamp bounds=([app] 448.6,894.5) content=(448.6,894.5) scroll_max=(0.00,0.00) before=(0.00,-78.00) after=(0.00,-0.00)
+[app] [gpui-scroll] measure children=26 content_size=(448.6,894.5)
+[app] [gpui-scroll] clamp bounds=(448.6,894.5) content=(448.6,894.5) scroll_max=(0.00,0.00) before=(0.00,-0.00) after=(0.00,-0.00)
+[app] [gpui-scroll] measure children=26 content_size=(448.6,894.5)
+[app] [gpui-scroll] clamp bounds=(448.6,894.5) content=(448.6,894.5) scroll_max=(0.00,0.00) before=(0.00,-0.00) after=(0.00,-0.00)
+[app] [gpui-scroll] measure children=26 content_size=(448.6,894.5)
+[app] [gpui-scroll] clamp bounds=(448.6,894.5) content=(448.6,894.5) scroll_max=(0.00,0.00) before=(0.00,-0.00) after=(0.00,[app] -0.00)
+[app] [gpui-scroll] measure children=26 content_size=(448.6,894.5)
+[app] [gpui-scroll] clamp bounds=(448.6,894.5) content=(448.6,894.5) scroll_max=(0.00,0.00) before=(0.00,-0.00[app] ) after=(0.00,-0.00)
+[app] [gpui-scroll] measure children=26 content_size=(448.6,894.5)
+[gpui-scroll] clamp bounds=(448.6,894[app] .5) content=(448.6,894.5) scroll_max=(0.00,0.00) before=(0.00,-0.00) after=(0.00,-0.00)
+[app] [gpui-scroll] measure children=26 content_size=(448.6,894.5)
+[app] [gpui-scroll] clamp bounds=(448.6,894.5) content=(448.6,894.5) scroll_max=(0.00,0.00) before=(0.00,-0.00) after=(0.00,-0.00)
+[app] [gpui-scroll] measure children=26 content_size=(448.6,894.5)
+[app] [gpui-scroll] clamp bounds=(448.6,894.5) content=(448.6,894.5) scroll_max=(0.00,0.00) before=(0.00,-0.00) after=(0.00,[app] -0.00)
+[app] [gpui-scroll] measure children=26 content_size=(448.6,894.[app] 5)
+[gpui-scroll] clamp bounds=(448.6,894.5) content=(448.6,894.5) scroll_max=(0.00,0.00) before=(0.00[app] ,-0.00) after=(0.00,[app] -0.00[app] )

@@ -11,3 +11,9 @@ export {
   getGpuixRenderer,
 } from "./runtime.js"
 export type { GpuixSolidNode } from "./runtime.js"
+
+export {
+  createSolidNativeTestRoot,
+  hasNativeTestRenderer,
+} from "./testing.js"
+export type { SolidNativeTestRoot } from "./testing.js"
