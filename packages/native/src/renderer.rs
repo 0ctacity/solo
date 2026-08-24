@@ -1440,6 +1440,7 @@ impl GpuixView {
             motion_active: &mut motion_active,
             selection: self.selection.clone(),
             inherited,
+            root_id: None,
         };
         let child = build_element(expected_child_id, &mut build_ctx, window, cx);
         if motion_active {
@@ -1542,6 +1543,12 @@ pub(crate) struct BuildCtx<'a> {
     /// own theme only seeds the root selection wash; custom elements resolve
     /// their own theme from their `theme` prop.
     pub inherited: Inherited,
+    /// The retained-tree root element, when this build renders from it. The
+    /// root div is created without styles by the JS side, so it must be sized
+    /// to the window here — otherwise every percentage height below it
+    /// resolves against an auto-height parent and collapses to content size,
+    /// which makes scroll containers non-scrollable (scroll_max = 0).
+    pub root_id: Option<u64>,
 }
 
 /// Style properties that cascade into descendants.
@@ -1921,6 +1928,7 @@ impl gpui::Render for GpuixView {
                     motion_active: &mut motion_active,
                     selection: self.selection.clone(),
                     inherited: Inherited::root(&theme),
+                    root_id: Some(root_id),
                 };
                 build_element(root_id, &mut ctx, window, cx)
             }
@@ -2238,6 +2246,14 @@ pub(crate) fn build_div(
 
     let element_id_str = format!("__gpuix_{}", element.id);
     let mut el = gpui::div().id(gpui::SharedString::from(element_id_str));
+
+    // The retained-tree root div is created unstyled by the JS side. Size it
+    // to the window so percentage heights below it resolve against a definite
+    // parent; without this, an app whose root uses height: "100%" collapses
+    // to content height and its scroll containers never overflow.
+    if ctx.root_id == Some(element.id) {
+        el = el.size_full();
+    }
 
     if let Some(style) = style {
         el = apply_styles(el, style);
