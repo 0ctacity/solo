@@ -14,25 +14,9 @@
 ///       -> loss is hit-test gating or scroll-handle wiring in GPUIX.
 
 import { spawn } from "node:child_process"
-import { readFileSync, readdirSync } from "node:fs"
 import { connectStdio } from "@gpuix/react/automation"
 
 const ENTRY = new URL("./dist/index.js", import.meta.url).pathname
-
-// Fail fast when the loaded native addon predates the scroller min-size fix.
-{
-  const nativeDir = new URL("../../packages/native/", import.meta.url).pathname;
-  const binPath = readdirSync(nativeDir).find((f) => f.startsWith("gpuix-native.") && f.endsWith(".node"));
-  if (!binPath) throw new Error("native addon not found");
-  const bin = readFileSync(nativeDir + binPath);
-  if (!bin.includes("root-size-full-v2")) {
-    console.error(
-      "STALE NATIVE ADDON: this binary predates the scroller min-size fix.\n" +
-        "Run: git pull && bun run build:native   — then re-run diagnose."
-    );
-    process.exit(1);
-  }
-}
 
 const child = spawn(process.execPath, [ENTRY], {
   cwd: new URL(".", import.meta.url).pathname,

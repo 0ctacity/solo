@@ -1868,27 +1868,6 @@ impl gpui::Render for GpuixView {
     ) -> impl gpui::IntoElement {
         use gpui::IntoElement;
 
-        // TEMPORARY scroll tracing (GPUIX_SCROLL_TRACE=1): logs every
-        // ScrollWheelEvent GPUI dispatches, at both dispatch phases. Remove
-        // once the Linux physical-scroll investigation is closed.
-        if std::env::var("GPUIX_SCROLL_TRACE").as_deref() == Ok("1") {
-            window.on_mouse_event(
-                |event: &gpui::ScrollWheelEvent,
-                 phase: gpui::DispatchPhase,
-                 _window: &mut gpui::Window,
-                 _cx: &mut gpui::App| {
-                    eprintln!(
-                        "[scroll-trace] gpui ScrollWheelEvent phase={:?} pos=({:.0},{:.0}) delta={:?} touch={:?}",
-                        phase,
-                        f64::from(event.position.x),
-                        f64::from(event.position.y),
-                        event.delta,
-                        event.touch_phase,
-                    );
-                },
-            );
-        }
-
         if self.quit_hook.is_none() {
             self.quit_hook = Some(cx.on_app_quit(|view, _cx| {
                 view.custom_registry.destroy_all();
@@ -2264,9 +2243,6 @@ pub(crate) fn build_div(
     // to content height and its scroll containers never overflow.
     if ctx.root_id == Some(element.id) {
         el = el.size_full();
-        if std::env::var("GPUIX_SCROLL_TRACE").as_deref() == Ok("1") {
-            eprintln!("[scroll-trace] root sized to window (root-size-full-v2, scroller min-size fix)");
-        }
     }
 
     if let Some(style) = style {
