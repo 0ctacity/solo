@@ -16,6 +16,11 @@ interface NativeTestRendererApi {
   simulateKeystrokes(keystrokes: string): void
   focusElement(elementId: number): void
   simulateClick(x: number, y: number): void
+  simulateScrollWheel(x: number, y: number, deltaX: number, deltaY: number): void
+  scrollToItem(elementId: number, index: number): void
+  scrollTo(elementId: number, x: number, y: number): void
+  getScrollOffset(elementId: number): number[] | null
+  clearSelection(): void
   getElementBounds(elementId: number): number[] | null
   getAllText(): string[]
   getPaintedText(): string[]
@@ -57,8 +62,14 @@ export interface SolidNativeTestRoot {
   getElementBounds(elementId: number): number[] | null
   // ── simulation ──
   nativeSimulateKeystrokes(elementId: number, keystrokes: string): void
+  simulateKeystrokes(keystrokes: string): void
   nativeSimulateClick(x: number, y: number): void
   focusElement(elementId: number): void
+  nativeSimulateScrollWheel(x: number, y: number, deltaX: number, deltaY: number): void
+  scrollToItem(elementId: number, index: number): void
+  scrollTo(elementId: number, x: number, y: number): void
+  getScrollOffset(elementId: number): number[] | null
+  clearSelection(): void
   dragSelect(x1: number, y1: number, x2: number, y2: number): string | null
   captureScreenshot(path: string): void
 }
@@ -138,12 +149,48 @@ export function createSolidNativeTestRoot(): SolidNativeTestRoot {
       dispatchNativeEvents()
     },
 
-    dragSelect(x1, y1, x2, y2) {
+    dragSelect(x1: number, y1: number, x2: number, y2: number) {
       native.dragSelect(x1, y1, x2, y2)
       return native.getSelectedText()
     },
 
-    captureScreenshot(path) {
+    simulateKeystrokes(keystrokes: string) {
+      native.flush()
+      native.simulateKeystrokes(keystrokes)
+      dispatchNativeEvents()
+      native.flush()
+    },
+
+    nativeSimulateScrollWheel(x: number, y: number, deltaX: number, deltaY: number) {
+      native.flush()
+      native.simulateScrollWheel(x, y, deltaX, deltaY)
+      dispatchNativeEvents()
+      native.flush()
+    },
+
+    scrollToItem(elementId: number, index: number) {
+      native.flush()
+      native.scrollToItem(elementId, index)
+      native.flush()
+    },
+
+    scrollTo(elementId: number, x: number, y: number) {
+      native.flush()
+      native.scrollTo(elementId, x, y)
+      native.flush()
+    },
+
+    getScrollOffset(elementId: number) {
+      native.flush()
+      return native.getScrollOffset(elementId)
+    },
+
+    clearSelection() {
+      native.clearSelection()
+      native.flush()
+    },
+
+    captureScreenshot(path: string) {
       native.flush()
       native.captureScreenshot(path)
     },
