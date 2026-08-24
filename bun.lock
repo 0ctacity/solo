@@ -59,6 +59,7 @@
         "@babel/core": "^7.26.0",
         "babel-preset-solid": "^2.0.0-rc.1",
         "vite": "^7.0.0",
+        "vitest": "^4.0.18",
       },
     },
     "packages/core": {
@@ -66,6 +67,8 @@
       "version": "0.4.0",
       "dependencies": {
         "@gpuix/native": "workspace:^",
+        "eventsource-parser": "^4.1.0",
+        "zod": "^4.4.3",
       },
       "devDependencies": {
         "@types/node": "^25.3.3",
@@ -88,7 +91,6 @@
         "@gpuix/native": "workspace:^",
         "eventsource-parser": "^4.1.0",
         "react-reconciler": "^0.31.0",
-        "zod": "^4.4.3",
       },
       "devDependencies": {
         "@testing-library/react": "^16.3.2",

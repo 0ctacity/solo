@@ -7,7 +7,13 @@
 import { GpuixRenderer } from "@gpuix/native"
 import type { EventPayload, WindowOptions } from "@gpuix/native"
 import { clearEventHandlers, handleGpuixEvent, startFrameLoop } from "@gpuix/core"
+import {
+  InProcessBackend,
+  liveRendererAsTest,
+  serveAutomationStdio,
+} from "@gpuix/core/automation"
 import type { FrameLoop, NativeRenderer } from "@gpuix/core"
+import type { LiveAutomationRenderer } from "@gpuix/core/automation"
 import type { Element as SolidElement } from "solid-js"
 import { mount, resetIdCounter } from "./runtime.js"
 
@@ -39,10 +45,15 @@ function renderSlot(): RenderSlot {
   return created
 }
 
+/** Serve the automation protocol over stdio when a controller owns stdin. */
+export function enableAutomation(renderer: LiveAutomationRenderer): void {
+  serveAutomationStdio(new InProcessBackend(liveRendererAsTest(renderer)))
+}
+
 function createNativeRenderer(
   onEvent?: (event: EventPayload) => void
 ): GpuixRenderer {
-  return new GpuixRenderer((err, event) => {
+  const renderer = new GpuixRenderer((err, event) => {
     if (err) {
       console.error("[GPUIX] Native event error:", err)
       return
@@ -52,6 +63,15 @@ function createNativeRenderer(
       onEvent?.(event)
     }
   })
+  // A pipe means a controller owns stdin. A TTY is a human keyboard.
+  if (!process.stdin.isTTY) {
+    const init = renderer.init.bind(renderer)
+    renderer.init = (options) => {
+      init(options)
+      enableAutomation(renderer)
+    }
+  }
+  return renderer
 }
 
 /** Mount the app in a GPUIX window. Later calls remount on the same window. */
