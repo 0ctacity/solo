@@ -1,0 +1,83 @@
+--- a/crates/gpui/src/elements/div.rs	2026-08-24 13:59:54.986075111 +0300
++++ b/crates/gpui/src/elements/div.rs	2026-08-24 13:59:55.006996469 +0300
+@@ -1890,7 +1890,16 @@
+                 child_max = child_max.max(&child_bounds.bottom_right());
+                 state.child_bounds.push(child_bounds);
+             }
+-            (child_max - child_min).into()
++            let content_size: Size<Pixels> = (child_max - child_min).into();
++            if scroll_trace_enabled() {
++                eprintln!(
++                    "[gpui-scroll] measure children={} content_size=({:.1},{:.1})",
++                    request_layout.child_layout_ids.len(),
++                    f64::from(content_size.width),
++                    f64::from(content_size.height),
++                );
++            }
++            content_size
+         } else {
+             for child_layout_id in &request_layout.child_layout_ids {
+                 let child_bounds = window.layout_bounds(*child_layout_id);
+@@ -2354,6 +2363,7 @@
+             // Clamp scroll offset in case scroll max is smaller now (e.g., if children
+             // were removed or the bounds became larger).
+             let mut scroll_offset = scroll_offset.borrow_mut();
++            let old_offset_clamped = *scroll_offset;
+ 
+             scroll_offset.x = scroll_offset.x.clamp(-scroll_max.x, px(0.));
+             if scroll_to_bottom {
+@@ -2367,6 +2377,22 @@
+                 scroll_handle_state.bounds = bounds;
+             }
+ 
++            if scroll_trace_enabled() {
++                eprintln!(
++                    "[gpui-scroll] clamp bounds=({:.1},{:.1}) content=({:.1},{:.1}) scroll_max=({:.2},{:.2}) before=({:.2},{:.2}) after=({:.2},{:.2})",
++                    f64::from(bounds.size.width),
++                    f64::from(bounds.size.height),
++                    f64::from(self.content_size.width),
++                    f64::from(self.content_size.height),
++                    f64::from(scroll_max.x),
++                    f64::from(scroll_max.y),
++                    f64::from(old_offset_clamped.x),
++                    f64::from(old_offset_clamped.y),
++                    f64::from(scroll_offset.x),
++                    f64::from(scroll_offset.y),
++                );
++            }
++
+             *scroll_offset
+         } else {
+             Point::default()
+@@ -3242,6 +3268,17 @@
+                     }
+                     scroll_offset.y += delta_y;
+                     scroll_offset.x += delta_x;
++                    if scroll_trace_enabled() {
++                        eprintln!(
++                            "[gpui-scroll] applied dx=({:.1}) dy=({:.1}) old=({:.2},{:.2}) new=({:.2},{:.2})",
++                            f64::from(delta_x),
++                            f64::from(delta_y),
++                            f64::from(old_scroll_offset.x),
++                            f64::from(old_scroll_offset.y),
++                            f64::from(scroll_offset.x),
++                            f64::from(scroll_offset.y),
++                        );
++                    }
+                     if *scroll_offset != old_scroll_offset {
+                         cx.notify(current_view);
+                     }
+@@ -4045,6 +4082,13 @@
+ /// Used for accessing scroll state, like the current scroll offset,
+ /// and for mutating the scroll state, like scrolling to a specific child.
+ #[derive(Clone, Debug)]
++/// TEMPORARY scroll diagnostics (GPUIX_SCROLL_TRACE=1). Remove with the
++/// rest of the [scroll-trace] instrumentation once investigation closes.
++pub(crate) fn scroll_trace_enabled() -> bool {
++    static ENABLED: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
++    *ENABLED.get_or_init(|| std::env::var("GPUIX_SCROLL_TRACE").as_deref() == Ok("1"))
++}
++
+ pub struct ScrollHandle(Rc<RefCell<ScrollHandleState>>);
+ 
+ impl Default for ScrollHandle {
