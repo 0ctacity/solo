@@ -9,6 +9,11 @@
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js",
       "default": "./dist/index.js"
+    },
+    "./automation": {
+      "types": "./dist/automation/index.d.ts",
+      "import": "./dist/automation/index.js",
+      "default": "./dist/automation/index.js"
     }
   },
   "files": [
@@ -30,7 +35,9 @@
     "test:watch": "vitest"
   },
   "dependencies": {
-    "@gpuix/native": "workspace:^"
+    "@gpuix/native": "workspace:^",
+    "eventsource-parser": "^4.1.0",
+    "zod": "^4.4.3"
   },
   "devDependencies": {
     "@types/node": "^25.3.3",

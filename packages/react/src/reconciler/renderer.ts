@@ -17,7 +17,7 @@ import {
   liveRendererAsTest,
   serveAutomationStdio,
   type LiveAutomationRenderer,
-} from "../automation/client.js"
+} from "@gpuix/core/automation"
 
 export function createRenderer(
   onEvent?: (event: import("@gpuix/native").EventPayload) => void

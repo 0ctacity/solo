@@ -456,6 +456,8 @@ export interface LiveAutomationRenderer {
   simulateMouseDown(x: number, y: number, button?: number): void
   simulateMouseUp(x: number, y: number, button?: number): void
   simulateMouseMove(x: number, y: number, pressedButton?: number): void
+  /** Inject a wheel event; supported where the native runtime implements it. */
+  simulateScrollWheel?(x: number, y: number, deltaX: number, deltaY: number): void
   tick?(): void
   focusElement(elementId: number): void
   blur(): void
@@ -497,8 +499,25 @@ export function liveRendererAsTest(
       renderer.simulateMouseMove(x, y, pressedButton)
       afterInput()
     },
-    nativeSimulateScrollWheel() {
-      throw new AutomationError("Unsupported", "scrollWheel is not live yet")
+    nativeSimulateScrollWheel(x, y, deltaX, deltaY) {
+      if (!renderer.simulateScrollWheel) {
+        throw new AutomationError(
+          "Unsupported",
+          "scrollWheel is not implemented by this platform's renderer"
+        )
+      }
+      try {
+        renderer.simulateScrollWheel(x, y, deltaX, deltaY)
+        afterInput()
+      } catch (error) {
+        // The native gate is per-platform (renderer.rs compiles simulate_*
+        // only for macOS); surface that as Unsupported, not Protocol noise.
+        if (process.platform === "darwin") throw error
+        throw new AutomationError(
+          "Unsupported",
+          error instanceof Error ? error.message : String(error)
+        )
+      }
     },
     simulateKeystrokes() {
       throw new AutomationError("Unsupported", "keystrokes are not live yet")
