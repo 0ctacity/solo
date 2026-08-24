@@ -1205,6 +1205,22 @@ impl GpuixRenderer {
     }
 
     #[napi]
+    pub fn simulate_scroll_wheel(&self, x: f64, y: f64, delta_x: f64, delta_y: f64) -> Result<()> {
+        #[cfg(target_os = "macos")]
+        return update_window(move |_view, window, cx| {
+            crate::automation::dispatch_scroll_wheel(window, cx, x, y, delta_x, delta_y);
+        });
+
+        #[cfg(not(target_os = "macos"))]
+        {
+            let _ = (x, y, delta_x, delta_y);
+            Err(Error::from_reason(
+                "simulateScrollWheel is only implemented on macOS",
+            ))
+        }
+    }
+
+    #[napi]
     pub fn clock_pause(&self) -> Result<f64> {
         #[cfg(target_os = "macos")]
         return update_window(move |view, _window, cx| {
