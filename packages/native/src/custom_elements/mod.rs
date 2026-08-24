@@ -180,6 +180,15 @@ impl CustomElementRegistry {
     }
 
     /// Called when React destroys an element.
+    /// Destroy every live instance, releasing any GPUI entities they hold.
+    /// Called on app quit so gpui's exit leak check sees a clean slate.
+    pub fn destroy_all(&mut self) {
+        let ids: Vec<u64> = self.instances.keys().copied().collect();
+        for id in ids {
+            self.destroy(id);
+        }
+    }
+
     pub fn destroy(&mut self, id: u64) {
         if let Some(mut el) = self.instances.remove(&id) {
             el.destroy();

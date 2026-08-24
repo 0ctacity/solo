@@ -1371,6 +1371,9 @@ pub(crate) struct GpuixView {
     virtual_lists: HashMap<u64, VirtualListEntry>,
     /// Motion / review clock. Live wall time unless automation freezes it.
     pub(crate) clock: crate::automation::AutomationClock,
+    /// Releases custom-element entities on app quit. Without this, gpui's
+    /// exit leak check panics because quitting does not drop root views.
+    quit_hook: Option<gpui::Subscription>,
 }
 
 impl GpuixView {
@@ -1392,6 +1395,7 @@ impl GpuixView {
             selection,
             virtual_lists: HashMap::new(),
             clock: crate::automation::AutomationClock::new(),
+            quit_hook: None,
         }
     }
 
@@ -1883,6 +1887,13 @@ impl gpui::Render for GpuixView {
                     );
                 },
             );
+        }
+
+        if self.quit_hook.is_none() {
+            self.quit_hook = Some(cx.on_app_quit(|view, _cx| {
+                view.custom_registry.destroy_all();
+                async {}
+            }));
         }
 
         window.set_window_title(&self.window_title);
