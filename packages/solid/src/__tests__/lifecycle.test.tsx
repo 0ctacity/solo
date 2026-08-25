@@ -9,11 +9,11 @@
 import { describe, expect, it } from "vitest"
 import { createSignal, For, Show } from "solid-js"
 import { createStore } from "solid-js"
-import { View, Text } from "@gpuix/solid"
+import { View, Text } from "@solo/solid"
 import { mountTest, findByTestId } from "../test-utils.js"
-import { handleGpuixEvent } from "@gpuix/core"
-import type { EventPayload } from "@gpuix/native"
-import type { MockElement } from "@gpuix/core"
+import { handleGpuixEvent } from "@solo/core"
+import type { EventPayload } from "@solo/native"
+import type { MockElement } from "@solo/core"
 
 interface Task {
   id: number

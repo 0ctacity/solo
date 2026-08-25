@@ -10,7 +10,7 @@
  */
 
 import { createSignal } from "solid-js"
-import { render, View, Text, Button } from "@gpuix/solid"
+import { render, View, Text, Button } from "@solo/solid"
 
 function Counter() {
   const [count, setCount] = createSignal(0)

@@ -22,7 +22,7 @@ const PINNED: Record<string, string> = {
   "@solidjs/universal": `${universalDist}/dev.js`,
 }
 
-export function gpuixSolidUniversal(): Plugin {  return {
+export function solidUniversal(): Plugin {  return {
     name: "gpuix:solid-universal",
     enforce: "pre",
     async resolveId(id) {
@@ -41,7 +41,7 @@ export function gpuixSolidUniversal(): Plugin {  return {
             "babel-preset-solid",
             // The compiler emits calls against this module; it re-exports the
             // createRenderer ops plus Solid control flow.
-            { generate: "universal", moduleName: "@gpuix/solid/runtime" },
+            { generate: "universal", moduleName: "@solo/solid/runtime" },
           ],
         ],
         sourceMaps: true,

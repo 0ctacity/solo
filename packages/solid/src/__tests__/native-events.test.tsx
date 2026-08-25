@@ -7,7 +7,7 @@
 import fs from "fs"
 import { createSignal } from "solid-js"
 import { beforeEach, describe, expect, it, vi } from "vitest"
-import type { EventPayload } from "@gpuix/native"
+import type { EventPayload } from "@solo/native"
 import { createSolidNativeTestRoot, hasNativeTestRenderer } from "../testing.js"
 import type { SolidNativeTestRoot } from "../testing.js"
 import { Text } from "../components.js"

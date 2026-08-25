@@ -8,9 +8,9 @@
     "diagnose": "bun diagnose-scroll.mts"
   },
   "dependencies": {
-    "@gpuix/core": "workspace:^",
-    "@gpuix/native": "workspace:^",
-    "@gpuix/solid": "workspace:^",
+    "@solo/core": "workspace:^",
+    "@solo/native": "workspace:^",
+    "@solo/solid": "workspace:^",
     "solid-js": "^2.0.0-rc.1",
     "@solidjs/universal": "^2.0.0-rc.1"
   },

@@ -1,4 +1,4 @@
-import type { EventPayload } from "@gpuix/native"
+import type { EventPayload } from "@solo/native"
 import { registerEventHandler, unregisterEventHandler } from "./event-registry.js"
 
 /// Mapping from framework event prop names (onClick, onKeyDown, ...) to the

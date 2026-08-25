@@ -2,7 +2,7 @@
 /// Framework-neutral: any renderer package can drive the embedded event loop
 /// with this.
 
-import type { GpuixRenderer } from "@gpuix/native"
+import type { GpuixRenderer } from "@solo/native"
 
 /** ~125fps. Above any common display refresh rate, so frames are never the
  *  bottleneck, while still leaving the Node event loop almost entirely idle. */

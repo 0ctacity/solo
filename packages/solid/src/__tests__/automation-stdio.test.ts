@@ -7,8 +7,8 @@ import {
   handleAutomationRequest,
   InProcessBackend,
   PROTOCOL_VERSION,
-} from "@gpuix/core/automation"
-import type { TestAutomationRenderer } from "@gpuix/core/automation"
+} from "@solo/core/automation"
+import type { TestAutomationRenderer } from "@solo/core/automation"
 
 function fakeRenderer(): TestAutomationRenderer {
   let clicks = 0

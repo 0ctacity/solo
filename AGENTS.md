@@ -1,6 +1,6 @@
-# AGENTS.md — GPUIX Codebase Guide
+# AGENTS.md — Solo Codebase Guide
 
-GPUIX builds native GPU-accelerated desktop apps from **TypeScript/Solid**
+Solo builds native GPU-accelerated desktop apps from **TypeScript/Solid**
 over [GPUI](https://github.com/zed-industries/zed/tree/main/crates/gpui)
 (Zed's rendering framework). Solid is the only supported frontend runtime.
 
@@ -9,32 +9,36 @@ TypeScript / TSX
       ↓
     Solid          ← custom renderer (babel-preset-solid, universal mode)
       ↓
-@gpuix/core        ← framework-neutral primitives
+@solo/core        ← framework-neutral primitives
       ↓
-@gpuix/native      ← napi-rs bridge, retained tree in Rust
+@solo/native      ← napi-rs bridge, retained tree in Rust
       ↓
      GPUI
 ```
 
 ## Package roles
 
-- **`packages/native`** (`@gpuix/native`): Rust + napi-rs. Owns the retained
+- **`packages/native`** (`@solo/native`): Rust + napi-rs. Owns the retained
   element tree (`RetainedTree`), GPUI element building (`build_element`,
   `apply_styles`), text selection registry, Tree-sitter syntax
   highlighting, markdown/diff rendering, native input editors, motion,
   automation host + GPU-backed test renderer (macOS), and the frame clock.
-- **`packages/core`** (`@gpuix/core`): framework-neutral TypeScript. The
+- **`packages/core`** (`@solo/core`): framework-neutral TypeScript. The
   mutation protocol vocabulary (`StyleDesc`, `NativeRenderer`), event-handler
   registry, `wrapWithBatching` (queues ops → one `applyBatch` FFI call),
   frame loop, event-prop mapping, `MockNativeRenderer`, and the automation
-  client/protocol (`@gpuix/core/automation`). Must never depend on a UI
+  client/protocol (`@solo/core/automation`). Must never depend on a UI
   framework.
-- **`packages/solid`** (`@gpuix/solid`): Solid custom renderer. `src/runtime.ts`
+- **`packages/solid`** (`@solo/solid`): Solid custom renderer. `src/runtime.ts`
   is the `moduleName` target for babel-preset-solid (`generate: "universal"`);
   every op maps onto a native mutation. Ships `View`/`Text`/`Button`
-  primitives, window `render()`, automation wiring, `@gpuix/solid/testing`
+  primitives, window `render()`, automation wiring, `@solo/solid/testing`
   harness, and a types-only jsx-runtime.
-- React support was removed; see git history and `PORTING.md`.
+- React support was removed; see git history.
+- Naming: packages/product are `@solo/*` / Solo; the Rust crate
+  (`gpuix-native`), napi binary name and internal symbols like `GpuixView`
+  still carry legacy names — renaming them is internal-only churn,
+  tracked as follow-up.
 
 ## Runtime & mutation model
 
@@ -81,14 +85,14 @@ All painted strings route through `crate::text` (`selectable_text` /
 Apps serve a Playwright-style protocol over stdio whenever stdin is not a
 TTY (`serveAutomationStdio`). Methods cover tree lookup (testId/text/type),
 click/mouse/keyboard/wheel injection, programmatic scrolling, bounds,
-screenshots, and clock control. Client lives in `@gpuix/core/automation`;
+screenshots, and clock control. Client lives in `@solo/core/automation`;
 see `examples/tasks/diagnose-scroll.mts`.
 
 ## Testing
 
 - Headless everywhere: `MockNativeRenderer` records each mutation op —
   assert protocol traffic directly (`lifecycle.test.tsx`).
-- macOS GPU-backed: `createSolidNativeTestRoot()` from `@gpuix/solid/testing`
+- macOS GPU-backed: `createSolidNativeTestRoot()` from `@solo/solid/testing`
   (mirrors the old React harness). Gate with `hasNativeTestRenderer`.
 - Layout ground-truth: `packages/native/tests/layout_probe.rs` draws the
   real builder chain headlessly and asserts ScrollHandle geometry.
@@ -134,8 +138,8 @@ rewrites them.
 
 User-facing fixes/features get a `.changeset/*.md` (never edit
 CHANGELOG.md or bump package.json versions manually). CI is the only
-release path; publish order: `@gpuix/native` then `@gpuix/solid` then
-`@gpuix/core`.
+release path; publish order: `@solo/native` then `@solo/solid` then
+`@solo/core`.
 
 ## Examples
 
@@ -147,4 +151,4 @@ release path; publish order: `@gpuix/native` then `@gpuix/solid` then
 
 1. Rust changes: `packages/native/src/`.
 2. TS changes: `packages/core` (neutral) or `packages/solid` (renderer).
-3. Keep `@gpuix/core` free of framework imports.
+3. Keep `@solo/core` free of framework imports.

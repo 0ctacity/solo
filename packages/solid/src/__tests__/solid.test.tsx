@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest"
 import { createSignal, Show, For } from "solid-js"
-import { View, Text, Button } from "@gpuix/solid"
+import { View, Text, Button } from "@solo/solid"
 import { mountTest, findByTestId, fireEvent, textOf } from "../test-utils.js"
 
 /** setTimeout flushes every pending microtask (Solid commits) first. */

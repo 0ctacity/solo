@@ -1,5 +1,5 @@
 {
-  "name": "@gpuix/core",
+  "name": "@solo/core",
   "version": "0.4.0",
   "type": "module",
   "main": "dist/index.js",
@@ -21,21 +21,21 @@
   ],
   "repository": {
     "type": "git",
-    "url": "https://github.com/remorses/gpuix"
+    "url": "https://github.com/0ctacity/solo"
   },
   "publishConfig": {
     "registry": "https://registry.npmjs.org/",
     "access": "public"
   },
   "scripts": {
-    "prepublishOnly": "node -e \"if (!process.env.CI) { console.error('Never publish @gpuix/core locally. CI is the only release path. See AGENTS.md.'); process.exit(1) }\"",
+    "prepublishOnly": "node -e \"if (!process.env.CI) { console.error('Never publish @solo/core locally. CI is the only release path. See AGENTS.md.'); process.exit(1) }\"",
     "build": "rm -rf dist *.tsbuildinfo && tsc",
     "dev": "tsc --watch",
     "test": "vitest run",
     "test:watch": "vitest"
   },
   "dependencies": {
-    "@gpuix/native": "workspace:^",
+    "@solo/native": "workspace:^",
     "eventsource-parser": "^4.1.0",
     "zod": "^4.4.3"
   },

@@ -1,13 +1,13 @@
 /// Test helpers for the Solid package.
 ///
 /// The GPU-backed TestGpuixRenderer is macOS-only, so tests run against
-/// MockNativeRenderer from @gpuix/core. It records every mutation op, which
+/// MockNativeRenderer from @solo/core. It records every mutation op, which
 /// lets us assert the exact protocol traffic (e.g. that a signal-driven text
 /// change produces one setText op and no tree rebuild).
 
-import { handleGpuixEvent, MockNativeRenderer } from "@gpuix/core"
-import type { EventPayload } from "@gpuix/native"
-import type { MockElement, MockNativeRenderer as MockNativeRendererType } from "@gpuix/core"
+import { handleGpuixEvent, MockNativeRenderer } from "@solo/core"
+import type { EventPayload } from "@solo/native"
+import type { MockElement, MockNativeRenderer as MockNativeRendererType } from "@solo/core"
 import { render } from "./index.js"
 
 export interface SolidTestRoot {

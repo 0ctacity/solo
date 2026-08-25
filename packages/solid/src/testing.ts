@@ -1,4 +1,4 @@
-/// macOS-only GPU-backed test harness for @gpuix/solid.
+/// macOS-only GPU-backed test harness for @solo/solid.
 ///
 /// Mirrors packages/react/src/testing.ts: mounts Solid trees through the
 /// native TestGpuixRenderer so tests exercise the same GPUI pipeline as
@@ -6,8 +6,8 @@
 /// suites using this harness skip themselves; headless coverage comes from
 /// MockNativeRenderer-based tests instead.
 
-import type { EventPayload } from "@gpuix/native"
-import { clearEventHandlers, handleGpuixEvent, wrapWithBatching } from "@gpuix/core"
+import type { EventPayload } from "@solo/native"
+import { clearEventHandlers, handleGpuixEvent, wrapWithBatching } from "@solo/core"
 import { mount as mountTree, resetIdCounter, flushMutations } from "./runtime.js"
 
 interface NativeTestRendererApi {
@@ -37,7 +37,7 @@ interface NativeTestRendererConstructor {
 let NativeTestRenderer: NativeTestRendererConstructor | null = null
 try {
   // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const native = require("@gpuix/native") as {
+  const native = require("@solo/native") as {
     TestGpuixRenderer?: NativeTestRendererConstructor
   }
   if (native.TestGpuixRenderer) {

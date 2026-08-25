@@ -1,6 +1,6 @@
 name: CI
 env:
-  APP_NAME: gpuix-native
+  APP_NAME: solo-native
   MACOSX_DEPLOYMENT_TARGET: "10.13"
 "on":
   push:
@@ -179,17 +179,17 @@ jobs:
 
       # NPM_TOKEN lives in Sigillo (npm/tokens, prod). CI only stores
       # SIGILLO_TOKEN. Rotate the npm token in one place.
-      - name: Publish @gpuix/native
+      - name: Publish @solo/native
         env:
           SIGILLO_TOKEN: ${{ secrets.SIGILLO_TOKEN }}
           SIGILLO_PROJECT: ${{ vars.SIGILLO_PROJECT }}
           SIGILLO_ENVIRONMENT: prod
         run: |
           CURRENT_VERSION=$(node -p "require('./packages/native/package.json').version")
-          if npm view "@gpuix/native@${CURRENT_VERSION}" version 2>/dev/null; then
-            echo "@gpuix/native@${CURRENT_VERSION} already published, skipping"
+          if npm view "@solo/native@${CURRENT_VERSION}" version 2>/dev/null; then
+            echo "@solo/native@${CURRENT_VERSION} already published, skipping"
           else
-            echo "Publishing @gpuix/native@${CURRENT_VERSION}"
+            echo "Publishing @solo/native@${CURRENT_VERSION}"
             cd packages/native
-            bunx sigillo run --command 'printf "//registry.npmjs.org/:_authToken=%s\n" "$NPM_TOKEN" > /tmp/gpuix-npmrc && NPM_CONFIG_USERCONFIG=/tmp/gpuix-npmrc npm publish --access public --provenance'
+            bunx sigillo run --command 'printf "//registry.npmjs.org/:_authToken=%s\n" "$NPM_TOKEN" > /tmp/solo-npmrc && NPM_CONFIG_USERCONFIG=/tmp/solo-npmrc npm publish --access public --provenance'
           fi

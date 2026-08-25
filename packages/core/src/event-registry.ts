@@ -1,4 +1,4 @@
-import type { EventPayload } from "@gpuix/native"
+import type { EventPayload } from "@solo/native"
 
 // Event handler registry — keyed by numeric element ID.
 // Shared by every framework package: the native side emits events by element

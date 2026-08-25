@@ -1,12 +1,12 @@
-/// JSX types for @gpuix/solid.
+/// JSX types for @solo/solid.
 ///
 /// babel-preset-solid compiles user JSX to universal runtime calls and never
 /// imports this module at runtime — it exists so TypeScript can type-check
-/// Solid JSX with `"jsxImportSource": "@gpuix/solid"` (see the
+/// Solid JSX with `"jsxImportSource": "@solo/solid"` (see the
 /// solid-js/universal README). Types are deliberately permissive: the native
 /// protocol accepts style objects, event handlers and custom props.
 
-import type { StyleDesc } from "@gpuix/core"
+import type { StyleDesc } from "@solo/core"
 
 export interface GpuixIntrinsicProps {
   style?: StyleDesc

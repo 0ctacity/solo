@@ -9,7 +9,7 @@ import { beforeEach, describe, expect, it } from "vitest"
 import { createSolidNativeTestRoot, hasNativeTestRenderer } from "../testing.js"
 import type { SolidNativeTestRoot } from "../testing.js"
 import { Text, View } from "../components.js"
-import type { StyleDesc } from "@gpuix/core"
+import type { StyleDesc } from "@solo/core"
 
 const describeNative = hasNativeTestRenderer ? describe : describe.skip
 const SHOT_DIR = "/tmp/gpuix-style-shots"

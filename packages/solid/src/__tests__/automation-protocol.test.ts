@@ -10,7 +10,7 @@ import {
   parseWireMessage,
   PROTOCOL_VERSION,
   type WireMessage,
-} from "@gpuix/core/automation"
+} from "@solo/core/automation"
 
 describe("automation protocol", () => {
   it("encodes one JSON object as an SSE data event", () => {

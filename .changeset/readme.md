@@ -1,6 +1,6 @@
 # Changesets
 
-This folder contains **pending release notes** for `@gpuix/native` and `@gpuix/react`. Each `.md` file describes one user-facing fix or feature that should appear in the next generated changelog.
+This folder contains **pending release notes** for `@solo/native` and `@solo/react`. Each `.md` file describes one user-facing fix or feature that should appear in the next generated changelog.
 
 ## What to put here
 

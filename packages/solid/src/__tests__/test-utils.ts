@@ -1,4 +1,4 @@
-/// Shared test utilities for @gpuix/solid suites.
+/// Shared test utilities for @solo/solid suites.
 /// Ported from packages/react/src/__tests__/test-utils.ts.
 
 import fs from "fs"

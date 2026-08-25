@@ -9,8 +9,8 @@
 /// everywhere, and pins down the wheel capability per platform.
 
 import { describe, expect, it } from "vitest"
-import { launch } from "@gpuix/core/automation"
-import type { App } from "@gpuix/core/automation"
+import { launch } from "@solo/core/automation"
+import type { App } from "@solo/core/automation"
 
 const ENTRY = new URL("./dist/index.js", import.meta.url).pathname
 

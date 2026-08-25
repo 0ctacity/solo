@@ -1,7 +1,7 @@
 /**
  * GPUIX Tasks — a small native task manager built entirely from Solid 2.
  *
- * Dogfood app for the @gpuix/solid runtime: list, add, toggle and delete
+ * Dogfood app for the @solo/solid runtime: list, add, toggle and delete
  * tasks. In-memory mock data only. All state is ordinary Solid primitives;
  * every interaction must reach GPUI as fine-grained native mutations.
  *
@@ -15,8 +15,8 @@
 
 import { createSignal, For, Show } from "solid-js"
 import { createStore } from "solid-js"
-import { View, Text, Button } from "@gpuix/solid"
-import type { StyleDesc } from "@gpuix/core"
+import { View, Text, Button } from "@solo/solid"
+import type { StyleDesc } from "@solo/core"
 
 interface Task {
   id: number

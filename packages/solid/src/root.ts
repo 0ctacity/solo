@@ -4,16 +4,16 @@
 /// opens the window, wires native events into the shared handler registry,
 /// batches mutations, and drives the frame loop where the platform needs it.
 
-import { GpuixRenderer } from "@gpuix/native"
-import type { EventPayload, WindowOptions } from "@gpuix/native"
-import { clearEventHandlers, handleGpuixEvent, startFrameLoop } from "@gpuix/core"
+import { GpuixRenderer } from "@solo/native"
+import type { EventPayload, WindowOptions } from "@solo/native"
+import { clearEventHandlers, handleGpuixEvent, startFrameLoop } from "@solo/core"
 import {
   InProcessBackend,
   liveRendererAsTest,
   serveAutomationStdio,
-} from "@gpuix/core/automation"
-import type { FrameLoop, NativeRenderer } from "@gpuix/core"
-import type { LiveAutomationRenderer } from "@gpuix/core/automation"
+} from "@solo/core/automation"
+import type { FrameLoop, NativeRenderer } from "@solo/core"
+import type { LiveAutomationRenderer } from "@solo/core/automation"
 import type { Element as SolidElement } from "solid-js"
 import { mount, resetIdCounter } from "./runtime.js"
 

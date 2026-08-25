@@ -1,11 +1,11 @@
 /// Solid 2 runtime for GPUIX.
 ///
 /// This is the `moduleName` target for babel-preset-solid compiled with
-/// `{ generate: "universal", moduleName: "@gpuix/solid/runtime" }`. The
+/// `{ generate: "universal", moduleName: "@solo/solid/runtime" }`. The
 /// compiler emits calls against the functions re-exported here, and each one
 /// maps onto the native mutation protocol (createElement / appendChild /
 /// insertBefore / setText / setStyle / setEventListener / setCustomProp /
-/// commitMutations) through @gpuix/core's NativeRenderer interface.
+/// commitMutations) through @solo/core's NativeRenderer interface.
 ///
 /// Fine-grained updates stay fine-grained: a signal-driven text change only
 /// produces a single `setText` op in the next batch, never a tree rebuild.
@@ -14,14 +14,14 @@ import { createRenderer } from "@solidjs/universal"
 import { flush } from "solid-js"
 import { For, Show, Switch, Match, Repeat, Reveal, Loading } from "solid-js"
 import type { Element as SolidElement } from "solid-js"
-import type { EventPayload } from "@gpuix/native"
+import type { EventPayload } from "@solo/native"
 import {
   attachEventHandler,
   clearEventHandlers,
   gpuixEventTypeForProp,
   wrapWithBatching,
-} from "@gpuix/core"
-import type { NativeRenderer, StyleDesc } from "@gpuix/core"
+} from "@solo/core"
+import type { NativeRenderer, StyleDesc } from "@solo/core"
 
 // ── Node bookkeeping ─────────────────────────────────────────────────
 
@@ -295,7 +295,7 @@ export const universal = createRenderer<GpuixSolidNode>({
 })
 
 // Re-exported under the exact names babel-preset-solid emits. Compiled JSX
-// does `import { createElement, insertNode, ... } from "@gpuix/solid/runtime"`
+// does `import { createElement, insertNode, ... } from "@solo/solid/runtime"`
 // — these must be named exports of this module.
 export const insert = universal.insert
 export const spread = universal.spread

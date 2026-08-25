@@ -4,8 +4,8 @@
 /// Written against the runtime ops directly (rather than JSX) so the package
 /// builds with plain tsc; compiled user JSX lands on the same ops anyway.
 
-import type { EventPayload } from "@gpuix/native"
-import type { StyleDesc } from "@gpuix/core"
+import type { EventPayload } from "@solo/native"
+import type { StyleDesc } from "@solo/core"
 import { merge } from "solid-js"
 import { universal } from "./runtime.js"
 import type { GpuixSolidNode } from "./runtime.js"

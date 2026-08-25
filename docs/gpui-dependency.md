@@ -6,7 +6,7 @@ where it is.
 ## Dependency graph
 
 ```text
-@gpuix/native (packages/native)
+@solo/native (packages/native)
 ├── gpui           — rendering, elements, styles, windows   [all platforms]
 ├── gpui_platform  — `application()` platform constructor    [Linux/Windows run path]
 └── gpui_macos     — MacPlatform::new_embedded / new         [macOS only]

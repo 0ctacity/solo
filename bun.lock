@@ -10,7 +10,7 @@
       },
     },
     "examples": {
-      "name": "@gpuix/examples",
+      "name": "@solo/examples",
       "version": "0.1.0",
       "dependencies": {
         "@kmamal/sdl": "^0.11.12",
@@ -28,9 +28,9 @@
     "examples/solid-counter": {
       "name": "solid-counter",
       "dependencies": {
-        "@gpuix/core": "workspace:^",
-        "@gpuix/native": "workspace:^",
-        "@gpuix/solid": "workspace:^",
+        "@solo/core": "workspace:^",
+        "@solo/native": "workspace:^",
+        "@solo/solid": "workspace:^",
         "@solidjs/universal": "^2.0.0-rc.1",
         "solid-js": "^2.0.0-rc.1",
       },
@@ -43,9 +43,9 @@
     "examples/tasks": {
       "name": "tasks",
       "dependencies": {
-        "@gpuix/core": "workspace:^",
-        "@gpuix/native": "workspace:^",
-        "@gpuix/solid": "workspace:^",
+        "@solo/core": "workspace:^",
+        "@solo/native": "workspace:^",
+        "@solo/solid": "workspace:^",
         "@solidjs/universal": "^2.0.0-rc.1",
         "solid-js": "^2.0.0-rc.1",
       },
@@ -57,10 +57,10 @@
       },
     },
     "packages/core": {
-      "name": "@gpuix/core",
+      "name": "@solo/core",
       "version": "0.4.0",
       "dependencies": {
-        "@gpuix/native": "workspace:^",
+        "@solo/native": "workspace:^",
         "eventsource-parser": "^4.1.0",
         "zod": "^4.4.3",
       },
@@ -71,17 +71,17 @@
       },
     },
     "packages/native": {
-      "name": "@gpuix/native",
+      "name": "@solo/native",
       "version": "0.4.0",
       "devDependencies": {
         "@napi-rs/cli": "^3.1.3",
       },
     },
     "packages/solid": {
-      "name": "@gpuix/solid",
+      "name": "@solo/solid",
       "version": "0.4.0",
       "dependencies": {
-        "@gpuix/core": "workspace:^",
+        "@solo/core": "workspace:^",
         "@solidjs/universal": "^2.0.0-rc.1",
         "solid-js": "^2.0.0-rc.1",
       },
@@ -94,7 +94,7 @@
         "vitest": "^4.0.18",
       },
       "peerDependencies": {
-        "@gpuix/native": "workspace:^",
+        "@solo/native": "workspace:^",
       },
     },
   },
@@ -195,13 +195,13 @@
 
     "@esbuild/win32-x64": ["@esbuild/win32-x64@0.27.2", "", { "os": "win32", "cpu": "x64" }, "sha512-sRdU18mcKf7F+YgheI/zGf5alZatMUTKj/jNS6l744f9u3WFu4v7twcUI9vu4mknF4Y9aDlblIie0IM+5xxaqQ=="],
 
-    "@gpuix/core": ["@gpuix/core@workspace:packages/core"],
+    "@solo/core": ["@solo/core@workspace:packages/core"],
 
-    "@gpuix/examples": ["@gpuix/examples@workspace:examples"],
+    "@solo/examples": ["@solo/examples@workspace:examples"],
 
-    "@gpuix/native": ["@gpuix/native@workspace:packages/native"],
+    "@solo/native": ["@solo/native@workspace:packages/native"],
 
-    "@gpuix/solid": ["@gpuix/solid@workspace:packages/solid"],
+    "@solo/solid": ["@solo/solid@workspace:packages/solid"],
 
     "@inquirer/ansi": ["@inquirer/ansi@2.0.3", "", {}, "sha512-g44zhR3NIKVs0zUesa4iMzExmZpLUdTLRMCStqX3GE5NT6VkPcxQGJ+uC8tDgBUC/vB1rUhUd55cOf++4NZcmw=="],
 

@@ -1,4 +1,4 @@
-# GPUIX
+# Solo
 
 Build native GPU-accelerated desktop apps with **Solid** and TypeScript.
 Your components render directly to the GPU via Metal, DirectX, or Vulkan —
@@ -6,7 +6,7 @@ no Electron, no web views.
 
 ```tsx
 import { createSignal } from "solid-js"
-import { render, View, Text, Button } from "@gpuix/solid"
+import { render, View, Text, Button } from "@solo/solid"
 
 function Counter() {
   const [count, setCount] = createSignal(0)
@@ -28,14 +28,14 @@ TypeScript / TSX
       ↓
     Solid          ← custom renderer (babel-preset-solid, universal mode)
       ↓
-@gpuix/core        ← framework-neutral: mutation protocol types, batching,
+@solo/core        ← framework-neutral: mutation protocol types, batching,
       ↓               event registry, automation client, frame loop
-@gpuix/native      ← napi-rs bridge; retained element tree in Rust
+@solo/native      ← napi-rs bridge; retained element tree in Rust
       ↓
      GPUI           ← Zed's GPU UI framework (pinned revision)
 ```
 
-GPUIX is **description-driven**, not DOM-like. Frameworks never mutate a
+Solo is **description-driven**, not DOM-like. Frameworks never mutate a
 retained JS tree: each commit queues a minimal batch of native mutations
 (`createElement`, `appendChild`, `setText`, `setStyle`, `setCustomProp`,
 `setEventListener`) that is flushed to Rust through a single `applyBatch`
@@ -45,14 +45,14 @@ FFI call. GPUI's retained tree owns all real state.
 
 | package | role |
 |---|---|
-| [`@gpuix/native`](packages/native) | Rust/napi bridge. Retained tree, GPUI element building, text selection, syntax highlighting, markdown, diffs, input editors, automation host, GPU-backed test renderer (macOS). |
-| [`@gpuix/core`](packages/core) | Framework-neutral primitives: protocol/style types, event-handler registry, mutation batching (`wrapWithBatching`), frame loop, automation client/server, mock renderer for tests. |
-| [`@gpuix/solid`](packages/solid) | Solid custom renderer. Maps Solid's universal ops onto the native mutation protocol with fine-grained updates; semantic primitives (`View`, `Text`, `Button`); window `render()`; automation wiring; test harness. |
+| [`@solo/native`](packages/native) | Rust/napi bridge. Retained tree, GPUI element building, text selection, syntax highlighting, markdown, diffs, input editors, automation host, GPU-backed test renderer (macOS). |
+| [`@solo/core`](packages/core) | Framework-neutral primitives: protocol/style types, event-handler registry, mutation batching (`wrapWithBatching`), frame loop, automation client/server, mock renderer for tests. |
+| [`@solo/solid`](packages/solid) | Solid custom renderer. Maps Solid's universal ops onto the native mutation protocol with fine-grained updates; semantic primitives (`View`, `Text`, `Button`); window `render()`; automation wiring; test harness. |
 
 ## Runtime model
 
 - Solid compiles JSX to universal renderer ops (`createElement`,
-  `insertNode`, `insert`, `setProp`, …) against `@gpuix/solid/runtime`.
+  `insertNode`, `insert`, `setProp`, …) against `@solo/solid/runtime`.
 - Every op maps onto a native mutation and is queued through
   `wrapWithBatching`; exactly one microtask-scheduled `applyBatch` flushes
   per reactive transaction. A signal-driven text change becomes a single
@@ -72,11 +72,11 @@ overflow scrolling, opacity, borders, and text metrics.
 
 ## Automation
 
-GPUIX ships a Playwright-style automation protocol over stdio (SSE
+Solo ships a Playwright-style automation protocol over stdio (SSE
 framing). Any app whose stdin is not a TTY serves it automatically:
 tree queries by testId/text/type, click/mouse/keyboard/wheel injection,
 programmatic scrolling, bounds, screenshots, clock control. The client
-lives in `@gpuix/core/automation`; see `examples/tasks/diagnose-scroll.mts`.
+lives in `@solo/core/automation`; see `examples/tasks/diagnose-scroll.mts`.
 
 ## Testing
 
