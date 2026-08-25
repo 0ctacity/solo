@@ -121,3 +121,12 @@ GPUI comes from a pinned git revision of `remorses/zed` (branch
 | macOS | ✅ | ✅ incl. synthetic input & GPU test renderer | embedded AppKit loop driven from Node |
 | Linux (Wayland/X11) | ✅ | ✅ physical input; synthetic wheel via automation | blocking UI thread |
 | Windows | ✅ builds | ⚠️ untested | same blocking-thread model |
+
+## Acknowledgements
+
+Solo originated as a fork of GPUIX and has since diverged into an independent
+Solid-first native TypeScript desktop framework built on GPUI.
+
+Inherited license notices are preserved in
+[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) and were not replaced by the
+transfer to independent ownership.
