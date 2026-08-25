@@ -1,8 +1,8 @@
 /**
- * GPUIX Solid Counter
+ * Solo Solid Counter
  *
  * Same app as examples/counter.tsx, written with Solid 2 against the native
- * GPUIX renderer. No Rust application code — just this file plus a build
+ * Solo renderer. No Rust application code — just this file plus a build
  * config that compiles Solid JSX to the native mutation protocol.
  *
  * Run:
@@ -58,5 +58,5 @@ render(
       <Counter />
     </View>
   ),
-  { title: "GPUIX Solid Counter", width: 800, height: 600 }
+  { title: "Solo Solid Counter", width: 800, height: 600 }
 )

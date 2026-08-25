@@ -20,7 +20,7 @@ use crate::renderer::{emit_event_full, EventCallback};
 use crate::theme::Theme;
 
 actions!(
-    gpuix_text_editor,
+    solo_text_editor,
     [
         Backspace,
         Delete,
@@ -59,8 +59,8 @@ actions!(
     ]
 );
 
-const INPUT_KEY_CONTEXT: &str = "GpuixInput";
-const TEXTAREA_KEY_CONTEXT: &str = "GpuixTextarea";
+const INPUT_KEY_CONTEXT: &str = "SoloInput";
+const TEXTAREA_KEY_CONTEXT: &str = "SoloTextarea";
 const CARET_BLINK_MS: u64 = 500;
 
 fn caret_visible(ms_since_activity: u64) -> bool {
@@ -216,7 +216,7 @@ impl CustomElement for TextEditorElement {
         &mut self,
         ctx: CustomRenderContext,
         _window: &mut Window,
-        cx: &mut Context<crate::renderer::GpuixView>,
+        cx: &mut Context<crate::renderer::SoloView>,
     ) -> gpui::AnyElement {
         let focus_handle = ctx
             .focus_handle
@@ -301,7 +301,7 @@ impl CustomElement for TextEditorElement {
         });
         self.last_prop_value = Some(self.value.clone());
 
-        let element_id = gpui::SharedString::from(format!("__gpuix_editor_{}", ctx.id));
+        let element_id = gpui::SharedString::from(format!("__solo_editor_{}", ctx.id));
         let mut editor = div()
             .id(element_id)
             .flex()

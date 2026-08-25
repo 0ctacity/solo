@@ -22,10 +22,10 @@ use gpui::{
 
 use super::selection::{self, SelectionState};
 
-/// Shared selection state. `GpuixView` and `GpuixRenderer` both hold clones, and
+/// Shared selection state. `SoloView` and `SoloRenderer` both hold clones, and
 /// so does every paint closure.
 ///
-/// `Arc<Mutex<..>>` rather than `Rc<RefCell<..>>`: napi requires `GpuixRenderer`
+/// `Arc<Mutex<..>>` rather than `Rc<RefCell<..>>`: napi requires `SoloRenderer`
 /// to be `Send`, and the renderer needs a handle so `getSelectedText()` works
 /// without an App context. All real access is single-threaded, so the mutex is
 /// always uncontended.
@@ -273,7 +273,7 @@ fn register_link_listener(
 /// end of a document clamp sensibly.
 ///
 /// Comet compares Y only, because its transcript is a single column where two
-/// texts never share a vertical band. GPUIX lays out arbitrary React trees: a
+/// texts never share a vertical band. Solo lays out arbitrary React trees: a
 /// Y-only match picks the leftmost text in a flex row no matter where the
 /// pointer actually is.
 fn registry_point(position: gpui::Point<gpui::Pixels>) -> Option<(usize, usize)> {
@@ -416,7 +416,7 @@ fn register_listeners(
 
 /// Register the frame's single Cmd+C / Ctrl+C listener.
 ///
-/// GPUIX has no keymap or action system, so this reads the raw keystroke.
+/// Solo has no keymap or action system, so this reads the raw keystroke.
 /// It lives on the frame reset rather than on each text element: registering it
 /// per element made one Cmd+C write the clipboard once per visible text node.
 fn register_copy_listener(window: &mut Window, selection: &SharedSelection) {

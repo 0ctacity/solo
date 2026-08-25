@@ -243,7 +243,7 @@ impl CustomElement for DiffElement {
         &mut self,
         ctx: CustomRenderContext,
         _window: &mut gpui::Window,
-        _cx: &mut gpui::Context<crate::renderer::GpuixView>,
+        _cx: &mut gpui::Context<crate::renderer::SoloView>,
     ) -> gpui::AnyElement {
         use gpui::prelude::*;
 
@@ -253,7 +253,7 @@ impl CustomElement for DiffElement {
 
         if data.rows.is_empty() {
             let mut empty = gpui::div()
-                .id(SharedString::from(format!("__gpuix_diff_empty_{}", ctx.id)))
+                .id(SharedString::from(format!("__solo_diff_empty_{}", ctx.id)))
                 .flex()
                 .items_center()
                 .justify_center()
@@ -365,7 +365,7 @@ impl CustomElement for DiffElement {
         };
 
         let mut container = gpui::div()
-            .id(SharedString::from(format!("__gpuix_diff_{}", ctx.id)))
+            .id(SharedString::from(format!("__solo_diff_{}", ctx.id)))
             .flex()
             .flex_col()
             .bg(theme.bg)
@@ -591,7 +591,7 @@ fn show_more_row(remaining: u32, ix: usize, ctx: &RowContext, theme: &Theme) -> 
     };
 
     let mut row = gpui::div()
-        .id(SharedString::from(format!("__gpuix_diff_more_{ix}")))
+        .id(SharedString::from(format!("__solo_diff_more_{ix}")))
         .w_full()
         .h(px(theme.metrics.diff_file_header_height))
         .flex_none()
@@ -629,7 +629,7 @@ fn file_header_row(
     let m = &theme.metrics;
 
     let mut header = gpui::div()
-        .id(SharedString::from(format!("__gpuix_diff_hdr_{ix}")))
+        .id(SharedString::from(format!("__solo_diff_hdr_{ix}")))
         .w_full()
         .h(px(m.diff_file_header_height))
         .flex_none()
@@ -816,7 +816,7 @@ fn diff_line_row(
         };
 
     let mut row = gpui::div()
-        .id(SharedString::from(format!("__gpuix_diff_line_{ix}")))
+        .id(SharedString::from(format!("__solo_diff_line_{ix}")))
         .h(px(m.diff_line_height))
         .w_full()
         .flex_none()

@@ -1,5 +1,5 @@
 /// Contract test: babel-preset-solid compiles JSX to named imports from
-/// "@solo/solid/runtime" (see scripts/gpuix-solid-plugin.ts). If any of
+/// "@solo/solid/runtime" (see scripts/solid-universal-plugin.ts). If any of
 /// these exports disappears, every compiled app fails at import time —
 /// as found by the tasks dogfood example, which resolves this module
 /// through the package instead of an alias to src.

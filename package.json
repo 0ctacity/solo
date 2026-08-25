@@ -1,17 +1,16 @@
 {
-  "name": "gpuix",
+  "name": "solo",
   "private": true,
   "workspaces": [
     "packages/*",
-    "examples",
     "examples/solid-counter",
     "examples/tasks"
   ],
   "scripts": {
-    "build": "bun run build:native && bun run build:react",
+    "build": "bun run build:native && bun run build:core && bun run build:solid",
     "build:native": "cd packages/native && bun run build",
-    "build:react": "cd packages/react && bun run build",
-    "example:counter": "cd examples && bun --hot counter.tsx",
+    "build:core": "cd packages/core && bun run build",
+    "build:solid": "cd packages/solid && bun run build",
     "dev": "bun scripts/dev.ts"
   },
   "devDependencies": {

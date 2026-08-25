@@ -67,7 +67,7 @@ impl CustomElement for MarkdownElement {
         &mut self,
         ctx: CustomRenderContext,
         window: &mut gpui::Window,
-        _cx: &mut gpui::Context<crate::renderer::GpuixView>,
+        _cx: &mut gpui::Context<crate::renderer::SoloView>,
     ) -> gpui::AnyElement {
         use gpui::prelude::*;
 
@@ -108,7 +108,7 @@ impl CustomElement for MarkdownElement {
         let body = render_tree(&tree, &mut md, window);
 
         let mut container = gpui::div()
-            .id(SharedString::from(format!("__gpuix_markdown_{}", ctx.id)))
+            .id(SharedString::from(format!("__solo_markdown_{}", ctx.id)))
             .flex()
             .flex_col()
             .text_color(theme.text)

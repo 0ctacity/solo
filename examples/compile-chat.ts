@@ -14,7 +14,7 @@ const PNG = path.join(DIST, 'app-icon.png')
 const ICO = path.join(DIST, 'app-icon.ico')
 const ICNS = path.join(DIST, 'app-icon.icns')
 const BINARY = path.join(DIST, process.platform === 'win32' ? 'chat.exe' : 'chat')
-const APP_NAME = 'GPUIX Chat'
+const APP_NAME = 'Solo Chat'
 const APP_BUNDLE = path.join(DIST, `${APP_NAME}.app`)
 
 function log(message: string): void {
@@ -106,9 +106,9 @@ async function compileBinary(): Promise<void> {
       icon: ICO,
       hideConsole: true,
       title: APP_NAME,
-      publisher: 'GPUIX',
+      publisher: .Solo.,
       version: '0.1.0',
-      description: 'Waku-style desktop app built with GPUIX',
+      description: 'Waku-style desktop app built with Solo',
     }
   }
 
@@ -153,7 +153,7 @@ function wrapMacApp(): void {
     '  <key>CFBundleIconFile</key>',
     '  <string>AppIcon</string>',
     '  <key>CFBundleIdentifier</key>',
-    '  <string>dev.gpuix.chat</string>',
+    '  <string>dev.solo.chat</string>',
     '  <key>CFBundleInfoDictionaryVersion</key>',
     '  <string>6.0</string>',
     '  <key>CFBundleName</key>',

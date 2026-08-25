@@ -1,11 +1,11 @@
-//! GpuixRenderer — napi-rs binding exposed to Node.js.
+//! SoloRenderer — napi-rs binding exposed to Node.js.
 //!
 //! Mutation-based API: React's reconciler sends individual mutations
 //! (createElement, appendChild, setStyle, etc.) instead of a full JSON tree.
 //! Rust maintains a RetainedTree and rebuilds GPUI elements from it each frame.
 //!
 //! Lifecycle:
-//!   const renderer = new GpuixRenderer(eventCallback)
+//!   const renderer = new SoloRenderer(eventCallback)
 //!   renderer.init({ title: 'My App', width: 800, height: 600 })
 //!   renderer.createElement(1, "div")     // mutations from React reconciler
 //!   renderer.appendChild(0, 1)
@@ -36,7 +36,7 @@ use crate::style::{parse_color_hex, StyleDesc};
 use crate::text::{selectable_text, selection_frame_reset, selection_key, SharedSelection};
 use crate::theme::Theme;
 
-gpui::actions!(gpuix_focus, [FocusNext, FocusPrevious]);
+gpui::actions!(solo_focus, [FocusNext, FocusPrevious]);
 
 pub(crate) fn init_key_bindings(cx: &mut gpui::App) {
     cx.bind_keys([
@@ -92,8 +92,8 @@ thread_local! {
     #[cfg(target_os = "macos")]
     static GPUI_APP: RefCell<Option<gpui::ApplicationHandle>> = const { RefCell::new(None) };
     #[cfg(target_os = "macos")]
-    static GPUI_WINDOW: RefCell<Option<gpui::WindowHandle<GpuixView>>> = const { RefCell::new(None) };
-    /// Shared scroll handles — GpuixView writes here during render(),
+    static GPUI_WINDOW: RefCell<Option<gpui::WindowHandle<SoloView>>> = const { RefCell::new(None) };
+    /// Shared scroll handles — SoloView writes here during render(),
     /// platform-local handlers read from here for programmatic scroll control.
     /// ScrollHandle is Rc<RefCell<...>> so its methods (set_offset, offset,
     /// scroll_to_item) work without an App context.
@@ -141,7 +141,7 @@ fn recv_debug_frame_overlay_mode(
 
 #[cfg(target_os = "macos")]
 fn update_window<R>(
-    update: impl FnOnce(&mut GpuixView, &mut gpui::Window, &mut gpui::Context<GpuixView>) -> R,
+    update: impl FnOnce(&mut SoloView, &mut gpui::Window, &mut gpui::Context<SoloView>) -> R,
 ) -> Result<R> {
     let window = GPUI_WINDOW
         .with(|window| *window.borrow())
@@ -206,7 +206,7 @@ enum UiCommand {
 
 #[cfg(any(target_os = "windows", target_os = "linux", target_os = "freebsd"))]
 fn refresh_ui_window(
-    window: gpui::WindowHandle<GpuixView>,
+    window: gpui::WindowHandle<SoloView>,
     cx: &mut gpui::AsyncApp,
 ) -> anyhow::Result<()> {
     window.update(cx, |_view, window, cx| {
@@ -218,7 +218,7 @@ fn refresh_ui_window(
 #[cfg(any(target_os = "windows", target_os = "linux", target_os = "freebsd"))]
 async fn run_ui_commands(
     mut commands: mpsc::UnboundedReceiver<UiCommand>,
-    window: gpui::WindowHandle<GpuixView>,
+    window: gpui::WindowHandle<SoloView>,
     cx: &mut gpui::AsyncApp,
 ) {
     while let Some(command) = commands.next().await {
@@ -347,11 +347,11 @@ fn panic_message(payload: Box<dyn std::any::Any + Send>) -> String {
 
 /// The main GPUI renderer exposed to Node.js.
 #[napi]
-pub struct GpuixRenderer {
+pub struct SoloRenderer {
     event_callback: Mutex<Option<Arc<ThreadsafeFunction<EventPayload>>>>,
     tree: Arc<Mutex<RetainedTree>>,
     initialized: Arc<Mutex<bool>>,
-    /// Shared with GpuixView so napi methods can read the live selection
+    /// Shared with SoloView so napi methods can read the live selection
     /// without an App context. Paint and napi calls can use different threads.
     selection: SharedSelection,
     #[cfg(any(target_os = "windows", target_os = "linux", target_os = "freebsd"))]
@@ -359,7 +359,7 @@ pub struct GpuixRenderer {
 }
 
 #[napi]
-impl GpuixRenderer {
+impl SoloRenderer {
     fn event_callback_for_view(&self) -> Option<EventCallback> {
         self.event_callback.lock().unwrap().clone().map(|tsf| {
             Arc::new(move |payload: EventPayload| {
@@ -393,7 +393,7 @@ impl GpuixRenderer {
             target_os = "freebsd"
         )))]
         Err(Error::from_reason(
-            "The production GPUIX renderer does not support this operating system",
+            "The production Solo renderer does not support this operating system",
         ))
     }
 
@@ -422,7 +422,7 @@ impl GpuixRenderer {
         {
             let _ = options;
             return Err(Error::from_reason(
-                "The production GPUIX renderer does not support this operating system",
+                "The production Solo renderer does not support this operating system",
             ));
         }
 
@@ -451,7 +451,7 @@ impl GpuixRenderer {
 
         let width = options.width.unwrap_or(800.0);
         let height = options.height.unwrap_or(600.0);
-        let title = options.title.clone().unwrap_or_else(|| "GPUIX".to_string());
+        let title = options.title.clone().unwrap_or_else(|| "Solo".to_string());
         let window_options = options.clone();
 
         let platform = Rc::new(gpui_macos::MacPlatform::new_embedded());
@@ -481,7 +481,7 @@ impl GpuixRenderer {
                 to_gpui_window_options(&window_options, bounds),
                 |_window, cx| {
                     cx.new(|_| {
-                        GpuixView::new(tree.clone(), callback.clone(), title, selection.clone())
+                        SoloView::new(tree.clone(), callback.clone(), title, selection.clone())
                     })
                 },
             ) {
@@ -541,7 +541,7 @@ impl GpuixRenderer {
 
         let width = options.width.unwrap_or(800.0);
         let height = options.height.unwrap_or(600.0);
-        let title = options.title.clone().unwrap_or_else(|| "GPUIX".to_string());
+        let title = options.title.clone().unwrap_or_else(|| "Solo".to_string());
         let window_options = options.clone();
         let tree = self.tree.clone();
         let selection = self.selection.clone();
@@ -551,7 +551,7 @@ impl GpuixRenderer {
         let exit_startup_sender = startup_sender.clone();
 
         std::thread::Builder::new()
-            .name("gpuix-ui".to_string())
+            .name("solo-ui".to_string())
             .spawn(move || {
                 let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
                     gpui_platform::application().run(move |cx| {
@@ -565,7 +565,7 @@ impl GpuixRenderer {
                         let window = match cx.open_window(
                             to_gpui_window_options(&window_options, bounds),
                             |_window, cx| {
-                                cx.new(|_| GpuixView::new(tree, callback, title, selection))
+                                cx.new(|_| SoloView::new(tree, callback, title, selection))
                             },
                         ) {
                             Ok(window) => window,
@@ -788,7 +788,7 @@ impl GpuixRenderer {
             target_os = "freebsd"
         )))]
         Err(Error::from_reason(
-            "The production GPUIX renderer does not support this operating system",
+            "The production Solo renderer does not support this operating system",
         ))
     }
 
@@ -927,7 +927,7 @@ impl GpuixRenderer {
             target_os = "freebsd"
         )))]
         Err(Error::from_reason(
-            "The production GPUIX renderer does not support this operating system",
+            "The production Solo renderer does not support this operating system",
         ))
     }
 
@@ -989,7 +989,7 @@ impl GpuixRenderer {
     }
 
     // ── Scroll API ───────────────────────────────────────────────────
-    // GpuixView syncs scroll handles and virtual list states to thread-local maps.
+    // SoloView syncs scroll handles and virtual list states to thread-local maps.
 
     /// Set the scroll offset of a scrollable element.
     /// x and y are negative pixel values (scroll down = more negative y).
@@ -1338,7 +1338,7 @@ fn collect_text(id: u64, tree: &RetainedTree, texts: &mut Vec<String>) {
 }
 
 #[cfg(any(target_os = "windows", target_os = "linux", target_os = "freebsd"))]
-impl Drop for GpuixRenderer {
+impl Drop for SoloRenderer {
     fn drop(&mut self) {
         self.ui_commands.lock().unwrap().take();
     }
@@ -1346,7 +1346,7 @@ impl Drop for GpuixRenderer {
 
 // ── GPUI View ────────────────────────────────────────────────────────
 
-pub(crate) struct GpuixView {
+pub(crate) struct SoloView {
     pub(crate) tree: Arc<Mutex<RetainedTree>>,
     pub(crate) event_callback: Option<EventCallback>,
     pub(crate) window_title: String,
@@ -1376,7 +1376,7 @@ pub(crate) struct GpuixView {
     quit_hook: Option<gpui::Subscription>,
 }
 
-impl GpuixView {
+impl SoloView {
     pub(crate) fn new(
         tree: Arc<Mutex<RetainedTree>>,
         event_callback: Option<EventCallback>,
@@ -1455,7 +1455,7 @@ impl GpuixView {
         };
         gpui::div()
             .id(gpui::SharedString::from(format!(
-                "__gpuix_virtual_row_{}_{}",
+                "__solo_virtual_row_{}_{}",
                 list_id, expected_child_id
             )))
             .w_full()
@@ -1673,7 +1673,7 @@ impl VirtualListEntry {
         child_ids: Vec<u64>,
         child_revisions: Vec<u64>,
         focusable_rows: &HashSet<u64>,
-        cx: &mut gpui::Context<GpuixView>,
+        cx: &mut gpui::Context<SoloView>,
     ) {
         let old_rows: HashMap<u64, (u64, Option<gpui::FocusHandle>)> = self
             .child_ids
@@ -1771,7 +1771,7 @@ impl VirtualListEntry {
     }
 }
 
-impl GpuixView {
+impl SoloView {
     /// Sync focus handles with the current element tree.
     /// Creates handles for new focusable elements, subscribes on_focus/on_blur,
     /// and cleans up handles for destroyed elements.
@@ -1860,7 +1860,7 @@ impl GpuixView {
     }
 }
 
-impl gpui::Render for GpuixView {
+impl gpui::Render for SoloView {
     fn render(
         &mut self,
         window: &mut gpui::Window,
@@ -1972,7 +1972,7 @@ pub(crate) fn build_element(
     id: u64,
     ctx: &mut BuildCtx,
     window: &mut gpui::Window,
-    cx: &mut gpui::Context<GpuixView>,
+    cx: &mut gpui::Context<SoloView>,
 ) -> gpui::AnyElement {
     use gpui::IntoElement;
 
@@ -2110,7 +2110,7 @@ fn build_virtual_list(
     element: &crate::retained_tree::RetainedElement,
     ctx: &mut BuildCtx,
     window: &mut gpui::Window,
-    cx: &mut gpui::Context<GpuixView>,
+    cx: &mut gpui::Context<SoloView>,
 ) -> gpui::AnyElement {
     use gpui::prelude::*;
 
@@ -2230,11 +2230,11 @@ pub(crate) fn build_div(
     style: Option<&StyleDesc>,
     ctx: &mut BuildCtx,
     window: &mut gpui::Window,
-    cx: &mut gpui::Context<GpuixView>,
+    cx: &mut gpui::Context<SoloView>,
 ) -> gpui::AnyElement {
     use gpui::prelude::*;
 
-    let element_id_str = format!("__gpuix_{}", element.id);
+    let element_id_str = format!("__solo_{}", element.id);
     let mut el = gpui::div().id(gpui::SharedString::from(element_id_str));
 
     // The retained-tree root div is created unstyled by the JS side. Size it
@@ -2318,7 +2318,7 @@ pub(crate) fn build_div(
         }
 
         // Attach a persistent ScrollHandle when scrolling is enabled.
-        // The handle persists across renders (stored in GpuixView::scroll_handles)
+        // The handle persists across renders (stored in SoloView::scroll_handles)
         // so GPUI maintains the scroll offset between frames.
         if needs_scroll_x || needs_scroll_y {
             let handle = ctx
@@ -2338,7 +2338,7 @@ pub(crate) fn build_div(
     // If a FocusHandle was pre-created for this element (by sync_focus_handles),
     // attach it via track_focus. This makes the element focusable — clicking it
     // or tabbing to it gives it keyboard focus. The handle persists across renders
-    // because it's stored in GpuixView::focus_handles.
+    // because it's stored in SoloView::focus_handles.
     if style.and_then(|style| style.position.as_deref()).is_none() {
         el = el.relative();
     }
@@ -2537,7 +2537,7 @@ pub(crate) fn build_div(
 
             // ── Focus / Blur ─────────────────────────────────────
             // Event emission is handled by FocusHandle subscriptions
-            // set up in GpuixView::sync_focus_handles(). The handle is
+            // set up in SoloView::sync_focus_handles(). The handle is
             // attached to this element via .track_focus() above.
             "focus" | "blur" => {}
 
@@ -2586,7 +2586,7 @@ pub(crate) fn build_text(
     style: Option<&StyleDesc>,
     ctx: &mut BuildCtx,
     window: &mut gpui::Window,
-    cx: &mut gpui::Context<GpuixView>,
+    cx: &mut gpui::Context<SoloView>,
 ) -> gpui::AnyElement {
     use gpui::prelude::*;
 
@@ -3082,7 +3082,7 @@ fn parse_batch_ops(ops: &[serde_json::Value]) -> Result<Vec<BatchOp>> {
 }
 
 /// Apply a batch of mutation tuples to a RetainedTree.
-/// Shared between GpuixRenderer::apply_batch and TestGpuixRenderer::apply_batch.
+/// Shared between SoloRenderer::apply_batch and TestSoloRenderer::apply_batch.
 /// Returns accumulated destroyed IDs (as f64) from all destroyElement ops.
 ///
 /// ATOMIC: all ops are parsed and validated first. If any op is malformed,
@@ -3090,7 +3090,7 @@ fn parse_batch_ops(ops: &[serde_json::Value]) -> Result<Vec<BatchOp>> {
 /// partial application that could desync JS and Rust state.
 ///
 /// Batch format: JSON array of tuples [opcode, ...args].
-/// See GpuixRenderer::apply_batch for opcode documentation.
+/// See SoloRenderer::apply_batch for opcode documentation.
 pub(crate) fn apply_batch_to_tree(
     tree: &mut RetainedTree,
     ops: &[serde_json::Value],
@@ -3235,7 +3235,7 @@ pub struct WindowOptions {
 impl Default for WindowOptions {
     fn default() -> Self {
         Self {
-            title: Some("GPUIX".to_string()),
+            title: Some("Solo".to_string()),
             width: Some(800.0),
             height: Some(600.0),
             min_width: None,
@@ -3255,7 +3255,7 @@ fn to_gpui_window_options(
     options: &WindowOptions,
     bounds: gpui::Bounds<gpui::Pixels>,
 ) -> gpui::WindowOptions {
-    let title = options.title.clone().unwrap_or_else(|| "GPUIX".to_string());
+    let title = options.title.clone().unwrap_or_else(|| "Solo".to_string());
     let titlebar_transparent = options.titlebar_transparent.unwrap_or(false);
     let traffic_light_position = match (options.traffic_light_x, options.traffic_light_y) {
         (Some(x), Some(y)) => Some(gpui::point(gpui::px(x as f32), gpui::px(y as f32))),

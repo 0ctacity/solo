@@ -1,7 +1,7 @@
-/// TestGpuixRenderer — GPU-backed GPUI test renderer exposed to Node.js via napi.
+/// TestSoloRenderer — GPU-backed GPUI test renderer exposed to Node.js via napi.
 ///
 /// Uses gpui::VisualTestAppContext (real Metal rendering on macOS) with
-/// TestDispatcher for deterministic scheduling. Runs the SAME GpuixView,
+/// TestDispatcher for deterministic scheduling. Runs the SAME SoloView,
 /// build_element(), apply_styles(), and event handlers as production.
 ///
 /// Windows are positioned offscreen at (-10000, -10000) — invisible but
@@ -22,7 +22,7 @@ use gpui::AppContext as _;
 use crate::element_tree::EventPayload;
 use crate::renderer::{
     apply_batch_to_tree, debug_frame_overlay_mode_name, parse_debug_frame_overlay_mode,
-    to_element_id, EventCallback, GpuixView,
+    to_element_id, EventCallback, SoloView,
 };
 use crate::retained_tree::RetainedTree;
 use crate::style::StyleDesc;
@@ -35,7 +35,7 @@ use crate::style::StyleDesc;
 /// gpui panics at app teardown if an `Entity` handle outlives its `App`.
 /// `view` must therefore be declared before `cx`.
 struct VisualTestState {
-    view: gpui::Entity<GpuixView>,
+    view: gpui::Entity<SoloView>,
     window: gpui::AnyWindowHandle,
     cx: gpui::VisualTestAppContext,
 }
@@ -46,19 +46,19 @@ thread_local! {
 
 /// Access VisualTestAppContext + window + view mutably within thread_local.
 /// The closure receives (&mut cx, window_handle, &view_entity).
-/// Returns Err if no TestGpuixRenderer has been created on this thread.
+/// Returns Err if no TestSoloRenderer has been created on this thread.
 fn with_test_state<R>(
     f: impl FnOnce(
         &mut gpui::VisualTestAppContext,
         gpui::AnyWindowHandle,
-        &gpui::Entity<GpuixView>,
+        &gpui::Entity<SoloView>,
     ) -> Result<R>,
 ) -> Result<R> {
     TEST_STATE.with(|cell| {
         let mut borrow = cell.borrow_mut();
         let state = borrow
             .as_mut()
-            .ok_or_else(|| Error::from_reason("TestGpuixRenderer not initialized"))?;
+            .ok_or_else(|| Error::from_reason("TestSoloRenderer not initialized"))?;
         f(&mut state.cx, state.window, &state.view)
     })
 }
@@ -72,32 +72,32 @@ fn u32_to_mouse_button(button: u32) -> gpui::MouseButton {
     }
 }
 
-// ── TestGpuixRenderer ────────────────────────────────────────────────
+// ── TestSoloRenderer ────────────────────────────────────────────────
 
 /// GPU-backed GPUI test renderer. Uses VisualTestAppContext (real Metal
 /// rendering on macOS) with TestDispatcher for deterministic scheduling.
-/// Same GpuixView and rendering pipeline as production.
+/// Same SoloView and rendering pipeline as production.
 ///
 /// Usage from JS:
-///   const r = new TestGpuixRenderer()
+///   const r = new TestSoloRenderer()
 ///   r.createElement(1, "div")
 ///   r.setRoot(1)
 ///   r.commitMutations()
-///   r.flush()                  // triggers GpuixView::render() via Metal
+///   r.flush()                  // triggers SoloView::render() via Metal
 ///   r.simulateClick(50, 50)    // dispatches through GPUI hit testing
 ///   const events = r.drainEvents()
 ///   r.captureScreenshot("/tmp/test.png")  // saves rendered UI as PNG
 #[napi]
-pub struct TestGpuixRenderer {
+pub struct TestSoloRenderer {
     tree: Arc<Mutex<RetainedTree>>,
     events: Arc<Mutex<Vec<EventPayload>>>,
-    /// Same handle GpuixView paints against, so tests can assert on the live
+    /// Same handle SoloView paints against, so tests can assert on the live
     /// selection after simulating a drag.
     selection: crate::text::SharedSelection,
 }
 
 #[napi]
-impl TestGpuixRenderer {
+impl TestSoloRenderer {
     #[napi(constructor)]
     pub fn new() -> Result<Self> {
         let tree = Arc::new(Mutex::new(RetainedTree::new()));
@@ -124,26 +124,26 @@ impl TestGpuixRenderer {
         });
 
         // Open an offscreen window at (-10000, -10000) — invisible but fully
-        // rendered by Metal. Uses the same GpuixView as production.
+        // rendered by Metal. Uses the same SoloView as production.
         let window_handle = cx
             .open_offscreen_window_default(|_window, app| {
                 app.new(|_cx| {
-                    GpuixView::new(
+                    SoloView::new(
                         tree_clone,
                         callback_clone,
-                        "GPUIX Test".to_string(),
+                        "Solo Test".to_string(),
                         selection_clone,
                     )
                 })
             })
             .map_err(|e| Error::from_reason(format!("Failed to open test window: {}", e)))?;
 
-        // Get the root entity (Entity<GpuixView>) from the window.
+        // Get the root entity (Entity<SoloView>) from the window.
         let view = window_handle
             .entity(&cx)
             .map_err(|e| Error::from_reason(format!("Failed to get root view: {}", e)))?;
 
-        // Convert typed WindowHandle<GpuixView> to AnyWindowHandle for simulation methods.
+        // Convert typed WindowHandle<SoloView> to AnyWindowHandle for simulation methods.
         let window: gpui::AnyWindowHandle = window_handle.into();
 
         // Store !Send types on the JS main thread.
@@ -158,7 +158,7 @@ impl TestGpuixRenderer {
         })
     }
 
-    // ── Mutation API (same interface as GpuixRenderer) ────────────────
+    // ── Mutation API (same interface as SoloRenderer) ────────────────
 
     #[napi]
     pub fn create_element(&self, id: f64, element_type: String) -> Result<()> {
@@ -266,7 +266,7 @@ impl TestGpuixRenderer {
     }
 
     /// Apply a batch of mutations in a single FFI call.
-    /// Same format as GpuixRenderer::apply_batch (string op names).
+    /// Same format as SoloRenderer::apply_batch (string op names).
     /// Returns accumulated destroyed IDs from all destroyElement ops.
     #[napi]
     pub fn apply_batch(&self, json: String) -> Result<Vec<f64>> {
@@ -279,7 +279,7 @@ impl TestGpuixRenderer {
     // ── Test-specific methods ────────────────────────────────────────
 
     /// Notify the view entity and run GPUI until parked.
-    /// This triggers GpuixView::render() → build_element() → GPUI layout.
+    /// This triggers SoloView::render() → build_element() → GPUI layout.
     /// Must be called after mutations and before simulating events (GPUI's
     /// hit testing requires elements to be laid out).
     #[napi]
@@ -479,7 +479,7 @@ impl TestGpuixRenderer {
 
     /// Syntax-cache counters as `[hits, misses, documents]`.
     ///
-    /// GPUIX rebuilds its whole element tree every frame, so a `<code>` block
+    /// Solo rebuilds its whole element tree every frame, so a `<code>` block
     /// that misses the cache reparses at frame rate. A test can watch the hit
     /// count to catch that regression before a profiler does.
     #[napi]

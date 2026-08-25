@@ -285,7 +285,7 @@ impl CustomElement for AnchoredElement {
         &mut self,
         ctx: CustomRenderContext,
         _window: &mut gpui::Window,
-        _cx: &mut gpui::Context<crate::renderer::GpuixView>,
+        _cx: &mut gpui::Context<crate::renderer::SoloView>,
     ) -> gpui::AnyElement {
         use gpui::prelude::*;
 

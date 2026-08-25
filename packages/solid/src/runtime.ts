@@ -1,4 +1,4 @@
-/// Solid 2 runtime for GPUIX.
+/// Solid 2 runtime for Solo.
 ///
 /// This is the `moduleName` target for babel-preset-solid compiled with
 /// `{ generate: "universal", moduleName: "@solo/solid/runtime" }`. The
@@ -18,20 +18,20 @@ import type { EventPayload } from "@solo/native"
 import {
   attachEventHandler,
   clearEventHandlers,
-  gpuixEventTypeForProp,
+  soloEventTypeForProp,
   wrapWithBatching,
 } from "@solo/core"
 import type { NativeRenderer, StyleDesc } from "@solo/core"
 
 // ── Node bookkeeping ─────────────────────────────────────────────────
 
-export interface GpuixSolidNode {
+export interface SoloSolidNode {
   id: number
   /** Native element type ("div", "text", "img", ...). */
   type: string
   isText: boolean
-  parent: GpuixSolidNode | null
-  children: GpuixSolidNode[]
+  parent: SoloSolidNode | null
+  children: SoloSolidNode[]
 }
 
 let idCounter = 0
@@ -56,7 +56,7 @@ let flushNow: (() => void) | null = null
  * applyBatch() per microtask: every queued mutation arms exactly one commit,
  * so everything a reactive transaction mutates lands in a single batch.
  */
-export function setGpuixRenderer(renderer: NativeRenderer): void {
+export function setSoloRenderer(renderer: NativeRenderer): void {
   const batched = wrapWithBatching(renderer)
   let scheduled = false
   let commitStep: (() => void) | null = null
@@ -115,8 +115,8 @@ export function setGpuixRenderer(renderer: NativeRenderer): void {
   }
 }
 
-export function getGpuixRenderer(): NativeRenderer {
-  if (!activeRenderer) throw new Error("GPUIX renderer not set. Call render() first.")
+export function getSoloRenderer(): NativeRenderer {
+  if (!activeRenderer) throw new Error("Solo renderer not set. Call render() first.")
   return activeRenderer
 }
 
@@ -142,15 +142,15 @@ const NATIVE_TYPES = new Set([
   "virtual-list",
 ])
 
-function applyProps(node: GpuixSolidNode, props: Record<string, unknown>): void {
+function applyProps(node: SoloSolidNode, props: Record<string, unknown>): void {
   for (const name of Object.keys(props)) {
     setProperty(node, name, props[name])
   }
 }
 
-export function createElement(tag: string, staticProps?: Record<string, unknown>): GpuixSolidNode {
-  const r = getGpuixRenderer()
-  const node: GpuixSolidNode = {
+export function createElement(tag: string, staticProps?: Record<string, unknown>): SoloSolidNode {
+  const r = getSoloRenderer()
+  const node: SoloSolidNode = {
     id: nextId(),
     type: NATIVE_TYPES.has(tag) ? tag : "div",
     isText: false,
@@ -164,9 +164,9 @@ export function createElement(tag: string, staticProps?: Record<string, unknown>
   return node
 }
 
-export function createTextNode(value: string | number): GpuixSolidNode {
-  const r = getGpuixRenderer()
-  const node: GpuixSolidNode = {
+export function createTextNode(value: string | number): SoloSolidNode {
+  const r = getSoloRenderer()
+  const node: SoloSolidNode = {
     id: nextId(),
     type: "text",
     isText: true,
@@ -179,16 +179,16 @@ export function createTextNode(value: string | number): GpuixSolidNode {
   return node
 }
 
-function replaceText(node: GpuixSolidNode, value: string | number): void {
-  getGpuixRenderer().setText(node.id, String(value))
+function replaceText(node: SoloSolidNode, value: string | number): void {
+  getSoloRenderer().setText(node.id, String(value))
 }
 
 /**
  * Insert `node` into `parent` before `anchor` (or appended when omitted).
  * Maps to appendChild / insertBefore on the retained tree.
  */
-export function insertNode(parent: GpuixSolidNode, node: GpuixSolidNode, anchor?: GpuixSolidNode): void {
-  const r = getGpuixRenderer()
+export function insertNode(parent: SoloSolidNode, node: SoloSolidNode, anchor?: SoloSolidNode): void {
+  const r = getSoloRenderer()
   detached.delete(node)
   // Detach from any previous parent first (the retained tree requires it).
   if (node.parent) {
@@ -218,10 +218,10 @@ export function insertNode(parent: GpuixSolidNode, node: GpuixSolidNode, anchor?
  * such subtrees, so removal only detaches; nodes still detached when a
  * batch commits are destroyed just before applyBatch.
  */
-const detached = new Set<GpuixSolidNode>()
+const detached = new Set<SoloSolidNode>()
 
-function removeNode(parent: GpuixSolidNode, node: GpuixSolidNode): void {
-  const r = getGpuixRenderer()
+function removeNode(parent: SoloSolidNode, node: SoloSolidNode): void {
+  const r = getSoloRenderer()
   const index = parent.children.indexOf(node)
   if (index !== -1) parent.children.splice(index, 1)
   node.parent = null
@@ -232,7 +232,7 @@ function removeNode(parent: GpuixSolidNode, node: GpuixSolidNode): void {
 /** Destroy every node still detached at commit time. */
 function destroyStillDetached(): void {
   if (detached.size === 0) return
-  const r = getGpuixRenderer()
+  const r = getSoloRenderer()
   for (const node of detached) {
     if (node.parent == null) {
       // destroyElement recurses over descendants; descendants that were
@@ -244,12 +244,12 @@ function destroyStillDetached(): void {
 }
 
 function setProperty(
-  node: GpuixSolidNode,
+  node: SoloSolidNode,
   name: string,
   value: unknown,
   prev?: unknown
 ): void {
-  const r = getGpuixRenderer()
+  const r = getSoloRenderer()
   if (name === "style") {
     if (value != null && typeof value === "object") {
       r.setStyle(node.id, value as StyleDesc)
@@ -258,7 +258,7 @@ function setProperty(
     }
     return
   }
-  const eventType = gpuixEventTypeForProp(name)
+  const eventType = soloEventTypeForProp(name)
   if (eventType) {
     attachEventHandler(r, node.id, eventType, value as ((e: EventPayload) => void) | null)
     return
@@ -271,9 +271,9 @@ function setProperty(
   )
 }
 
-const getParentNode = (node: GpuixSolidNode): GpuixSolidNode | undefined => node.parent ?? undefined
-const getFirstChild = (node: GpuixSolidNode): GpuixSolidNode | undefined => node.children[0]
-function getNextSibling(node: GpuixSolidNode): GpuixSolidNode | undefined {
+const getParentNode = (node: SoloSolidNode): SoloSolidNode | undefined => node.parent ?? undefined
+const getFirstChild = (node: SoloSolidNode): SoloSolidNode | undefined => node.children[0]
+function getNextSibling(node: SoloSolidNode): SoloSolidNode | undefined {
   const siblings = node.parent?.children
   if (!siblings) return undefined
   return siblings[siblings.indexOf(node) + 1]
@@ -281,7 +281,7 @@ function getNextSibling(node: GpuixSolidNode): GpuixSolidNode | undefined {
 
 // ── Universal renderer ───────────────────────────────────────────────
 
-export const universal = createRenderer<GpuixSolidNode>({
+export const universal = createRenderer<SoloSolidNode>({
   createElement,
   createTextNode,
   replaceText,
@@ -326,14 +326,14 @@ export function mount(
   code: () => SolidElement,
   renderer: NativeRenderer
 ): () => void {
-  setGpuixRenderer(renderer)
+  setSoloRenderer(renderer)
   const rootNode = createElement("div")
   renderer.setRoot(rootNode.id)
-  const solidDispose = universal.render(code as unknown as () => GpuixSolidNode, rootNode)
+  const solidDispose = universal.render(code as unknown as () => SoloSolidNode, rootNode)
   const dispose = (): void => {
     // The universal disposer removes mounted nodes through our removeNode op.
     solidDispose()
-    getGpuixRenderer().destroyElement(rootNode.id)
+    getSoloRenderer().destroyElement(rootNode.id)
     flushNow?.()
     clearEventHandlers()
   }

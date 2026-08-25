@@ -1,5 +1,5 @@
 /// MockNativeRenderer — in-memory NativeRenderer for framework tests on
-/// platforms without TestGpuixRenderer (the GPU-backed test renderer is
+/// platforms without TestSoloRenderer (the GPU-backed test renderer is
 /// macOS-only). Records every mutation op so tests can assert exactly which
 /// protocol messages a framework integration sends.
 

@@ -11,7 +11,7 @@ import { createSignal, For, Show } from "solid-js"
 import { createStore } from "solid-js"
 import { View, Text } from "@solo/solid"
 import { mountTest, findByTestId } from "../test-utils.js"
-import { handleGpuixEvent } from "@solo/core"
+import { handleSoloEvent } from "@solo/core"
 import type { EventPayload } from "@solo/native"
 import type { MockElement } from "@solo/core"
 
@@ -270,7 +270,7 @@ describe("lifecycle: deletion", () => {
       // The registry entry was unregistered by the destroy flush; firing the
       // former event (same element id) must do nothing, not throw.
       expect(() =>
-        handleGpuixEvent({ elementId: doomed.id, eventType: "click" } as EventPayload)
+        handleSoloEvent({ elementId: doomed.id, eventType: "click" } as EventPayload)
       ).not.toThrow()
       await tick()
       expect(elementOps(t)).toEqual([])

@@ -1,7 +1,7 @@
 /// Native style properties. Faithful port of packages/react
 /// styles.test.tsx (32 tests) — compact form, identical scenarios and
 /// assertions (explicit expected-text arrays replace inline snapshots).
-/// macOS-only: requires the GPU-backed TestGpuixRenderer.
+/// macOS-only: requires the GPU-backed TestSoloRenderer.
 
 import fs from "fs"
 import { createSignal } from "solid-js"
@@ -12,7 +12,7 @@ import { Text, View } from "../components.js"
 import type { StyleDesc } from "@solo/core"
 
 const describeNative = hasNativeTestRenderer ? describe : describe.skip
-const SHOT_DIR = "/tmp/gpuix-style-shots"
+const SHOT_DIR = "/tmp/solo-style-shots"
 
 let testRoot: SolidNativeTestRoot
 
@@ -71,7 +71,7 @@ describeNative("style properties", () => {
       ))
 
       expect(texts()).toEqual(["01", "Line content that may wrap", "Second line of content"])
-      expectShot(shot("gpuix-align-self"))
+      expectShot(shot("solo-align-self"))
     })
   })
 
@@ -91,7 +91,7 @@ describeNative("style properties", () => {
       ))
 
       expect(texts()).toEqual(["42", "const x = someVeryLongVariableName"])
-      expectShot(shot("gpuix-flex-shrink"))
+      expectShot(shot("solo-flex-shrink"))
     })
   })
 
@@ -111,7 +111,7 @@ describeNative("style properties", () => {
       ))
 
       expect(texts()).toEqual(["grow-0", "grow-1"])
-      expectShot(shot("gpuix-flex-grow"))
+      expectShot(shot("solo-flex-grow"))
     })
   })
 
@@ -152,7 +152,7 @@ describeNative("style properties", () => {
         " = ",
         '"string value"',
       ])
-      expectShot(shot("gpuix-fonts-tokens"))
+      expectShot(shot("solo-fonts-tokens"))
     })
 
     it("visually differs between default and monospace fonts", () => {
@@ -189,7 +189,7 @@ describeNative("style properties", () => {
         </Center>
       ))
       expect(texts()[0]).toBe(LONG)
-      expectShot(shot("gpuix-nowrap"))
+      expectShot(shot("solo-nowrap"))
     })
 
     it("normal: text wraps within container width", () => {
@@ -201,7 +201,7 @@ describeNative("style properties", () => {
         </Center>
       ))
       expect(texts().length).toBeGreaterThan(0)
-      expectShot(shot("gpuix-wrap-normal"))
+      expectShot(shot("solo-wrap-normal"))
     })
 
     it("nowrap vs normal: screenshots differ for same text", () => {
@@ -236,7 +236,7 @@ describeNative("style properties", () => {
       ))
       const painted = testRoot.getPaintedText().join("")
       expect(painted.includes("…") || painted.length < LONG.length).toBe(true)
-      expectShot(shot("gpuix-ellipsis"))
+      expectShot(shot("solo-ellipsis"))
     })
 
     it("ellipsis-start: truncates long text with ... at start", () => {
@@ -247,7 +247,7 @@ describeNative("style properties", () => {
           </View>
         </Center>
       ))
-      expectShot(shot("gpuix-ellipsis-start"))
+      expectShot(shot("solo-ellipsis-start"))
     })
 
     it("short text: no truncation when text fits", () => {
@@ -275,7 +275,7 @@ describeNative("style properties", () => {
       ))
       const joined = testRoot.getPaintedText().join("\n")
       expect(joined.split("\n").length).toBeLessThanOrEqual(3)
-      expectShot(shot("gpuix-line-clamp-3"))
+      expectShot(shot("solo-line-clamp-3"))
     })
 
     it("lineClamp 0 is ignored (no clamping)", () => {
@@ -409,7 +409,7 @@ describeNative("style properties", () => {
         </Center>
       ))
       expect(texts()).toEqual(lines)
-      expectShot(shot("gpuix-ws-pre-sim"))
+      expectShot(shot("solo-ws-pre-sim"))
     })
   })
 

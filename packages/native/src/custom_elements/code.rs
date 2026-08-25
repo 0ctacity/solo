@@ -94,7 +94,7 @@ impl CustomElement for CodeElement {
         &mut self,
         ctx: CustomRenderContext,
         _window: &mut gpui::Window,
-        _cx: &mut gpui::Context<crate::renderer::GpuixView>,
+        _cx: &mut gpui::Context<crate::renderer::SoloView>,
     ) -> gpui::AnyElement {
         use gpui::prelude::*;
 
@@ -106,7 +106,7 @@ impl CustomElement for CodeElement {
         let gutter_width = gutter_width(lines.len(), m);
 
         let mut body = gpui::div()
-            .id(SharedString::from(format!("__gpuix_code_body_{}", ctx.id)))
+            .id(SharedString::from(format!("__solo_code_body_{}", ctx.id)))
             .overflow_x_scroll()
             .restrict_scroll_to_axis()
             .min_w_0()
@@ -184,7 +184,7 @@ impl CustomElement for CodeElement {
         }
 
         let mut block = block
-            .id(SharedString::from(format!("__gpuix_code_{}", ctx.id)))
+            .id(SharedString::from(format!("__solo_code_{}", ctx.id)))
             .child(body);
         if let Some(style) = ctx.style {
             block = crate::renderer::apply_styles(block, style);

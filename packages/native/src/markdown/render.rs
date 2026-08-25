@@ -577,7 +577,7 @@ fn render_table(
     // block keeps `min_table_width` and this viewport scrolls it.
     div()
         .id(SharedString::from(format!(
-            "__gpuix_md_table_{}_{table_sub}",
+            "__solo_md_table_{}_{table_sub}",
             ctx.element_id
         )))
         .w_full()

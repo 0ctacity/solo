@@ -29,8 +29,8 @@ describe("automation protocol", () => {
 
   it("ignores logs that are not data: lines", () => {
     const chunk = [
-      "Starting GPUIX...\n",
-      "[GPUIX] Initial render complete\n",
+      "Starting Solo...\n",
+      "[Solo] Initial render complete\n",
       encodeSse({
         id: 1,
         method: "initialize",

@@ -35,7 +35,7 @@ impl Render for ProbeView {
             .track_scroll(&handle)
             .child(rows);
 
-        // Exact chain emitted by GPUIX: wrapper > retained root > app column.
+        // Exact chain emitted by Solo: wrapper > retained root > app column.
         div().size_full().child(
             div().size_full().child(
                 div().w(relative(1.0)).h(relative(1.0)).flex().flex_col()

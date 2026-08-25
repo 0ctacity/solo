@@ -36,9 +36,12 @@ const EVENT_PROP_TO_TYPE = new Map<string, string>(
 )
 
 /** The native event type for a framework event prop name, or null. */
-export function gpuixEventTypeForProp(name: string): string | null {
+export function soloEventTypeForProp(name: string): string | null {
   return EVENT_PROP_TO_TYPE.get(name) ?? null
 }
+
+// Deprecated alias — remove in next major
+export const gpuixEventTypeForProp = soloEventTypeForProp
 
 /** Attach one event handler through the shared registry + native listener. */
 export function attachEventHandler(

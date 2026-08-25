@@ -1,4 +1,4 @@
-// GPUIX Solid — Solid bindings for GPUIX.
+// Solo — Solid bindings for Solo.
 
 export { render } from "./root.js"
 export type { Root, RenderOptions, FrameLoop } from "./root.js"
@@ -7,10 +7,10 @@ export type { ViewProps, TextProps, ButtonProps } from "./components.js"
 export {
   resetIdCounter,
   flushMutations,
-  setGpuixRenderer,
-  getGpuixRenderer,
+  setSoloRenderer,
+  getSoloRenderer,
 } from "./runtime.js"
-export type { GpuixSolidNode } from "./runtime.js"
+export type { SoloSolidNode } from "./runtime.js"
 
 export {
   createSolidNativeTestRoot,

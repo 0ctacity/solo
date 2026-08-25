@@ -23,7 +23,7 @@ const PINNED: Record<string, string> = {
 }
 
 export function solidUniversal(): Plugin {  return {
-    name: "gpuix:solid-universal",
+    name: "solo:solid-universal",
     enforce: "pre",
     async resolveId(id) {
       return PINNED[id] ?? null

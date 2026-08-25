@@ -1,6 +1,6 @@
 /// Image custom elements for raster images and tintable SVG icons.
 ///
-/// This provides a native `<img>` for GPUIX React apps while keeping the same
+/// This provides a native `<img>` for Solo React apps while keeping the same
 /// custom-element prop pipeline (`setCustomProp`/`custom_props`).
 use super::{CustomElement, CustomElementFactory, CustomRenderContext};
 
@@ -76,7 +76,7 @@ impl CustomElement for ImgElement {
         &mut self,
         ctx: CustomRenderContext,
         _window: &mut gpui::Window,
-        _cx: &mut gpui::Context<crate::renderer::GpuixView>,
+        _cx: &mut gpui::Context<crate::renderer::SoloView>,
     ) -> gpui::AnyElement {
         use gpui::prelude::*;
 
@@ -212,7 +212,7 @@ impl CustomElement for SvgElement {
         &mut self,
         ctx: CustomRenderContext,
         _window: &mut gpui::Window,
-        _cx: &mut gpui::Context<crate::renderer::GpuixView>,
+        _cx: &mut gpui::Context<crate::renderer::SoloView>,
     ) -> gpui::AnyElement {
         use gpui::prelude::*;
 

@@ -1,4 +1,4 @@
-/// Typed GPUIX automation protocol and SSE codec.
+/// Typed Solo automation protocol and SSE codec.
 ///
 /// Wire format is SSE `data:` lines so `eventsource-parser` can extract
 /// messages from noisy stdout. JSON carries every field. Do not emit SSE

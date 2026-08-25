@@ -1,5 +1,5 @@
 /**
- * GPUIX Tasks — a small native task manager built entirely from Solid 2.
+ * Solo Tasks — a small native task manager built entirely from Solid 2.
  *
  * Dogfood app for the @solo/solid runtime: list, add, toggle and delete
  * tasks. In-memory mock data only. All state is ordinary Solid primitives;

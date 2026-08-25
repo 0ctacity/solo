@@ -2513,45 +2513,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "gpuix-native"
-version = "0.4.0"
-dependencies = [
- "anyhow",
- "core-graphics 0.24.0",
- "core-text",
- "env_logger",
- "futures",
- "gpui",
- "gpui_macos",
- "gpui_platform",
- "log",
- "napi",
- "napi-build",
- "napi-derive",
- "parking_lot",
- "pulldown-cmark",
- "serde",
- "serde_json",
- "thiserror 2.0.18",
- "tree-sitter",
- "tree-sitter-bash",
- "tree-sitter-c",
- "tree-sitter-css",
- "tree-sitter-go",
- "tree-sitter-highlight",
- "tree-sitter-html",
- "tree-sitter-javascript",
- "tree-sitter-json",
- "tree-sitter-md",
- "tree-sitter-python",
- "tree-sitter-rust",
- "tree-sitter-toml-ng",
- "tree-sitter-typescript",
- "tree-sitter-yaml",
- "unicode-segmentation",
-]
-
-[[package]]
 name = "half"
 version = "2.7.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5263,6 +5224,45 @@ checksum = "4aaa7368fcf4852a4c2dd92df0cace6a71f2091ca0a23391ce7f3a31833f1523"
 dependencies = [
  "borsh",
  "serde_core",
+]
+
+[[package]]
+name = "solo-native"
+version = "0.4.0"
+dependencies = [
+ "anyhow",
+ "core-graphics 0.24.0",
+ "core-text",
+ "env_logger",
+ "futures",
+ "gpui",
+ "gpui_macos",
+ "gpui_platform",
+ "log",
+ "napi",
+ "napi-build",
+ "napi-derive",
+ "parking_lot",
+ "pulldown-cmark",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+ "tree-sitter",
+ "tree-sitter-bash",
+ "tree-sitter-c",
+ "tree-sitter-css",
+ "tree-sitter-go",
+ "tree-sitter-highlight",
+ "tree-sitter-html",
+ "tree-sitter-javascript",
+ "tree-sitter-json",
+ "tree-sitter-md",
+ "tree-sitter-python",
+ "tree-sitter-rust",
+ "tree-sitter-toml-ng",
+ "tree-sitter-typescript",
+ "tree-sitter-yaml",
+ "unicode-segmentation",
 ]
 
 [[package]]

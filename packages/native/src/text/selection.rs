@@ -5,7 +5,7 @@
 //!
 //! GPUI has no built-in selection for plain text. Zed's markdown selects
 //! continuously because its whole document is ONE element over one text model.
-//! GPUIX renders a TREE of text elements, so this module rebuilds that
+//! Solo renders a TREE of text elements, so this module rebuilds that
 //! continuity: every frame the renderer registers each painted text element in
 //! paint order (which IS document order), and a drag anchored in one element
 //! resolves against that registry into per-element SPANS — partial in the anchor
@@ -17,7 +17,7 @@
 //! [`super::paint`].
 //!
 //! Difference from Comet: the state lives in a `SelectionState` value owned by
-//! `GpuixView` instead of a process-global. GPUIX is a library and a process may
+//! `SoloView` instead of a process-global. Solo is a library and a process may
 //! host more than one renderer, so a global would let two windows fight over one
 //! selection.
 

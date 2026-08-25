@@ -1,7 +1,7 @@
 /// Retained element tree — the Rust-side source of truth for the UI.
 ///
 /// React's reconciler sends mutations (create, append, remove, etc.) via napi.
-/// This tree stores those mutations. GpuixView builds ephemeral GPUI elements
+/// This tree stores those mutations. SoloView builds ephemeral GPUI elements
 /// from it, while virtual lists defer offscreen subtrees until layout requests them.
 ///
 /// All IDs are u64 — JS generates them with an incrementing counter,

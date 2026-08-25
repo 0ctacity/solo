@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest"
 import { wrapWithBatching } from "../batching.js"
 import {
   clearEventHandlers,
-  handleGpuixEvent,
+  handleSoloEvent,
   registerEventHandler,
   unregisterEventHandlers,
 } from "../event-registry.js"
@@ -143,11 +143,11 @@ describe("event registry", () => {
     const handler = vi.fn()
     registerEventHandler(5, "click", handler)
 
-    handleGpuixEvent({ elementId: 5, eventType: "click" } as any)
+    handleSoloEvent({ elementId: 5, eventType: "click" } as any)
     expect(handler).toHaveBeenCalledTimes(1)
 
-    handleGpuixEvent({ elementId: 5, eventType: "mouseEnter" } as any)
-    handleGpuixEvent({ elementId: 6, eventType: "click" } as any)
+    handleSoloEvent({ elementId: 5, eventType: "mouseEnter" } as any)
+    handleSoloEvent({ elementId: 6, eventType: "click" } as any)
     expect(handler).toHaveBeenCalledTimes(1)
   })
 
@@ -156,7 +156,7 @@ describe("event registry", () => {
     registerEventHandler(5, "click", click)
     unregisterEventHandlers(5)
 
-    handleGpuixEvent({ elementId: 5, eventType: "click" } as any)
+    handleSoloEvent({ elementId: 5, eventType: "click" } as any)
     expect(click).not.toHaveBeenCalled()
   })
 })

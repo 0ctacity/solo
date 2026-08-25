@@ -1,6 +1,6 @@
 /// End-to-end tests for the native GPUI text editor host elements.
 /// Faithful port of packages/react/src/__tests__/input.test.tsx to Solid.
-/// macOS-only: requires the GPU-backed TestGpuixRenderer.
+/// macOS-only: requires the GPU-backed TestSoloRenderer.
 
 import { createSignal } from "solid-js"
 import { beforeEach, describe, expect, it } from "vitest"

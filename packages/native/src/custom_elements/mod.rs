@@ -1,4 +1,4 @@
-/// Custom element trait infrastructure for GPUIX.
+/// Custom element trait infrastructure for Solo.
 ///
 /// Allows native GPUI components (input, editor, diff) to be used as
 /// React custom elements with props and callbacks. The renderer dispatches
@@ -99,7 +99,7 @@ pub trait CustomElement: 'static {
         &mut self,
         ctx: CustomRenderContext,
         window: &mut gpui::Window,
-        cx: &mut gpui::Context<crate::renderer::GpuixView>,
+        cx: &mut gpui::Context<crate::renderer::SoloView>,
     ) -> gpui::AnyElement;
 
     /// Set a named prop from JS. Values are JSON-encoded.

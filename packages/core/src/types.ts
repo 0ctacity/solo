@@ -1,4 +1,4 @@
-/// Framework-neutral GPUIX types shared by every renderer package.
+/// Framework-neutral Solo types shared by every renderer package.
 ///
 /// Nothing in this file may import React, Solid, or any other UI framework.
 /// These describe the native mutation protocol and the style vocabulary that
@@ -126,7 +126,7 @@ export interface StyleDesc {
   active?: Omit<StyleDesc, "hover" | "active">
 }
 
-// Element types supported by GPUIX
+// Element types supported by Solo
 export type ElementType =
   | "div"
   | "text"
@@ -177,7 +177,7 @@ export interface SyntaxTheme {
  * These live in the theme, not in Rust constants, so tuning a row height or a
  * heading scale is a re-render and needs no native rebuild.
  */
-export interface GpuixMetrics {
+export interface SoloMetrics {
   // Code blocks
   codeTextSize?: number
   codeLineHeight?: number
@@ -219,7 +219,7 @@ export interface GpuixMetrics {
  * Theme tokens for the native text components. Every field is optional and
  * layers on top of the built-in dark theme (or light, via `appearance`).
  */
-export interface GpuixTheme {
+export interface SoloTheme {
   appearance?: "dark" | "light"
   bg?: string
   border?: string
@@ -237,14 +237,14 @@ export interface GpuixTheme {
   fontSans?: string
   fontMono?: string
   syntax?: SyntaxTheme
-  metrics?: GpuixMetrics
+  metrics?: SoloMetrics
 }
 
 export type DebugFrameOverlayMode = "hidden" | "minimal" | "full"
 
 /// Interface for the renderer that receives mutations from a framework
-/// reconciler. Implemented by the real napi GpuixRenderer and by TestRenderer
-/// (which delegates to native TestGpuixRenderer for tests).
+/// reconciler. Implemented by the real napi SoloRenderer and by TestRenderer
+/// (which delegates to native TestSoloRenderer for tests).
 export interface NativeRenderer {
   createElement(id: number, elementType: string): void
   destroyElement(id: number): Array<number>
@@ -293,3 +293,8 @@ export interface NativeRenderer {
 export interface Container {
   renderer: NativeRenderer
 }
+
+// Deprecated aliases — remove in next major
+export type GpuixMetrics = SoloMetrics
+export type GpuixTheme = SoloTheme
+export type GpuixRenderer = NativeRenderer

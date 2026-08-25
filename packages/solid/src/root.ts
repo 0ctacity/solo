@@ -1,12 +1,12 @@
-/// GPUIX Solid — render Solid apps into a native GPUIX window.
+/// Solo — render Solid apps into a native Solo window.
 ///
-/// Mirrors the React package's render(): creates the napi GpuixRenderer,
+/// Mirrors the previous React package's render(): creates the napi SoloRenderer,
 /// opens the window, wires native events into the shared handler registry,
 /// batches mutations, and drives the frame loop where the platform needs it.
 
-import { GpuixRenderer } from "@solo/native"
+import { SoloRenderer } from "@solo/native"
 import type { EventPayload, WindowOptions } from "@solo/native"
-import { clearEventHandlers, handleGpuixEvent, startFrameLoop } from "@solo/core"
+import { clearEventHandlers, handleSoloEvent, startFrameLoop } from "@solo/core"
 import {
   InProcessBackend,
   liveRendererAsTest,
@@ -25,11 +25,11 @@ export type { FrameLoop }
 
 export interface RenderOptions extends WindowOptions {
   onEvent?: (event: EventPayload) => void
-  /** Inject a renderer (tests). Defaults to a real GpuixRenderer window. */
+  /** Inject a renderer (tests). Defaults to a real SoloRenderer window. */
   renderer?: NativeRenderer
 }
 
-const RENDER_HOST_KEY = "__gpuixSolidRenderHost"
+const RENDER_HOST_KEY = "__soloSolidRenderHost"
 
 type RenderSlot = {
   renderer?: NativeRenderer
@@ -52,14 +52,14 @@ export function enableAutomation(renderer: LiveAutomationRenderer): void {
 
 function createNativeRenderer(
   onEvent?: (event: EventPayload) => void
-): GpuixRenderer {
-  const renderer = new GpuixRenderer((err, event) => {
+): SoloRenderer {
+  const renderer = new SoloRenderer((err, event) => {
     if (err) {
-      console.error("[GPUIX] Native event error:", err)
+      console.error("[Solo] Native event error:", err)
       return
     }
     if (event) {
-      handleGpuixEvent(event)
+      handleSoloEvent(event)
       onEvent?.(event)
     }
   })
@@ -74,7 +74,7 @@ function createNativeRenderer(
   return renderer
 }
 
-/** Mount the app in a GPUIX window. Later calls remount on the same window. */
+/** Mount the app in a Solo window. Later calls remount on the same window. */
 export function render(code: () => SolidElement, options: RenderOptions = {}): Root {
   const slot = renderSlot()
   if (options.renderer) {
@@ -84,12 +84,12 @@ export function render(code: () => SolidElement, options: RenderOptions = {}): R
     const renderer = createNativeRenderer(options.onEvent)
     renderer.init(options)
     slot.renderer = renderer
-    console.log("[gpuix] created native window")
+      console.log("[solo] created native window")
   }
   const host = slot.renderer as NativeRenderer
 
   if (slot.root) {
-    console.log("[gpuix] remount: unmount previous tree")
+    console.log("[solo] remount: unmount previous tree")
     slot.root.unmount()
   }
   resetIdCounter()
@@ -106,7 +106,7 @@ export function render(code: () => SolidElement, options: RenderOptions = {}): R
 
   if (
     !options.renderer &&
-    host instanceof GpuixRenderer &&
+    host instanceof SoloRenderer &&
     typeof host.requiresTick === "function" &&
     host.requiresTick()
   ) {
@@ -115,7 +115,7 @@ export function render(code: () => SolidElement, options: RenderOptions = {}): R
       onTerminated: () => process.exit(0),
     })
   }
-  console.log("[gpuix] mount complete")
+  console.log("[solo] mount complete")
   return slot.root
 }
 

@@ -11,7 +11,7 @@ import { Text, View } from "../components.js"
 
 const describeNative = hasNativeTestRenderer ? describe : describe.skip
 
-const IMAGE_FIXTURE_PATH = "/tmp/gpuix-img-fixture.svg"
+const IMAGE_FIXTURE_PATH = "/tmp/solo-img-fixture.svg"
 
 function writeSvgFixture(filePath: string): void {
   const svg = [
@@ -108,8 +108,8 @@ describeNative("custom element: img", () => {
 
       testRoot.render(() => <ImageScreenshotProbe />)
 
-      const path0 = "/tmp/gpuix-img-0.png"
-      const path1 = "/tmp/gpuix-img-1.png"
+      const path0 = "/tmp/solo-img-0.png"
+      const path1 = "/tmp/solo-img-1.png"
 
       if (fs.existsSync(path0)) fs.unlinkSync(path0)
       if (fs.existsSync(path1)) fs.unlinkSync(path1)

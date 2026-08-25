@@ -1,4 +1,4 @@
-/// Semantic primitives for GPUIX Solid apps.
+/// Semantic primitives for Solo apps.
 ///
 /// Thin wrappers over existing native intrinsic elements — no new Rust.
 /// Written against the runtime ops directly (rather than JSX) so the package
@@ -8,7 +8,7 @@ import type { EventPayload } from "@solo/native"
 import type { StyleDesc } from "@solo/core"
 import { merge } from "solid-js"
 import { universal } from "./runtime.js"
-import type { GpuixSolidNode } from "./runtime.js"
+import type { SoloSolidNode } from "./runtime.js"
 
 export interface ViewProps {
   style?: StyleDesc
@@ -23,7 +23,7 @@ export interface ViewProps {
 }
 
 /** A flex container. Maps to the native "div" element. */
-export function View(props: ViewProps): GpuixSolidNode {
+export function View(props: ViewProps): SoloSolidNode {
   const el = universal.createElement("div")
   universal.spread(el, props as Record<string, unknown>)
   return el
@@ -37,7 +37,7 @@ export interface TextProps {
 }
 
 /** Styled text content. Maps to the native "text" element. */
-export function Text(props: TextProps): GpuixSolidNode {
+export function Text(props: TextProps): SoloSolidNode {
   const el = universal.createElement("text")
   // spread handles style, events, custom props AND the (reactive) children.
   universal.spread(el, props as Record<string, unknown>)
@@ -62,7 +62,7 @@ export interface ButtonProps extends Omit<ViewProps, "style"> {
 }
 
 /** A clickable button. A native "div" with sensible default styles. */
-export function Button(props: ButtonProps): GpuixSolidNode {
+export function Button(props: ButtonProps): SoloSolidNode {
   const el = universal.createElement("div")
   const merged = merge(props, {
     get style(): StyleDesc {

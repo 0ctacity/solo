@@ -2,7 +2,7 @@
 /// Framework-neutral: any renderer package can drive the embedded event loop
 /// with this.
 
-import type { GpuixRenderer } from "@solo/native"
+import type { SoloRenderer } from "@solo/native"
 
 /** ~125fps. Above any common display refresh rate, so frames are never the
  *  bottleneck, while still leaving the Node event loop almost entirely idle. */
@@ -37,7 +37,7 @@ export interface FrameLoop {
  * `onTerminated` runs.
  */
 export function startFrameLoop(
-  renderer: Pick<GpuixRenderer, "requiresTick" | "tick">,
+  renderer: Pick<SoloRenderer, "requiresTick" | "tick">,
   options: { frameMs?: number; onTerminated?: () => void } = {}
 ): FrameLoop {
   if (!renderer.requiresTick()) {

@@ -41,7 +41,7 @@ impl Default for HighlightLimits {
 }
 
 /// Bundled grammars. Comet ships 28; this is the subset that covers the
-/// languages a GPUIX app is likely to display, kept small because every grammar
+/// languages a Solo app is likely to display, kept small because every grammar
 /// is a C file compiled into the native binary.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum LanguageId {

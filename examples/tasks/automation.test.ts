@@ -1,4 +1,4 @@
-/// Automation regression: drive the REAL Solid tasks app in its real GPUIX
+/// Automation regression: drive the REAL Solid tasks app in its real Solo
 /// window over the stdio automation protocol — the same path a controller
 /// uses for React apps.
 ///

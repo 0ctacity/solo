@@ -4,7 +4,7 @@
 //! clears the map in paint, and GPUI prepaint runs for the whole tree
 //! before any paint. A prepaint recorder would be wiped by the reset.
 //!
-//! TestGpuixRenderer and GpuixRenderer both use this so locators, screenshots,
+//! TestSoloRenderer and SoloRenderer both use this so locators, screenshots,
 //! and clock control do not fork between headless tests and a live window.
 
 use std::cell::RefCell;

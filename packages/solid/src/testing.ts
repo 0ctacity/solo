@@ -1,13 +1,13 @@
 /// macOS-only GPU-backed test harness for @solo/solid.
 ///
 /// Mirrors packages/react/src/testing.ts: mounts Solid trees through the
-/// native TestGpuixRenderer so tests exercise the same GPUI pipeline as
+/// native TestSoloRenderer so tests exercise the same GPUI pipeline as
 /// production. On non-macOS builds hasNativeTestRenderer is false and the
 /// suites using this harness skip themselves; headless coverage comes from
 /// MockNativeRenderer-based tests instead.
 
 import type { EventPayload } from "@solo/native"
-import { clearEventHandlers, handleGpuixEvent, wrapWithBatching } from "@solo/core"
+import { clearEventHandlers, handleSoloEvent, wrapWithBatching } from "@solo/core"
 import { mount as mountTree, resetIdCounter, flushMutations } from "./runtime.js"
 
 interface NativeTestRendererApi {
@@ -38,10 +38,10 @@ let NativeTestRenderer: NativeTestRendererConstructor | null = null
 try {
   // eslint-disable-next-line @typescript-eslint/no-require-imports
   const native = require("@solo/native") as {
-    TestGpuixRenderer?: NativeTestRendererConstructor
+    TestSoloRenderer?: NativeTestRendererConstructor
   }
-  if (native.TestGpuixRenderer) {
-    NativeTestRenderer = native.TestGpuixRenderer
+  if (native.TestSoloRenderer) {
+    NativeTestRenderer = native.TestSoloRenderer
   }
 } catch {
   // Native module unavailable — harness stays disabled.
@@ -77,7 +77,7 @@ export interface SolidNativeTestRoot {
 export function createSolidNativeTestRoot(): SolidNativeTestRoot {
   if (!NativeTestRenderer) {
     throw new Error(
-      "Native TestGpuixRenderer not available. Build with test-support to run tests."
+      "Native TestSoloRenderer not available. Build with test-support to run tests."
     )
   }
   const native = new NativeTestRenderer()
@@ -89,7 +89,7 @@ export function createSolidNativeTestRoot(): SolidNativeTestRoot {
     for (;;) {
       const events = native.drainEvents()
       if (events.length === 0) break
-      for (const event of events) handleGpuixEvent(event)
+      for (const event of events) handleSoloEvent(event)
       // Force the mutations queued by Solid's handlers into the native tree.
       flushMutations()
     }

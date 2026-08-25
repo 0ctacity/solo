@@ -576,4 +576,4 @@ if (!nativeBinding) {
 }
 
 module.exports = nativeBinding
-module.exports.GpuixRenderer = nativeBinding.GpuixRenderer
+module.exports.SoloRenderer = nativeBinding.SoloRenderer

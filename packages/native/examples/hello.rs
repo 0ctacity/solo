@@ -1,7 +1,7 @@
-//! Simple GPUIX example - renders a basic UI using GPUI directly
+//! Simple Solo example - renders a basic UI using GPUI directly
 //!
-//! This example demonstrates what the React renderer produces internally.
-//! Run with: cargo run -p gpuix --example hello
+//! This example demonstrates what the Solid renderer produces internally.
+//! Run with: cargo run -p solo-native --example hello
 
 use gpui::{
     div, prelude::*, px, rgb, size, App, Bounds, Context, Hsla, Window, WindowBounds, WindowOptions,
@@ -76,13 +76,13 @@ impl Render for HelloWorld {
                     .id("title")
                     .text_color(rgb(0xcdd6f4))
                     .text_3xl()
-                    .child("Hello from GPUIX!"),
+                    .child("Hello from Solo!"),
             )
             .child(
                 div()
                     .id("subtitle")
                     .text_color(rgb(0xa6adc8))
-                    .child("React → GPUI via napi-rs"),
+                    .child("Solid → GPUI via napi-rs"),
             )
             .child(
                 div()

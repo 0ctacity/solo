@@ -261,8 +261,8 @@ describeNative("events", () => {
 
       testRoot.render(() => <DialogScreenshotProbe />)
 
-      const path0 = "/tmp/gpuix-dialog-0.png"
-      const path1 = "/tmp/gpuix-dialog-1.png"
+      const path0 = "/tmp/solo-dialog-0.png"
+      const path1 = "/tmp/solo-dialog-1.png"
 
       if (fs.existsSync(path0)) fs.unlinkSync(path0)
       if (fs.existsSync(path1)) fs.unlinkSync(path1)
@@ -912,8 +912,8 @@ describeNative("events", () => {
 
       testRoot.render(() => <ScreenshotScroller />)
 
-      const path0 = "/tmp/gpuix-scroll-before.png"
-      const path1 = "/tmp/gpuix-scroll-after.png"
+      const path0 = "/tmp/solo-scroll-before.png"
+      const path1 = "/tmp/solo-scroll-after.png"
 
       if (fs.existsSync(path0)) fs.unlinkSync(path0)
       if (fs.existsSync(path1)) fs.unlinkSync(path1)
@@ -962,7 +962,7 @@ describeNative("events", () => {
 
     it("exposes the scrolled element for programmatic scroll via ref", () => {
       // Solid's ref compiles to universal.ref: the callback receives the
-      // GPUIX node, whose numeric id drives the scroll API.
+      // Solo node, whose numeric id drives the scroll API.
       let capturedId: number | null = null
 
       function RefScroller() {

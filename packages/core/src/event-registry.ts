@@ -5,7 +5,7 @@ import type { EventPayload } from "@solo/native"
 // ID, and whichever framework owns an element registers its handler here.
 const eventHandlers = new Map<number, Map<string, (event: EventPayload) => void>>()
 
-export function handleGpuixEvent(payload: EventPayload): void {
+export function handleSoloEvent(payload: EventPayload): void {
   const elementHandlers = eventHandlers.get(payload.elementId)
   if (elementHandlers) {
     const handler = elementHandlers.get(payload.eventType)
@@ -14,6 +14,9 @@ export function handleGpuixEvent(payload: EventPayload): void {
     }
   }
 }
+
+// Deprecated alias — remove in next major
+export const handleGpuixEvent = handleSoloEvent
 
 export function registerEventHandler(
   elementId: number,

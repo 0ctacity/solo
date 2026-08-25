@@ -1,11 +1,11 @@
 /// Test helpers for the Solid package.
 ///
-/// The GPU-backed TestGpuixRenderer is macOS-only, so tests run against
+/// The GPU-backed TestSoloRenderer is macOS-only, so tests run against
 /// MockNativeRenderer from @solo/core. It records every mutation op, which
 /// lets us assert the exact protocol traffic (e.g. that a signal-driven text
 /// change produces one setText op and no tree rebuild).
 
-import { handleGpuixEvent, MockNativeRenderer } from "@solo/core"
+import { handleSoloEvent, MockNativeRenderer } from "@solo/core"
 import type { EventPayload } from "@solo/native"
 import type { MockElement, MockNativeRenderer as MockNativeRendererType } from "@solo/core"
 import { render } from "./index.js"
@@ -20,7 +20,7 @@ export function mountTest(code: () => unknown): SolidTestRoot {
   const renderer = new MockNativeRenderer()
   const root: { unmount(): void } | null = render(
     code as () => never,
-    // The mock is not a GpuixRenderer, so no window and no frame loop.
+    // The mock is not a SoloRenderer, so no window and no frame loop.
     { renderer: renderer as never }
   )
   return {
@@ -54,7 +54,7 @@ export function fireEvent(
 ): void {
   const el = findByTestId(renderer, testId)
   if (!el) throw new Error(`No element with testId "${testId}"`)
-  handleGpuixEvent({
+  handleSoloEvent({
     elementId: el.id,
     eventType,
   } as EventPayload)

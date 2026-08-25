@@ -8,7 +8,7 @@
 
 import type { StyleDesc } from "@solo/core"
 
-export interface GpuixIntrinsicProps {
+export interface SoloIntrinsicProps {
   style?: StyleDesc
   children?: unknown
   onClick?: (event: unknown) => void
@@ -28,18 +28,18 @@ export namespace JSX {
   export type Element = unknown
 
   export interface IntrinsicElements {
-    div: GpuixIntrinsicProps
-    text: GpuixIntrinsicProps
-    img: GpuixIntrinsicProps
-    svg: GpuixIntrinsicProps
-    canvas: GpuixIntrinsicProps
-    input: GpuixIntrinsicProps
-    textarea: GpuixIntrinsicProps
-    anchored: GpuixIntrinsicProps
-    code: GpuixIntrinsicProps
-    diff: GpuixIntrinsicProps
-    markdown: GpuixIntrinsicProps
-    "virtual-list": GpuixIntrinsicProps
+    div: SoloIntrinsicProps
+    text: SoloIntrinsicProps
+    img: SoloIntrinsicProps
+    svg: SoloIntrinsicProps
+    canvas: SoloIntrinsicProps
+    input: SoloIntrinsicProps
+    textarea: SoloIntrinsicProps
+    anchored: SoloIntrinsicProps
+    code: SoloIntrinsicProps
+    diff: SoloIntrinsicProps
+    markdown: SoloIntrinsicProps
+    "virtual-list": SoloIntrinsicProps
   }
 }
 
