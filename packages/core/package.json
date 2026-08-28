@@ -28,7 +28,7 @@
     "access": "public"
   },
   "scripts": {
-    "prepublishOnly": "node -e \"if (!process.env.CI) { console.error('Never publish @solo/core locally. CI is the only release path. See AGENTS.md.'); process.exit(1) }\"",
+    "prepublishOnly": "node -e \"if (!process.env.CI) { console.error('Never publish @solo/core locally. There is no automated release path; see AGENTS.md.'); process.exit(1) }\"",
     "build": "rm -rf dist *.tsbuildinfo && tsc",
     "dev": "tsc --watch",
     "test": "vitest run",

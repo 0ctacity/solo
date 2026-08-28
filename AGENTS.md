@@ -134,12 +134,16 @@ builds generate different declarations (TestGpuixRenderer is
 macOS-gated); restore them with `git checkout` if a local Linux build
 rewrites them.
 
-## Changesets / publishing
+## Releasing
 
-User-facing fixes/features get a `.changeset/*.md` (never edit
-CHANGELOG.md or bump package.json versions manually). CI is the only
-release path; publish order: `@solo/native` then `@solo/solid` then
-`@solo/core`.
+There is no automated release path: CI builds and tests only, and the
+packages are not published anywhere. Every `packages/*/package.json`
+carries a `prepublishOnly` guard that aborts a local `npm publish`, so
+releasing takes a deliberate decision rather than an accidental version
+bump. When publishing returns, stand up a versioning workflow
+(changesets or equivalent) in the same change — `CHANGELOG.md` is
+frozen at 0.4.0 and still documents the removed `@solo/react`
+package.
 
 ## Examples
 
