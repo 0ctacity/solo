@@ -5,7 +5,8 @@
   "scripts": {
     "build": "vite build",
     "start": "vite build && node dist/index.js",
-    "diagnose": "bun diagnose-scroll.mts"
+    "diagnose": "bun diagnose-scroll.mts",
+    "test": "vitest run"
   },
   "dependencies": {
     "@solo/core": "workspace:^",
