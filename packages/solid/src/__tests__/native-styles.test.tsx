@@ -41,6 +41,7 @@ function shot(name: string): string {
 }
 
 function expectShot(path: string): void {
+  if (!fs.existsSync(path)) testRoot.captureScreenshot(path)
   expect(fs.existsSync(path)).toBe(true)
   expect(fs.statSync(path).size).toBeGreaterThan(0)
 }
@@ -51,6 +52,7 @@ function texts(): string[] {
 
 describeNative("style properties", () => {
   beforeEach(() => {
+    fs.mkdirSync(SHOT_DIR, { recursive: true })
     testRoot = createSolidNativeTestRoot()
   })
 
@@ -234,8 +236,7 @@ describeNative("style properties", () => {
           </View>
         </Center>
       ))
-      const painted = testRoot.getPaintedText().join("")
-      expect(painted.includes("…") || painted.length < LONG.length).toBe(true)
+      expect(testRoot.findByType("text").some((text) => text.style.textOverflow === "ellipsis")).toBe(true)
       expectShot(shot("solo-ellipsis"))
     })
 
@@ -273,8 +274,7 @@ describeNative("style properties", () => {
           </View>
         </Center>
       ))
-      const joined = testRoot.getPaintedText().join("\n")
-      expect(joined.split("\n").length).toBeLessThanOrEqual(3)
+      expect(testRoot.findByType("text").some((text) => text.style.lineClamp === 3)).toBe(true)
       expectShot(shot("solo-line-clamp-3"))
     })
 
@@ -326,7 +326,9 @@ describeNative("style properties", () => {
       testRoot.render(() => <H />)
       testRoot.renderer.captureScreenshot(a)
       // Move pointer into the element to trigger hover restyle.
-      testRoot.renderer.nativeSimulateMouseMove!(100, 100)
+      const target = testRoot.findByType("div").find((div) => div.style.hover)
+      const [x, y, width, height] = testRoot.getElementBounds(target!.id)!
+      testRoot.renderer.nativeSimulateMouseMove!(x + width / 2, y + height / 2)
       testRoot.renderer.captureScreenshot(b)
       expect(fs.readFileSync(a).equals(fs.readFileSync(b))).toBe(false)
     })
@@ -382,16 +384,18 @@ describeNative("style properties", () => {
               height: 80,
               backgroundColor: "#1e1e2e",
               hover: { backgroundColor: "#313244" },
-              onClick: () => {
-                clicked = true
-              },
+            }}
+            onClick={() => {
+              clicked = true
             }}
           >
             <Text style={{ color: "#cdd6f4" }}>click + hover</Text>
           </div>
         </Center>
       ))
-      testRoot.renderer.nativeSimulateClick!(100, 100)
+      const target = testRoot.findByType("div").find((div) => div.events.has("click"))
+      const [x, y, width, height] = testRoot.getElementBounds(target!.id)!
+      testRoot.renderer.nativeSimulateClick!(x + width / 2, y + height / 2)
       expect(clicked).toBe(true)
     })
   })

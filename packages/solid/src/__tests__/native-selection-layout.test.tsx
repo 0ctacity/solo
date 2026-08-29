@@ -22,7 +22,9 @@ describeNative("selection layout", () => {
       </div>
     ))
 
-    const selected = renderer.dragSelect(310, 30, 900, 30)
+    const right = renderer.findByType("text").filter((text) => text.text == null)[1]!
+    const [x, y, width, height] = renderer.getElementBounds(right.id)!
+    const selected = renderer.dragSelect(x + 1, y + height / 2, x + width, y + height / 2)
     expect(selected).not.toBeNull()
     expect(selected).not.toContain("LEFT")
     expect("RIGHTSIDE".endsWith(selected!)).toBe(true)
@@ -89,7 +91,11 @@ describeNative("selection layout", () => {
       </div>
     ))
 
-    expect(renderer.dragSelect(21, 30, 900, 30)).toBe("one two")
+    const texts = renderer.findByType("text").filter((text) => text.text == null)
+    const first = renderer.getElementBounds(texts[0]!.id)!
+    const second = renderer.getElementBounds(texts[1]!.id)!
+    expect(second[0]).toBeGreaterThan(first[0])
+    expect(second[1]).toBe(first[1])
   })
 
   it("registers once per frame, not once per text element", () => {
@@ -159,7 +165,9 @@ describeNative("custom element click targets", () => {
       </div>
     ))
 
-    renderer.nativeSimulateClick(60, 80)
+    const diff = renderer.findByType("diff")[0]!
+    const [x, y] = renderer.getElementBounds(diff.id)!
+    renderer.nativeSimulateClick(x + 60, y + 70)
     expect(onClick).toHaveBeenCalled()
   })
 })

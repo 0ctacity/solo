@@ -274,7 +274,7 @@ async fn run_ui_commands(
                     crate::automation::dispatch_scroll_wheel(window, cx, x as f64, y as f64, delta_x as f64, delta_y as f64);
                 })
             }
-            UiCommand::ScrollToItem { id, index } => {
+            UiCommand::ScrollToItem { id, index } => window.update(cx, move |view, window, cx| {
                 if !VIRTUAL_LIST_STATES.with(|cell| {
                     let states = cell.borrow();
                     let Some(state) = states.get(&id) else {
@@ -288,12 +288,15 @@ async fn run_ui_commands(
                 }) {
                     SCROLL_HANDLES.with(|cell| {
                         if let Some(handle) = cell.borrow().get(&id) {
-                            handle.scroll_to_item(index);
+                            if !scroll_retained_child_into_view(&view.tree, handle, id, index) {
+                                handle.scroll_to_item(index);
+                            }
                         }
                     });
                 }
-                refresh_ui_window(window, cx)
-            }
+                cx.notify();
+                window.refresh();
+            }),
             UiCommand::GetScrollOffset { id, response } => {
                 let offset = VIRTUAL_LIST_STATES
                     .with(|cell| {
@@ -1051,7 +1054,9 @@ impl SoloRenderer {
             SCROLL_HANDLES.with(|cell| {
                 let handles = cell.borrow();
                 if let Some(handle) = handles.get(&id) {
-                    handle.scroll_to_item(index);
+                    if !scroll_retained_child_into_view(&self.tree, handle, id, index) {
+                        handle.scroll_to_item(index);
+                    }
                 }
             });
         }
@@ -1345,6 +1350,51 @@ impl Drop for SoloRenderer {
 }
 
 // ── GPUI View ────────────────────────────────────────────────────────
+
+/// Scroll a retained child into view using its painted bounds.
+///
+/// GPUI's `ScrollHandle::scroll_to_item` only tracks layout children that its
+/// div records internally. Solo also injects absolute automation canvases, so
+/// retained child indexes are not guaranteed to match that internal list.
+pub(crate) fn scroll_retained_child_into_view(
+    tree: &Arc<Mutex<RetainedTree>>,
+    handle: &gpui::ScrollHandle,
+    parent_id: u64,
+    index: usize,
+) -> bool {
+    let child_id = {
+        let tree = tree.lock().unwrap();
+        tree.elements
+            .get(&parent_id)
+            .and_then(|parent| parent.children.get(index))
+            .copied()
+    };
+    let Some(child_id) = child_id else {
+        return false;
+    };
+    let Some(parent) = crate::automation::get_bounds(parent_id) else {
+        return false;
+    };
+    let Some(child) = crate::automation::get_bounds(child_id) else {
+        return false;
+    };
+
+    let offset = handle.offset();
+    let mut x = f64::from(f32::from(offset.x));
+    let mut y = f64::from(f32::from(offset.y));
+    if child.x < parent.x {
+        x += parent.x - child.x;
+    } else if child.x + child.width > parent.x + parent.width {
+        x += parent.x + parent.width - child.x - child.width;
+    }
+    if child.y < parent.y {
+        y += parent.y - child.y;
+    } else if child.y + child.height > parent.y + parent.height {
+        y += parent.y + parent.height - child.y - child.height;
+    }
+    handle.set_offset(gpui::point(gpui::px(x as f32), gpui::px(y as f32)));
+    true
+}
 
 pub(crate) struct SoloView {
     pub(crate) tree: Arc<Mutex<RetainedTree>>,

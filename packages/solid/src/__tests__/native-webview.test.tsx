@@ -28,7 +28,7 @@ describeNative("custom element: webview", () => {
 
   it("takes part in layout like any other element", () => {
     testRoot.render(() => (
-      <div style={{ width: 400, height: 300 }}>
+      <div style={{ display: "flex", width: 400, height: 300 }}>
         <webview testId="web" style={{ flexGrow: 1, minHeight: 0 }} />
       </div>
     ))

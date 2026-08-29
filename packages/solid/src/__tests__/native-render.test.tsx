@@ -10,6 +10,7 @@ import {
   hasNativeTestRenderer,
 } from "../testing.js"
 import type { SolidNativeTestRoot } from "../testing.js"
+import { Text } from "../components.js"
 
 const describeNative = hasNativeTestRenderer ? describe : describe.skip
 

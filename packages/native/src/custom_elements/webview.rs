@@ -207,8 +207,16 @@ impl CustomElement for WebviewElement {
         if let Some(style) = ctx.style {
             wrapper = crate::renderer::apply_styles(wrapper, style);
         }
+        if ctx
+            .style
+            .and_then(|style| style.position.as_deref())
+            .is_none()
+        {
+            wrapper = wrapper.relative();
+        }
 
         wrapper
+            .child(crate::automation::bounds_tracker(self.id))
             .child(WebviewPlaceholder {
                 element_id: self.id,
                 url: self.url.clone(),
