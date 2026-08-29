@@ -366,9 +366,11 @@ impl CustomElement for DiffElement {
 
         let mut container = gpui::div()
             .id(SharedString::from(format!("__solo_diff_{}", ctx.id)))
+            .relative()
             .flex()
             .flex_col()
             .bg(theme.bg)
+            .child(crate::automation::bounds_tracker(ctx.id))
             .child(body);
         if self.scroll {
             container = container.min_h_0();

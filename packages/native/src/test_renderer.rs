@@ -560,7 +560,14 @@ impl TestSoloRenderer {
                         return;
                     }
                     if let Some(handle) = view.scroll_handles.get(&id) {
-                        handle.scroll_to_item(index);
+                        if !crate::renderer::scroll_retained_child_into_view(
+                            &view.tree,
+                            handle,
+                            id,
+                            index,
+                        ) {
+                            handle.scroll_to_item(index);
+                        }
                     }
                 });
             })

@@ -185,6 +185,7 @@ impl CustomElement for CodeElement {
 
         let mut block = block
             .id(SharedString::from(format!("__solo_code_{}", ctx.id)))
+            .child(crate::automation::bounds_tracker(ctx.id))
             .child(body);
         if let Some(style) = ctx.style {
             block = crate::renderer::apply_styles(block, style);

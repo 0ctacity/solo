@@ -304,10 +304,12 @@ impl CustomElement for TextEditorElement {
         let element_id = gpui::SharedString::from(format!("__solo_editor_{}", ctx.id));
         let mut editor = div()
             .id(element_id)
+            .relative()
             .flex()
             .min_w_0()
             .w_full()
             .track_focus(&focus_handle)
+            .child(crate::automation::bounds_tracker(ctx.id))
             .child(state);
         if let Some(style) = ctx.style {
             editor = crate::renderer::apply_styles(editor, style);

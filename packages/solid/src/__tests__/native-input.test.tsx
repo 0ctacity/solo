@@ -19,7 +19,7 @@ describeNative("native text editors", () => {
   })
 
   function TextInput(props: { readOnly?: boolean }) {
-    const [text, setText] = createSignal("locked")
+    const [text, setText] = createSignal(props.readOnly ? "locked" : "")
     return (
       <View style={{ width: 400, height: 100 }}>
         <input
@@ -44,9 +44,9 @@ describeNative("native text editors", () => {
   })
 
   it("supports multiline textarea editing and submission", () => {
-    let submits = 0
     function Textarea() {
       const [text, setText] = createSignal("")
+      const [submits, setSubmits] = createSignal(0)
       return (
         <View style={{ width: 400, height: 160 }}>
           <textarea
@@ -57,11 +57,11 @@ describeNative("native text editors", () => {
             style={{ width: 300 }}
             onChange={(event: EventPayload) => setText(event.value ?? "")}
             onSubmit={() => {
-              submits += 1
+              setSubmits((count) => count + 1)
             }}
           />
           <Text>{`Value: ${JSON.stringify(text())}`}</Text>
-          <Text>{`Submits: ${submits}`}</Text>
+          <Text>{`Submits: ${submits()}`}</Text>
         </View>
       )
     }
@@ -199,7 +199,7 @@ describeNative("native text editors", () => {
     void input
     // The automation tree carries customProps per node.
     const found = (function find(node: any): Record<string, unknown> | null {
-      if (node.type === "input" && node.customProps?.theme) return node.customProps
+      if (node.type === "input" && node.customProps?.theme) return node.customProps.theme
       for (const child of node.children ?? []) {
         const hit = find(child)
         if (hit) return hit
@@ -250,7 +250,9 @@ describeNative("native text editors", () => {
     }
 
     testRoot.render(() => <ClickFocusInput />)
-    testRoot.renderer.nativeSimulateClick(250, 20)
+    const input = testRoot.findByType("input")[0]!
+    const [x, y, width, height] = testRoot.getElementBounds(input.id)!
+    testRoot.renderer.nativeSimulateClick(x + width / 2, y + height / 2)
     testRoot.renderer.simulateKeystrokes("a")
 
     expect(testRoot.getAllText()).toContain("Value: a")

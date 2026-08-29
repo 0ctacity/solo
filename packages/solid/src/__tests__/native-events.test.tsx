@@ -129,7 +129,7 @@ describeNative("events", () => {
             <div style={{ width: 100, height: 30 }} onClick={() => setOpen(true)}>
               <Text>trigger</Text>
             </div>
-            {open && (
+            {open() && (
               <div style={{ width: 100, height: 100 }} onMouseDownOutside={() => setOpen(false)}>
                 <Text>dropdown content</Text>
               </div>
@@ -168,7 +168,7 @@ describeNative("events", () => {
             >
               <Text>Open dialog</Text>
             </div>
-            {open && (
+            {open() && (
               <div
                 style={{
                   position: "absolute",
@@ -234,7 +234,7 @@ describeNative("events", () => {
               <div style={{ width: 148, height: 36, borderRadius: 10, backgroundColor: "#3a5ecf" }}>
                 <Text>Open dialog</Text>
               </div>
-              {open && (
+              {open() && (
                 <div
                   style={{
                     position: "absolute",
@@ -303,7 +303,7 @@ describeNative("events", () => {
               onClick={() => setOpen(true)}
             >
               <Text>Open anchored</Text>
-              {open && (
+              {open() && (
                 <anchored position={{ x: 700, y: 360 }} anchor="topLeft" deferred priority={1}>
                   <div
                     style={{
@@ -668,7 +668,7 @@ describeNative("events", () => {
       // Structure assertion (ids are runtime-assigned; shape and content are
       // what matters across runtimes).
       const raw = JSON.parse(
-        (testRoot.renderer as unknown as { getAutomationTree(): string }).getAutomationTree()
+        (testRoot.renderer as unknown as { getTreeJson(): string }).getTreeJson()
       ) as any
       const strip = (n: any): any => ({
         type: n.type,
@@ -681,9 +681,9 @@ describeNative("events", () => {
       // Root wrapper > retained root > two children.
       const retained = root.children![0].children!
       expect(retained.map((c: any) => c.type)).toEqual(["text", "div"])
-      expect(retained[0]).toMatchObject({ type: "text", text: "Hello" })
+      expect(retained[0].children![0]).toMatchObject({ type: "text", text: "Hello" })
       expect(retained[1].events).toEqual(["click"])
-      expect(retained[1].children![0]).toMatchObject({ type: "text", text: "Click me" })
+      expect(retained[1].children![0].children![0]).toMatchObject({ type: "text", text: "Click me" })
     })
   })
 
@@ -847,12 +847,11 @@ describeNative("events", () => {
     it("should support programmatic scrollToItem", () => {
       function ItemList() {
         return (
-          <div style={{ width: 200, height: 100, overflow: "scroll" }}>
-            {["A", "B", "C", "D"].map((l) => (
-              <div style={{ height: 80 }}>
-                <Text>{`Item ${l}`}</Text>
-              </div>
-            ))}
+          <div style={{ display: "flex", flexDirection: "column", width: 200, height: 100, overflow: "scroll" }}>
+            <div style={{ height: 80, flexShrink: 0 }}><Text>Item A</Text></div>
+            <div style={{ height: 80, flexShrink: 0 }}><Text>Item B</Text></div>
+            <div style={{ height: 80, flexShrink: 0 }}><Text>Item C</Text></div>
+            <div style={{ height: 80, flexShrink: 0 }}><Text>Item D</Text></div>
           </div>
         )
       }
