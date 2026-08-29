@@ -7,24 +7,14 @@
 //! GPUI owns layout; WebKit owns rendering and input. Nothing here is driven
 //! from JavaScript.
 //!
-//! # Verification status
-//!
-//! **This module has never been compiled.** It is macOS-only, and the crate
-//! cannot be built for a macOS target on a Linux host: `gpui_apple` needs
-//! Apple's Metal shader compiler to produce `shaders.metallib`, and `media`
-//! needs a real macOS SDK for bindgen. Every symbol below was checked against
-//! the `objc2` 0.6.4 / `objc2-web-kit` 0.3.2 / `objc2-app-kit` 0.3.2 sources
-//! in the local cargo registry, but the composition has not been through
-//! rustc. Expect to fix compile errors here first when building on macOS.
-
 use std::ffi::c_void;
 
 use objc2::rc::Retained;
 use objc2::runtime::ProtocolObject;
-use objc2::{define_class, msg_send, ClassType, DefinedClass, MainThreadMarker, MainThreadOnly};
+use objc2::{define_class, msg_send, DefinedClass, MainThreadMarker, MainThreadOnly};
 use objc2_app_kit::NSView;
 use objc2_core_foundation::{CGPoint, CGRect, CGSize};
-use objc2_foundation::{NSError, NSObject, NSObjectProtocol, NSString, NSURL, NSURLRequest};
+use objc2_foundation::{NSError, NSObject, NSObjectProtocol, NSString, NSURLRequest, NSURL};
 use objc2_web_kit::{WKNavigation, WKNavigationDelegate, WKWebView, WKWebViewConfiguration};
 
 use super::{NativeViewFrame, NativeViewInstance};
@@ -78,31 +68,38 @@ define_class!(
         /// A navigation started — the earliest meaningful signal, and the one
         /// that covers link clicks and redirects rather than just first loads.
         #[unsafe(method(webView:didStartProvisionalNavigation:))]
-        #[unsafe(method_family = none)]
         unsafe fn webView_didStartProvisionalNavigation(
             &self,
             web_view: &WKWebView,
             _navigation: Option<&WKNavigation>,
         ) {
             let ivars = self.ivars();
-            emit(&ivars.callback, ivars.element_id, EVENT_NAVIGATION, current_url(web_view));
+            emit(
+                &ivars.callback,
+                ivars.element_id,
+                EVENT_NAVIGATION,
+                current_url(web_view),
+            );
         }
 
         /// Content finished arriving for the main frame.
         #[unsafe(method(webView:didFinishNavigation:))]
-        #[unsafe(method_family = none)]
         unsafe fn webView_didFinishNavigation(
             &self,
             web_view: &WKWebView,
             _navigation: Option<&WKNavigation>,
         ) {
             let ivars = self.ivars();
-            emit(&ivars.callback, ivars.element_id, EVENT_LOAD, current_url(web_view));
+            emit(
+                &ivars.callback,
+                ivars.element_id,
+                EVENT_LOAD,
+                current_url(web_view),
+            );
         }
 
         /// A committed navigation failed part-way through.
         #[unsafe(method(webView:didFailNavigation:withError:))]
-        #[unsafe(method_family = none)]
         unsafe fn webView_didFailNavigation_withError(
             &self,
             web_view: &WKWebView,
@@ -121,7 +118,6 @@ define_class!(
         /// The navigation failed before committing: bad host, no network, or
         /// an unparseable URL. Often the only signal we get for a typo'd URL.
         #[unsafe(method(webView:didFailProvisionalNavigation:withError:))]
-        #[unsafe(method_family = none)]
         unsafe fn webView_didFailProvisionalNavigation_withError(
             &self,
             web_view: &WKWebView,
@@ -225,11 +221,16 @@ impl MacWebView {
     ///
     /// A reactive `url` change must never rebuild the native view.
     fn load_url(&self, url: &str) {
-        let Some(view) = self.view.as_ref() else {
+        let Some(ns_url) = NSURL::URLWithString(&NSString::from_str(url)) else {
+            emit(
+                &self.callback,
+                self.element_id,
+                EVENT_LOAD_ERROR,
+                Some(format!("{url} — invalid URL")),
+            );
             return;
         };
-        let Some(ns_url) = NSURL::URLWithString(&NSString::from_str(url)) else {
-            log::warn!("webview: ignoring malformed url {:?}", url);
+        let Some(view) = self.view.as_ref() else {
             return;
         };
         let request = NSURLRequest::requestWithURL(&ns_url);
@@ -270,7 +271,7 @@ impl NativeViewInstance for MacWebView {
             )
         };
 
-        let delegate = SoloNavigationDelegate::new(mtm, self.element_id, self.callback.take());
+        let delegate = SoloNavigationDelegate::new(mtm, self.element_id, self.callback.clone());
         unsafe {
             view.setNavigationDelegate(Some(ProtocolObject::from_ref(&*delegate)));
         }
@@ -362,5 +363,34 @@ fn native_rect(frame: NativeViewFrame) -> CGRect {
             width: frame.width as f64,
             height: frame.height as f64,
         },
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::sync::{Arc, Mutex};
+
+    use super::*;
+    use crate::element_tree::EventPayload;
+
+    #[test]
+    fn malformed_url_emits_load_error_before_mount() {
+        let events = Arc::new(Mutex::new(Vec::<EventPayload>::new()));
+        let captured = events.clone();
+        let callback: EventCallback = Arc::new(move |payload| {
+            captured.lock().unwrap().push(payload);
+        });
+        let mut webview = MacWebView::new(42, Some(callback));
+
+        webview.set_content(PROP_URL, Some("https://exa mple.com"));
+
+        let events = events.lock().unwrap();
+        assert_eq!(events.len(), 1);
+        assert_eq!(events[0].element_id, 42.0);
+        assert_eq!(events[0].event_type, EVENT_LOAD_ERROR);
+        assert!(events[0]
+            .value
+            .as_deref()
+            .is_some_and(|value| value.contains("https://exa mple.com")));
     }
 }

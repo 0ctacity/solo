@@ -24,10 +24,6 @@ pub mod markdown;
 /// no WebView2 or WebKitGTK implementation. Off macOS the type is not
 /// registered, so `build_element` falls through to its "unknown element type"
 /// branch rather than pretending to render web content.
-/// `<webview>` is macOS-only: it is backed by a real WKWebView and there is
-/// no WebView2 or WebKitGTK implementation. Off macOS the type is not
-/// registered, so `build_element` falls through to its "unknown element type"
-/// branch rather than pretending to render web content.
 #[cfg(target_os = "macos")]
 pub mod webview;
 
