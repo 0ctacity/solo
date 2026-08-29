@@ -8,6 +8,10 @@ import type { Plugin } from "vite"
 // need the reactive client builds even though Vite produces an SSR bundle.
 const req = createRequire(import.meta.url)
 const solidJsDist = dirname(req.resolve("solid-js"))
+// Resolved from @solo/solid, which declares the preset as a dependency. Babel
+// resolves a bare preset name against the file being compiled, so passing the
+// string would make every consumer depend on hoisting.
+const babelPresetSolid = req.resolve("babel-preset-solid")
 const signalsDist = dirname(
   createRequire(req.resolve("solid-js")).resolve("@solidjs/signals"),
 )
@@ -47,7 +51,7 @@ export function solidUniversal(): Plugin {
         parserOpts: { plugins: parserPlugins },
         presets: [
           [
-            "babel-preset-solid",
+            babelPresetSolid,
             { generate: "universal", moduleName: "@solo/solid/runtime" },
           ],
         ],
