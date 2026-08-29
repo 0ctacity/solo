@@ -458,6 +458,14 @@ export interface LiveAutomationRenderer {
   simulateMouseMove(x: number, y: number, pressedButton?: number): void
   /** Inject a wheel event; supported where the native runtime implements it. */
   simulateScrollWheel?(x: number, y: number, deltaX: number, deltaY: number): void
+  /**
+   * Inject key events; supported where the native runtime implements them.
+   * Optional so a renderer built without them degrades to `Unsupported`
+   * instead of failing to satisfy the interface.
+   */
+  simulateKeystrokes?(keystrokes: string): void
+  simulateKeyDown?(keystroke: string, isHeld?: boolean): void
+  simulateKeyUp?(keystroke: string): void
   tick?(): void
   focusElement(elementId: number): void
   blur(): void
@@ -482,6 +490,30 @@ export function liveRendererAsTest(
   const afterInput = (): void => {
     renderer.tick?.()
   }
+
+  /** A renderer built without keyboard support at all. */
+  const noKeyboard = (): AutomationError =>
+    new AutomationError(
+      "Unsupported",
+      "keyboard is not implemented by this platform's renderer"
+    )
+
+  /**
+   * A keyboard op that exists but failed in the native layer.
+   *
+   * On macOS that is real news — the method is compiled in, so a throw is a
+   * genuine failure and is passed through untouched. Off macOS the renderer is
+   * built without these methods and the plain Error would otherwise reach the
+   * controller as `Protocol` noise instead of a capability gap.
+   */
+  const keyboardFailure = (op: string, error: unknown): AutomationError => {
+    if (process.platform === "darwin") throw error
+    return new AutomationError(
+      "Unsupported",
+      `${op}: ${error instanceof Error ? error.message : String(error)}`
+    )
+  }
+
   return {
     nativeSimulateClick(x, y) {
       renderer.simulateClick(x, y)
@@ -519,17 +551,48 @@ export function liveRendererAsTest(
         )
       }
     },
-    simulateKeystrokes() {
-      throw new AutomationError("Unsupported", "keystrokes are not live yet")
+    simulateKeystrokes(keystrokes) {
+      if (!renderer.simulateKeystrokes) throw noKeyboard()
+      try {
+        renderer.simulateKeystrokes(keystrokes)
+        afterInput()
+      } catch (error) {
+        throw keyboardFailure("keystrokes", error)
+      }
     },
-    nativeSimulateKeystrokes() {
-      throw new AutomationError("Unsupported", "keystrokes are not live yet")
+    nativeSimulateKeystrokes(elementId, keystrokes) {
+      if (!renderer.simulateKeystrokes) throw noKeyboard()
+      try {
+        // Focus before typing. Keystrokes are dispatched to whatever has
+        // focus, and an element only exposes its text input handler while
+        // focused, so without this the keys go nowhere. Mirrors the native
+        // test harness in packages/solid/src/testing.ts.
+        renderer.focusElement(elementId)
+        renderer.simulateKeystrokes(keystrokes)
+        afterInput()
+      } catch (error) {
+        throw keyboardFailure("keystrokes", error)
+      }
     },
-    nativeSimulateKeyDown() {
-      throw new AutomationError("Unsupported", "keyDown is not live yet")
+    nativeSimulateKeyDown(elementId, keystroke, isHeld) {
+      if (!renderer.simulateKeyDown) throw noKeyboard()
+      try {
+        renderer.focusElement(elementId)
+        renderer.simulateKeyDown(keystroke, isHeld)
+        afterInput()
+      } catch (error) {
+        throw keyboardFailure("keyDown", error)
+      }
     },
-    nativeSimulateKeyUp() {
-      throw new AutomationError("Unsupported", "keyUp is not live yet")
+    nativeSimulateKeyUp(elementId, keystroke) {
+      if (!renderer.simulateKeyUp) throw noKeyboard()
+      try {
+        renderer.focusElement(elementId)
+        renderer.simulateKeyUp(keystroke)
+        afterInput()
+      } catch (error) {
+        throw keyboardFailure("keyUp", error)
+      }
     },
     scrollTo: (id, x, y) => renderer.scrollTo(id, x, y),
     getScrollOffset: (id) => {

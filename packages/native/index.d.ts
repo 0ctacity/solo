@@ -92,6 +92,25 @@ export declare class SoloRenderer {
   simulateMouseUp(x: number, y: number, button?: number | undefined | null): void
   simulateMouseMove(x: number, y: number, pressedButton?: number | undefined | null): void
   simulateScrollWheel(x: number, y: number, deltaX: number, deltaY: number): void
+  /**
+   * Type a space-separated sequence of keystrokes, e.g. `"a enter cmd-s"`.
+   *
+   * Text is inserted through GPUI's input pipeline, so it lands in whatever
+   * element has focus. That is the point: this is a real key event, not a
+   * JS-bound value write, so `onChange` and `onKeyDown` fire as they would
+   * for a human. Focus the target first — see `focus_element`.
+   */
+  simulateKeystrokes(keystrokes: string): void
+  /**
+   * A key down with no matching key up.
+   *
+   * Fires `onKeyDown` but does **not** insert text — use
+   * [`Self::simulate_keystrokes`] to type. Matches
+   * `TestSoloRenderer::simulate_key_down`.
+   */
+  simulateKeyDown(keystroke: string, isHeld?: boolean | undefined | null): void
+  /** A key up, paired with [`Self::simulate_key_down`]. */
+  simulateKeyUp(keystroke: string): void
   clockPause(): number
   clockSet(nowMs: number): number
   clockFastForward(deltaMs: number): number

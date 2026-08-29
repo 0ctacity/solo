@@ -160,6 +160,29 @@ fn update_window<R>(
     })
 }
 
+/// Update only the window, without leasing its root `SoloView` entity.
+/// Input dispatch can synchronously draw and render the root, so calling it
+/// from `WindowHandle<SoloView>::update` would lease `SoloView` twice.
+#[cfg(target_os = "macos")]
+fn update_window_for_input<R>(
+    update: impl FnOnce(&mut gpui::Window, &mut gpui::App) -> R,
+) -> Result<R> {
+    let window = GPUI_WINDOW
+        .with(|window| *window.borrow())
+        .ok_or_else(|| Error::from_reason("GPUI window is not initialized"))?;
+
+    GPUI_APP.with(|app| {
+        let app = app.borrow();
+        let app = app
+            .as_ref()
+            .ok_or_else(|| Error::from_reason("GPUI application is not initialized"))?;
+        app.update(|cx| {
+            cx.update_window(window.into(), move |_view, window, cx| update(window, cx))
+                .map_err(|error| Error::from_reason(error.to_string()))
+        })
+    })
+}
+
 #[cfg(target_os = "macos")]
 fn invalidate_window() -> Result<()> {
     update_window(|_view, window, cx| {
@@ -195,6 +218,20 @@ enum UiCommand {
         y: f32,
         delta_x: f32,
         delta_y: f32,
+    },
+    /// Inject keystrokes at the GPUI event boundary (automation). Carries
+    /// parsed keystrokes, not a string: parsing happens on the calling thread
+    /// so a malformed key is reported to JS instead of being swallowed by the
+    /// fire-and-forget channel.
+    SimulateKeystrokes {
+        keys: Vec<gpui::Keystroke>,
+    },
+    SimulateKeyDown {
+        key: gpui::Keystroke,
+        is_held: bool,
+    },
+    SimulateKeyUp {
+        key: gpui::Keystroke,
     },
     GetScrollOffset {
         id: u64,
@@ -272,6 +309,21 @@ async fn run_ui_commands(
             UiCommand::SimulateScrollWheel { x, y, delta_x, delta_y } => {
                 window.update(cx, move |_view, window, cx| {
                     crate::automation::dispatch_scroll_wheel(window, cx, x as f64, y as f64, delta_x as f64, delta_y as f64);
+                })
+            }
+            UiCommand::SimulateKeystrokes { keys } => {
+                cx.update_window(window.into(), move |_view, window, cx| {
+                    crate::automation::dispatch_keystrokes(window, cx, &keys);
+                })
+            }
+            UiCommand::SimulateKeyDown { key, is_held } => {
+                cx.update_window(window.into(), move |_view, window, cx| {
+                    crate::automation::dispatch_key_down(window, cx, &key, is_held);
+                })
+            }
+            UiCommand::SimulateKeyUp { key } => {
+                cx.update_window(window.into(), move |_view, window, cx| {
+                    crate::automation::dispatch_key_up(window, cx, &key);
                 })
             }
             UiCommand::ScrollToItem { id, index } => window.update(cx, move |view, window, cx| {
@@ -1243,6 +1295,94 @@ impl SoloRenderer {
             target_os = "freebsd"
         )))]
         Err(Error::from_reason("Unsupported operating system"))
+    }
+
+    /// Type a space-separated sequence of keystrokes, e.g. `"a enter cmd-s"`.
+    ///
+    /// Text is inserted through GPUI's input pipeline, so it lands in whatever
+    /// element has focus. That is the point: this is a real key event, not a
+    /// JS-bound value write, so `onChange` and `onKeyDown` fire as they would
+    /// for a human. Focus the target first — see `focus_element`.
+    #[napi]
+    pub fn simulate_keystrokes(&self, keystrokes: String) -> Result<()> {
+        // Parsed here rather than inside the platform branches so a malformed
+        // key is reported to the caller instead of being swallowed by the
+        // fire-and-forget UiCommand channel.
+        let keys = crate::automation::parse_keystrokes(&keystrokes).map_err(Error::from_reason)?;
+
+        #[cfg(target_os = "macos")]
+        return update_window_for_input(move |window, cx| {
+            crate::automation::dispatch_keystrokes(window, cx, &keys);
+        });
+
+        #[cfg(any(target_os = "windows", target_os = "linux", target_os = "freebsd"))]
+        return self.send_ui_command(UiCommand::SimulateKeystrokes { keys });
+
+        #[cfg(not(any(
+            target_os = "macos",
+            target_os = "windows",
+            target_os = "linux",
+            target_os = "freebsd"
+        )))]
+        {
+            let _ = keys;
+            Err(Error::from_reason("Unsupported operating system"))
+        }
+    }
+
+    /// A key down with no matching key up.
+    ///
+    /// Fires `onKeyDown` but does **not** insert text — use
+    /// [`Self::simulate_keystrokes`] to type. Matches
+    /// `TestSoloRenderer::simulate_key_down`.
+    #[napi]
+    pub fn simulate_key_down(&self, keystroke: String, is_held: Option<bool>) -> Result<()> {
+        let key = crate::automation::parse_keystroke(&keystroke).map_err(Error::from_reason)?;
+        let is_held = is_held.unwrap_or(false);
+
+        #[cfg(target_os = "macos")]
+        return update_window_for_input(move |window, cx| {
+            crate::automation::dispatch_key_down(window, cx, &key, is_held);
+        });
+
+        #[cfg(any(target_os = "windows", target_os = "linux", target_os = "freebsd"))]
+        return self.send_ui_command(UiCommand::SimulateKeyDown { key, is_held });
+
+        #[cfg(not(any(
+            target_os = "macos",
+            target_os = "windows",
+            target_os = "linux",
+            target_os = "freebsd"
+        )))]
+        {
+            let _ = (key, is_held);
+            Err(Error::from_reason("Unsupported operating system"))
+        }
+    }
+
+    /// A key up, paired with [`Self::simulate_key_down`].
+    #[napi]
+    pub fn simulate_key_up(&self, keystroke: String) -> Result<()> {
+        let key = crate::automation::parse_keystroke(&keystroke).map_err(Error::from_reason)?;
+
+        #[cfg(target_os = "macos")]
+        return update_window_for_input(move |window, cx| {
+            crate::automation::dispatch_key_up(window, cx, &key);
+        });
+
+        #[cfg(any(target_os = "windows", target_os = "linux", target_os = "freebsd"))]
+        return self.send_ui_command(UiCommand::SimulateKeyUp { key });
+
+        #[cfg(not(any(
+            target_os = "macos",
+            target_os = "windows",
+            target_os = "linux",
+            target_os = "freebsd"
+        )))]
+        {
+            let _ = key;
+            Err(Error::from_reason("Unsupported operating system"))
+        }
     }
 
     #[napi]
