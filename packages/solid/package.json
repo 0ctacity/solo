@@ -34,6 +34,11 @@
       "types": "./dist/vite.d.ts",
       "import": "./dist/vite.js",
       "default": "./dist/vite.js"
+    },
+    "./_native": {
+      "types": "./dist/_native.d.ts",
+      "import": "./dist/_native.js",
+      "default": "./dist/_native.js"
     }
   },
   "files": [

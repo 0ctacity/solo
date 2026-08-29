@@ -14,16 +14,6 @@
 //!           → WKWebView.setFrame:
 //! ```
 //!
-//! # Verification status
-//!
-//! The GPUI plumbing below — the `Element` impl, bounds capture, and registry
-//! calls — has been type-checked against the pinned GPUI revision. It was
-//! checked by temporarily substituting a no-op `MacWebView` so the module
-//! compiles off macOS; the substitution has since been removed.
-//!
-//! The WKWebView itself has **not** been compiled. See
-//! `crate::native_view::webview`.
-
 use gpui::prelude::*;
 use gpui::{
     App, Bounds, Element, ElementId, GlobalElementId, InspectorElementId, IntoElement, LayoutId,
