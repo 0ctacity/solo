@@ -1871,6 +1871,10 @@ impl gpui::Render for SoloView {
         if self.quit_hook.is_none() {
             self.quit_hook = Some(cx.on_app_quit(|view, _cx| {
                 view.custom_registry.destroy_all();
+                // Native child views (WKWebView) outlive the retained tree, so
+                // they need their own teardown or AppKit keeps the web process
+                // alive past the window.
+                crate::native_view::with_registry(|registry| registry.destroy_all());
                 async {}
             }));
         }
