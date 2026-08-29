@@ -13,8 +13,9 @@ use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use gpui::{
-    canvas, point, px, App, Bounds, InputEvent, IntoElement, Modifiers, MouseButton, MouseDownEvent,
-    MouseMoveEvent, MouseUpEvent, Pixels, ScrollDelta, ScrollWheelEvent, Styled, TouchPhase, Window,
+    canvas, point, px, App, Bounds, InputEvent, IntoElement, KeyDownEvent, KeyUpEvent, Keystroke,
+    Modifiers, MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent, Pixels, ScrollDelta,
+    ScrollWheelEvent, Styled, TouchPhase, Window,
 };
 
 #[derive(Clone, Copy, Debug)]
@@ -268,6 +269,79 @@ pub fn dispatch_mouse_move(
     );
 }
 
+// ── Keyboard ────────────────────────────────────────────────────────
+
+/// Parse one keystroke, e.g. `"a"`, `"enter"`, `"cmd-shift-p"`.
+///
+/// Returns a human-readable message on failure: `Keystroke::parse` owns the
+/// grammar and its error carries no detail beyond the offending string.
+pub fn parse_keystroke(keystroke: &str) -> Result<Keystroke, String> {
+    Keystroke::parse(keystroke)
+        .map_err(|error| format!("Invalid keystroke '{keystroke}': {error}"))
+}
+
+/// Parse a space-separated keystroke string, e.g. `"a enter cmd-shift-p"`.
+///
+/// Mirrors gpui's own `VisualTestAppContext::simulate_keystrokes` grammar.
+/// Empty tokens are dropped so a trailing or repeated space is not an error.
+pub fn parse_keystrokes(keystrokes: &str) -> Result<Vec<Keystroke>, String> {
+    keystrokes
+        .split(' ')
+        .filter(|token| !token.is_empty())
+        .map(parse_keystroke)
+        .collect()
+}
+
+/// Type a sequence of keystrokes, as though the user had typed them.
+///
+/// Routes through `Window::dispatch_keystroke` rather than a bare
+/// `KeyDownEvent`. That distinction is the whole point: `dispatch_keystroke`
+/// fills in `key_char` via `Keystroke::with_simulated_ime` and then hands it
+/// to the focused element's input handler, which is what actually inserts
+/// text. Dispatching `KeyDownEvent` directly fires the element's `onKeyDown`
+/// listener but never reaches the text buffer.
+///
+/// Modifier keys (`cmd-a`, `backspace`) have no `key_char`, so they fall
+/// through to gpui's key bindings and run as actions instead.
+pub fn dispatch_keystrokes(window: &mut Window, cx: &mut App, keystrokes: &[Keystroke]) {
+    for keystroke in keystrokes {
+        window.dispatch_keystroke(keystroke.clone(), cx);
+    }
+}
+
+/// A key down with no matching key up, for holding a key or testing the
+/// down/up pair separately.
+///
+/// Deliberately does **not** go through `dispatch_keystroke`, so it never
+/// inserts text — matching `TestSoloRenderer::simulate_key_down`. Use
+/// [`dispatch_keystrokes`] to type; use this to observe key events.
+pub fn dispatch_key_down(
+    window: &mut Window,
+    cx: &mut App,
+    keystroke: &Keystroke,
+    is_held: bool,
+) {
+    window.dispatch_event(
+        KeyDownEvent {
+            keystroke: keystroke.clone(),
+            is_held,
+            prefer_character_input: false,
+        }
+        .to_platform_input(),
+        cx,
+    );
+}
+
+pub fn dispatch_key_up(window: &mut Window, cx: &mut App, keystroke: &Keystroke) {
+    window.dispatch_event(
+        KeyUpEvent {
+            keystroke: keystroke.clone(),
+        }
+        .to_platform_input(),
+        cx,
+    );
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -284,6 +358,88 @@ mod tests {
         assert_eq!(
             clock.now().saturating_duration_since(later),
             Duration::from_millis(150)
+        );
+    }
+
+    /// `Locator.fill` encodes text as space-separated keystrokes, so the split
+    /// is load-bearing: the grammar here is the grammar of the automation API.
+    #[test]
+    fn parse_keystrokes_splits_on_spaces() {
+        let parsed = parse_keystrokes("a b enter").expect("valid keystrokes");
+        let keys: Vec<&str> = parsed.iter().map(|k| k.key.as_str()).collect();
+        assert_eq!(keys, vec!["a", "b", "enter"]);
+    }
+
+    /// A trailing or repeated space is not a keystroke. `Keystroke::parse("")`
+    /// is an error, so without this a harmless string would fail the whole
+    /// command.
+    #[test]
+    fn parse_keystrokes_ignores_empty_tokens() {
+        let parsed = parse_keystrokes("  a   enter  ").expect("valid keystrokes");
+        let keys: Vec<&str> = parsed.iter().map(|k| k.key.as_str()).collect();
+        assert_eq!(keys, vec!["a", "enter"]);
+
+        assert_eq!(parse_keystrokes("   ").expect("empty is empty"), vec![]);
+    }
+
+    /// `fill` sends `cmd-a` on macOS to select all, and `press` sends named
+    /// keys straight through. Both must survive parsing as modifiers.
+    #[test]
+    fn parse_keystrokes_accepts_modifiers() {
+        let parsed = parse_keystrokes("cmd-a").expect("cmd-a parses");
+        assert_eq!(parsed.len(), 1);
+        assert!(parsed[0].modifiers.platform, "cmd must set platform");
+        assert_eq!(parsed[0].key, "a");
+
+        // `super` and `win` are aliases for the platform modifier.
+        for alias in ["super-a", "win-a"] {
+            let parsed = parse_keystrokes(alias).unwrap_or_else(|e| panic!("{alias}: {e}"));
+            assert!(parsed[0].modifiers.platform, "{alias} must set platform");
+        }
+    }
+
+    /// Modifiers must not be silently dropped when several are combined.
+    #[test]
+    fn parse_keystrokes_accepts_modifier_chords() {
+        let parsed = parse_keystrokes("cmd-shift-p").expect("chord parses");
+        let modifiers = &parsed[0].modifiers;
+        assert!(modifiers.platform && modifiers.shift);
+        assert!(!modifiers.control && !modifiers.alt);
+        assert_eq!(parsed[0].key, "p");
+    }
+
+    /// `fill` maps a space to the literal token "space" and a newline to
+    /// "enter", so those names must round-trip.
+    #[test]
+    fn parse_keystrokes_accepts_named_keys() {
+        for name in ["space", "enter", "tab", "backspace", "escape", "up"] {
+            let parsed = parse_keystrokes(name).unwrap_or_else(|e| panic!("{name}: {e}"));
+            assert_eq!(parsed.len(), 1);
+            assert_eq!(parsed[0].key, name);
+        }
+    }
+
+    /// The issue's regression case is Unicode text. Multi-byte characters must
+    /// survive `Keystroke::parse`, which branches on byte length and could
+    /// otherwise lowercase or reject them.
+    #[test]
+    fn parse_keystrokes_preserves_unicode() {
+        let parsed = parse_keystrokes("İ s t a n b u l space 世 界").expect("unicode parses");
+        let keys: Vec<&str> = parsed.iter().map(|k| k.key.as_str()).collect();
+        assert_eq!(
+            keys,
+            vec!["İ", "s", "t", "a", "n", "b", "u", "l", "space", "世", "界"]
+        );
+    }
+
+    /// A bad token must be reported with the token in the message, because the
+    /// caller is an automation controller that only sees the string.
+    #[test]
+    fn parse_keystrokes_reports_the_offending_token() {
+        let error = parse_keystrokes("a enter-totally-bogus").expect_err("must fail");
+        assert!(
+            error.contains("enter-totally-bogus"),
+            "error should name the token, got {error:?}"
         );
     }
 }

@@ -2,11 +2,12 @@
 /// window over the stdio automation protocol — the same path application
 /// controllers use for Solid apps.
 ///
-/// Platform note: live input synthesis (click/wheel) is implemented only on
-/// macOS today (renderer.rs gates simulate_* behind target_os = "macos").
-/// Query and programmatic-scroll methods are cross-platform, so this suite
-/// verifies launch/handshake, tree lookup, scroll positioning and cleanup
-/// everywhere, and pins down the wheel capability per platform.
+/// Platform note: live input synthesis reaches the renderer on every platform
+/// (macOS via update_window, elsewhere via the UiCommand channel), but only
+/// lands in an element once a frame has painted, because an element exposes
+/// its text input handler during paint. So this suite verifies launch/
+/// handshake, tree lookup, scroll positioning and cleanup everywhere, and
+/// pins down the paint-dependent behaviour per platform.
 
 import { describe, expect, it } from "vitest"
 import { launch } from "@solo/solid/automation"
@@ -139,4 +140,73 @@ describe("tasks app automation", () => {
       await app.close()
     }
   }, 30_000)
+
+  it("types into the composer with fill() and press()", async () => {
+    const app = await launchTasksApp()
+    try {
+      const input = app.getByTestId("new-task-input")
+
+      // The issue's regression snippet. Every call must resolve: before this
+      // change the live adapter threw "not live yet" for all four keyboard
+      // methods, so Locator.fill and Locator.press were unusable here.
+      await expect(input.fill("news")).resolves.toBeUndefined()
+      await expect(input.press("cmd-a")).resolves.toBeUndefined()
+      await expect(input.press("backspace")).resolves.toBeUndefined()
+      await expect(input.fill("İstanbul 世界")).resolves.toBeUndefined()
+      await expect(input.press("enter")).resolves.toBeUndefined()
+
+      const { text } = await app.call("getPaintedText", {})
+      if (text.length === 0) {
+        // Headless (no display server): nothing paints, so no input handler is
+        // installed and no keystroke can land in the composer. The commands
+        // still round-tripped through the live renderer and resolved, which
+        // is all that can be proven without a window.
+        console.warn("[automation] headless: skipped paint-dependent assertions")
+        return
+      }
+
+      // A display is present, so the full chain is exercised: keystrokes reach
+      // the focused composer, onChange updates the Solid signal, and Enter
+      // submits into the store — observable as a new row in the tree.
+      const final = await waitForText(app, "İstanbul 世界")
+      expect(final.some((entry) => entry.includes("İstanbul 世界"))).toBe(true)
+    } finally {
+      await app.close()
+    }
+  }, 30_000)
+
+  it("rejects a malformed keystroke before it reaches the renderer", async () => {
+    const app = await launchTasksApp()
+    try {
+      // Parsing happens on the calling thread, before the platform split, so
+      // the error reaches the controller with the offending token instead of
+      // being swallowed by the fire-and-forget UiCommand channel.
+      const error = await app
+        .call("keystrokes", { keys: "cmd-totally-bogus" })
+        .then(() => null)
+        .catch((e: unknown) => e)
+
+      expect(error).toBeInstanceOf(Error)
+      expect((error as Error).message).toContain("cmd-totally-bogus")
+      // The error CODE is deliberately not pinned: on macOS the native method
+      // is compiled in, so its throw is a genuine failure and the adapter
+      // passes it through (reported as Protocol); off macOS it is re-tagged as
+      // Unsupported. The token in the message is what the controller needs.
+    } finally {
+      await app.close()
+    }
+  }, 30_000)
+
+  /** Poll `getAllText` until some entry contains `needle`. */
+  async function waitForText(app: App, needle: string): Promise<string[]> {
+    const deadline = Date.now() + 10_000
+    let latest: string[] = []
+    while (Date.now() < deadline) {
+      const { text } = await app.call("getAllText", {})
+      latest = text
+      if (text.some((entry) => entry.includes(needle))) return text
+      await new Promise((resolve) => setTimeout(resolve, 100))
+    }
+    return latest
+  }
 })

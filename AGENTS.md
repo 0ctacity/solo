@@ -91,6 +91,31 @@ screenshots, and clock control. The public client is
 `@solo/solid/automation`;
 see `examples/tasks/diagnose-scroll.mts`.
 
+Two renderers sit behind the same protocol. `TestSoloRenderer` is the
+GPU-backed native test harness; `SoloRenderer` is a live application, adapted
+to the same interface by `liveRendererAsTest`. Keep them symmetrical — a
+method added to one is expected on the other.
+
+Keyboard has two dispatch paths and picking the wrong one silently does
+nothing:
+
+- `Window::dispatch_keystroke` fills in `key_char` via
+  `Keystroke::with_simulated_ime` and routes it to the focused element's input
+  handler. **This is the only path that inserts text.** `simulateKeystrokes`
+  uses it.
+- A bare `KeyDownEvent` dispatched with `window.dispatch_event` fires the
+  element's `onKeyDown` listener and any matching key binding, but never
+  reaches the text buffer. `simulateKeyDown`/`simulateKeyUp` use it, matching
+  `TestSoloRenderer`.
+
+Both need the target focused first: an element only installs its input handler
+during paint, and only while focused. `liveRendererAsTest` focuses before
+dispatching.
+
+Keystrokes are parsed on the calling thread, before the platform split, so a
+malformed key reaches the controller as `Unsupported` with the offending
+token rather than being swallowed by the `UiCommand` channel.
+
 ## Testing
 
 - Headless everywhere: `MockNativeRenderer` records each mutation op —
