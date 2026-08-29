@@ -16,6 +16,8 @@ use std::sync::{Arc, Mutex};
 
 use napi::bindgen_prelude::*;
 use napi_derive::napi;
+use objc2::MainThreadMarker;
+use objc2_app_kit::NSScreen;
 
 use gpui::AppContext as _;
 
@@ -72,6 +74,24 @@ fn u32_to_mouse_button(button: u32) -> gpui::MouseButton {
     }
 }
 
+fn validate_display_count(display_count: usize) -> Result<()> {
+    if display_count == 0 {
+        return Err(Error::from_reason(
+            "TestSoloRenderer requires an interactive macOS display; NSScreen reported no available displays",
+        ));
+    }
+
+    Ok(())
+}
+
+fn ensure_macos_display_available() -> Result<()> {
+    let mtm = MainThreadMarker::new().ok_or_else(|| {
+        Error::from_reason("TestSoloRenderer must be created on the macOS main thread")
+    })?;
+
+    validate_display_count(NSScreen::screens(mtm).len())
+}
+
 // ── TestSoloRenderer ────────────────────────────────────────────────
 
 /// GPU-backed GPUI test renderer. Uses VisualTestAppContext (real Metal
@@ -100,6 +120,8 @@ pub struct TestSoloRenderer {
 impl TestSoloRenderer {
     #[napi(constructor)]
     pub fn new() -> Result<Self> {
+        ensure_macos_display_available()?;
+
         let tree = Arc::new(Mutex::new(RetainedTree::new()));
         let events: Arc<Mutex<Vec<EventPayload>>> = Arc::new(Mutex::new(Vec::new()));
 
@@ -858,5 +880,24 @@ impl TestSoloRenderer {
                 Self::collect_text(child_id, tree, texts);
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn display_preflight_rejects_zero_displays() {
+        let error = validate_display_count(0).expect_err("zero displays must be rejected");
+
+        assert!(error
+            .to_string()
+            .contains("requires an interactive macOS display"));
+    }
+
+    #[test]
+    fn display_preflight_accepts_an_available_display() {
+        assert!(validate_display_count(1).is_ok());
     }
 }
