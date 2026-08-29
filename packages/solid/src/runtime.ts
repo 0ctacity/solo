@@ -140,6 +140,7 @@ const NATIVE_TYPES = new Set([
   "diff",
   "markdown",
   "virtual-list",
+  "webview",
 ])
 
 function applyProps(node: SoloSolidNode, props: Record<string, unknown>): void {

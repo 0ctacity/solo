@@ -70,7 +70,8 @@ FFI call. GPUI's retained tree owns all real state.
 
 `div`, `text`, `img`, `svg`, `input`, `textarea`, `anchored`, `code`
 (Tree-sitter highlighting), `diff` (unified patches), `markdown`
-(GFM), `virtual-list` (windowed rows). Styles are a CSS-like subset
+(GFM), `virtual-list` (windowed rows), `webview` (macOS only — a real
+WKWebView). Styles are a CSS-like subset
 (`StyleDesc`) applied natively, including hover/active pseudo-states,
 overflow scrolling, opacity, borders, and text metrics.
 
@@ -104,6 +105,7 @@ cd packages/native && cargo test --lib && cargo test --test layout_probe
 |---|---|
 | `examples/tasks` | full task manager: store state, keyed list, scroll, input, automation regression suite |
 | `examples/solid-counter` | minimal counter window |
+| `examples/webview-preview` | macOS-only embedded WKWebView beside a fully native pane |
 
 ## Build
 
@@ -123,7 +125,7 @@ GPUI comes from a pinned git revision of `remorses/zed` (branch
 
 | platform | windows | input | notes |
 |---|---|---|---|
-| macOS | ✅ | ✅ incl. synthetic input & GPU test renderer | embedded AppKit loop driven from Node |
+| macOS | ✅ | ✅ incl. synthetic input & GPU test renderer | embedded AppKit loop driven from Node; only platform with `<webview>` |
 | Linux (Wayland/X11) | ✅ | ✅ physical input; synthetic wheel via automation | blocking UI thread |
 | Windows | ✅ builds | ⚠️ untested | same blocking-thread model |
 
