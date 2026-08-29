@@ -6,6 +6,7 @@ mod diff;
 mod element_tree;
 mod markdown;
 mod motion;
+mod native_view;
 mod renderer;
 mod retained_tree;
 mod style;

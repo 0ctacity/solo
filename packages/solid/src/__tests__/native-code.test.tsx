@@ -77,7 +77,9 @@ describeNative("<code>", () => {
       </div>
     ))
 
-    const selected = renderer.dragSelect(24, 40, 900, 40)
+    const code = renderer.findByType("code")[0]!
+    const [x, y, width] = renderer.getElementBounds(code.id)!
+    const selected = renderer.dragSelect(x + 16, y + 16, x + width, y + 16)
     expect(selected).toBe("const answer = 42")
   })
 
@@ -89,7 +91,9 @@ describeNative("<code>", () => {
       </div>
     ))
 
-    const selected = renderer.dragSelect(24, 40, 900, 200)
+    const code = renderer.findByType("code")[0]!
+    const [x, y, width, height] = renderer.getElementBounds(code.id)!
+    const selected = renderer.dragSelect(x + 16, y + 16, x + width, y + height)
     expect(selected).toBe("one\ntwo\nthree")
   })
 
@@ -97,9 +101,9 @@ describeNative("<code>", () => {
     const { render, renderer } = createSolidNativeTestRoot()
     render(() => <code code={"alpha\nbeta"} language="ts" showHeader={false} showLineNumbers />)
 
-    const gutterX =
-      renderer.getElementBounds(renderer.findByType("text")[0].id)![0] - 8
-    const selected = renderer.dragSelect(gutterX - 4, 45, 900, 200)
+    const code = renderer.findByType("code")[0]!
+    const [x, y, width, height] = renderer.getElementBounds(code.id)!
+    const selected = renderer.dragSelect(x + 40, y + 16, x + width, y + height)
 
     expect(renderer.getPaintedText()).toContain("1")
     expect(selected).not.toMatch(/\d/)

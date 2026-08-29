@@ -128,6 +128,35 @@ token rather than being swallowed by the `UiCommand` channel.
   `cargo test --lib --test layout_probe` in packages/native. Use `bun run
   test`, not `bun test` (vitest).
 
+## Native child views (`<webview>`)
+
+`<webview>` is the one element GPUI cannot paint. It is a real WKWebView, an
+AppKit NSView, so it lives in the window's NSView hierarchy and composites
+*above* GPUI — GPUI clears its Metal drawable opaquely every frame, so
+anything below it is invisible.
+
+```text
+<webview url=…>
+  → WebviewElement        CustomElement: props, events, destroy
+    → WebviewPlaceholder  gpui::Element: takes layout space
+      → prepaint(bounds)  authoritative post-layout bounds
+        → native_view registry → WKWebView.setFrame:
+```
+
+- GPUI owns layout, AppKit owns pixels and input. Nothing polls bounds from
+  JS: `prepaint` is inside the redraw that a resize triggers, so reflow is
+  automatic.
+- The host NSView comes from the public `Window::window_handle()`
+  (`raw-window-handle`), not from GPUI's private `MacWindow` — no fork change.
+- GPUI measures from the top-left, AppKit from the bottom-left; both in
+  logical points. Every frame goes through `to_native_frame`, which is unit
+  tested in `packages/native/src/native_view.rs`.
+- macOS only. There is no WebView2 or WebKitGTK implementation, so the factory
+  is `cfg`-gated and off macOS the type is simply not registered.
+- New child views implement `NativeViewInstance` and are keyed by Solo element
+  ID, so `destroy` (unmount) and `destroy_all` (app quit) are the only two
+  cleanup paths.
+
 ## Native layout gotchas (each cost us a bug)
 
 - Percentage heights need a *definite* parent height chain up to the window;
@@ -135,6 +164,8 @@ token rather than being swallowed by the `UiCommand` channel.
 - Flex items cannot shrink below content without explicit min-size 0.
 - `.on_scroll_wheel` listeners see every wheel event in the window — always
   position-check before consuming/stopping propagation.
+- A zero-area frame still keeps a WKWebView's web process alive, so
+  `update_frame` hides the view instead of leaving it mounted.
 
 ## Iterating on the Rust side
 
@@ -179,6 +210,8 @@ package.
 - `examples/tasks` — dogfood task manager: store state, keyed list,
   scrolling, input composer, automation regression suite, diagnose driver.
 - `examples/solid-counter` — minimal counter window.
+- `examples/webview-preview` — macOS-only embedded WKWebView beside a fully
+  native pane, driven by the three `<webview>` events.
 
 ## Contributing
 

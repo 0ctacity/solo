@@ -10,6 +10,7 @@ import {
   hasNativeTestRenderer,
 } from "../testing.js"
 import { expectScreenshotsDiffer, SHOTS_DIR } from "./test-utils.js"
+import { Text } from "../components.js"
 
 const describeNative = hasNativeTestRenderer ? describe : describe.skip
 
@@ -108,7 +109,7 @@ describeNative("showcase", () => {
 
     const painted = renderer.getPaintedText()
     expect(painted).toContain("Release notes")
-    expect(painted).toContain("  const renderer = createRenderer()")
+    expect(painted.some((line) => line.includes("const renderer = createRenderer()"))).toBe(true)
     expect(painted).toContain("src/server.ts")
 
     expect(fs.existsSync(shot)).toBe(true)

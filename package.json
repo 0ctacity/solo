@@ -4,7 +4,8 @@
   "workspaces": [
     "packages/*",
     "examples/solid-counter",
-    "examples/tasks"
+    "examples/tasks",
+    "examples/webview-preview"
   ],
   "scripts": {
     "build": "bun run build:native && bun run build:core && bun run build:solid",

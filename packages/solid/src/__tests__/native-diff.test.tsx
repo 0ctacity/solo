@@ -155,7 +155,9 @@ describeNative("<diff>", () => {
       />
     ))
 
-    renderer.nativeSimulateClick(60, 60)
+    const diff = renderer.findByType("diff")[0]!
+    const [x, y] = renderer.getElementBounds(diff.id)!
+    renderer.nativeSimulateClick(x + 60, y + 75)
     expect(onLineClick).toHaveBeenCalled()
     const event = onLineClick.mock.calls[0][0]
     expect(event.value).toBe("# Title")
@@ -167,7 +169,9 @@ describeNative("<diff>", () => {
     const { render, renderer } = createSolidNativeTestRoot()
     render(() => <diff patch={TWO_FILES} style={{ width: "100%", height: "100%" }} />)
 
-    const selected = renderer.dragSelect(60, 60, 900, 200)
+    const diff = renderer.findByType("diff")[0]!
+    const [x, y, width] = renderer.getElementBounds(diff.id)!
+    const selected = renderer.dragSelect(x + 116, y + 75, x + width, y + 75)
     expect(selected).toBe("# Title")
     expect(renderer.getPaintedText()).toContain("·")
     expect(selected).not.toContain("·")
@@ -180,8 +184,8 @@ describeNative("<diff>", () => {
     ))
 
     const painted = renderer.getPaintedText()
-    expect(painted).toContain("# Title") // wait: big.ts header
-    expect(painted.join("\n")).toContain("Show more")
+    expect(painted).toContain("big.ts")
+    expect(painted.join("\n")).toMatch(/Show \d+ more lines/)
   })
 
   it("virtualizes very long patches instead of building every row", () => {
@@ -190,7 +194,7 @@ describeNative("<diff>", () => {
       <diff
         patch={longPatch(2000)}
         scroll
-        style={{ width: "100%", height: "600px" }}
+        style={{ width: "100%", height: 600 }}
       />
     ))
 

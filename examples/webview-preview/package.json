@@ -1,0 +1,16 @@
+{
+  "name": "webview-preview",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "vite build",
+    "start": "vite build && node dist/index.js"
+  },
+  "dependencies": {
+    "@solo/solid": "workspace:^",
+    "solid-js": "^2.0.0-rc.1"
+  },
+  "devDependencies": {
+    "vite": "^7.0.0"
+  }
+}

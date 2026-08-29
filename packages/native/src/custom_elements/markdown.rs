@@ -109,12 +109,14 @@ impl CustomElement for MarkdownElement {
 
         let mut container = gpui::div()
             .id(SharedString::from(format!("__solo_markdown_{}", ctx.id)))
+            .relative()
             .flex()
             .flex_col()
             .text_color(theme.text)
             .font_family(theme.font_sans.clone())
             .text_size(gpui::px(theme.metrics.md_text_size))
             .line_height(gpui::px(theme.metrics.md_line_height))
+            .child(crate::automation::bounds_tracker(ctx.id))
             .child(body);
 
         container = super::code::wire_standard_events(container, &ctx);

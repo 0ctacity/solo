@@ -160,6 +160,29 @@ fn update_window<R>(
     })
 }
 
+/// Update only the window, without leasing its root `SoloView` entity.
+/// Input dispatch can synchronously draw and render the root, so calling it
+/// from `WindowHandle<SoloView>::update` would lease `SoloView` twice.
+#[cfg(target_os = "macos")]
+fn update_window_for_input<R>(
+    update: impl FnOnce(&mut gpui::Window, &mut gpui::App) -> R,
+) -> Result<R> {
+    let window = GPUI_WINDOW
+        .with(|window| *window.borrow())
+        .ok_or_else(|| Error::from_reason("GPUI window is not initialized"))?;
+
+    GPUI_APP.with(|app| {
+        let app = app.borrow();
+        let app = app
+            .as_ref()
+            .ok_or_else(|| Error::from_reason("GPUI application is not initialized"))?;
+        app.update(|cx| {
+            cx.update_window(window.into(), move |_view, window, cx| update(window, cx))
+                .map_err(|error| Error::from_reason(error.to_string()))
+        })
+    })
+}
+
 #[cfg(target_os = "macos")]
 fn invalidate_window() -> Result<()> {
     update_window(|_view, window, cx| {
@@ -289,21 +312,21 @@ async fn run_ui_commands(
                 })
             }
             UiCommand::SimulateKeystrokes { keys } => {
-                window.update(cx, move |_view, window, cx| {
+                cx.update_window(window.into(), move |_view, window, cx| {
                     crate::automation::dispatch_keystrokes(window, cx, &keys);
                 })
             }
             UiCommand::SimulateKeyDown { key, is_held } => {
-                window.update(cx, move |_view, window, cx| {
+                cx.update_window(window.into(), move |_view, window, cx| {
                     crate::automation::dispatch_key_down(window, cx, &key, is_held);
                 })
             }
             UiCommand::SimulateKeyUp { key } => {
-                window.update(cx, move |_view, window, cx| {
+                cx.update_window(window.into(), move |_view, window, cx| {
                     crate::automation::dispatch_key_up(window, cx, &key);
                 })
             }
-            UiCommand::ScrollToItem { id, index } => {
+            UiCommand::ScrollToItem { id, index } => window.update(cx, move |view, window, cx| {
                 if !VIRTUAL_LIST_STATES.with(|cell| {
                     let states = cell.borrow();
                     let Some(state) = states.get(&id) else {
@@ -317,12 +340,15 @@ async fn run_ui_commands(
                 }) {
                     SCROLL_HANDLES.with(|cell| {
                         if let Some(handle) = cell.borrow().get(&id) {
-                            handle.scroll_to_item(index);
+                            if !scroll_retained_child_into_view(&view.tree, handle, id, index) {
+                                handle.scroll_to_item(index);
+                            }
                         }
                     });
                 }
-                refresh_ui_window(window, cx)
-            }
+                cx.notify();
+                window.refresh();
+            }),
             UiCommand::GetScrollOffset { id, response } => {
                 let offset = VIRTUAL_LIST_STATES
                     .with(|cell| {
@@ -1080,7 +1106,9 @@ impl SoloRenderer {
             SCROLL_HANDLES.with(|cell| {
                 let handles = cell.borrow();
                 if let Some(handle) = handles.get(&id) {
-                    handle.scroll_to_item(index);
+                    if !scroll_retained_child_into_view(&self.tree, handle, id, index) {
+                        handle.scroll_to_item(index);
+                    }
                 }
             });
         }
@@ -1283,7 +1311,7 @@ impl SoloRenderer {
         let keys = crate::automation::parse_keystrokes(&keystrokes).map_err(Error::from_reason)?;
 
         #[cfg(target_os = "macos")]
-        return update_window(move |_view, window, cx| {
+        return update_window_for_input(move |window, cx| {
             crate::automation::dispatch_keystrokes(window, cx, &keys);
         });
 
@@ -1313,7 +1341,7 @@ impl SoloRenderer {
         let is_held = is_held.unwrap_or(false);
 
         #[cfg(target_os = "macos")]
-        return update_window(move |_view, window, cx| {
+        return update_window_for_input(move |window, cx| {
             crate::automation::dispatch_key_down(window, cx, &key, is_held);
         });
 
@@ -1338,7 +1366,7 @@ impl SoloRenderer {
         let key = crate::automation::parse_keystroke(&keystroke).map_err(Error::from_reason)?;
 
         #[cfg(target_os = "macos")]
-        return update_window(move |_view, window, cx| {
+        return update_window_for_input(move |window, cx| {
             crate::automation::dispatch_key_up(window, cx, &key);
         });
 
@@ -1462,6 +1490,51 @@ impl Drop for SoloRenderer {
 }
 
 // ── GPUI View ────────────────────────────────────────────────────────
+
+/// Scroll a retained child into view using its painted bounds.
+///
+/// GPUI's `ScrollHandle::scroll_to_item` only tracks layout children that its
+/// div records internally. Solo also injects absolute automation canvases, so
+/// retained child indexes are not guaranteed to match that internal list.
+pub(crate) fn scroll_retained_child_into_view(
+    tree: &Arc<Mutex<RetainedTree>>,
+    handle: &gpui::ScrollHandle,
+    parent_id: u64,
+    index: usize,
+) -> bool {
+    let child_id = {
+        let tree = tree.lock().unwrap();
+        tree.elements
+            .get(&parent_id)
+            .and_then(|parent| parent.children.get(index))
+            .copied()
+    };
+    let Some(child_id) = child_id else {
+        return false;
+    };
+    let Some(parent) = crate::automation::get_bounds(parent_id) else {
+        return false;
+    };
+    let Some(child) = crate::automation::get_bounds(child_id) else {
+        return false;
+    };
+
+    let offset = handle.offset();
+    let mut x = f64::from(f32::from(offset.x));
+    let mut y = f64::from(f32::from(offset.y));
+    if child.x < parent.x {
+        x += parent.x - child.x;
+    } else if child.x + child.width > parent.x + parent.width {
+        x += parent.x + parent.width - child.x - child.width;
+    }
+    if child.y < parent.y {
+        y += parent.y - child.y;
+    } else if child.y + child.height > parent.y + parent.height {
+        y += parent.y + parent.height - child.y - child.height;
+    }
+    handle.set_offset(gpui::point(gpui::px(x as f32), gpui::px(y as f32)));
+    true
+}
 
 pub(crate) struct SoloView {
     pub(crate) tree: Arc<Mutex<RetainedTree>>,
@@ -1988,6 +2061,10 @@ impl gpui::Render for SoloView {
         if self.quit_hook.is_none() {
             self.quit_hook = Some(cx.on_app_quit(|view, _cx| {
                 view.custom_registry.destroy_all();
+                // Native child views (WKWebView) outlive the retained tree, so
+                // they need their own teardown or AppKit keeps the web process
+                // alive past the window.
+                crate::native_view::with_registry(|registry| registry.destroy_all());
                 async {}
             }));
         }

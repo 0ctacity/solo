@@ -31,6 +31,27 @@ describe("Solid public package boundary", () => {
     expect(solidUniversal()).toMatchObject({ name: "solo:solid-universal" })
   })
 
+  it("keeps bundled native imports behind the Solid package", async () => {
+    const plugin = solidUniversal()
+    const config = plugin.config
+    if (typeof config !== "function") {
+      throw new Error("solidUniversal must provide a config hook")
+    }
+    config.call({} as never, {}, { command: "build", mode: "production" })
+
+    const resolveId = plugin.resolveId
+    if (typeof resolveId !== "function") {
+      throw new Error("solidUniversal must provide a resolveId hook")
+    }
+
+    await expect(
+      resolveId.call({} as never, "@solo/native", undefined, {} as never),
+    ).resolves.toEqual({
+      id: "@solo/solid/_native",
+      external: true,
+    })
+  })
+
   it("keeps the implementation packages behind @solo/solid", () => {
     const solid = readPackage("../../package.json")
     const core = readPackage("../../../core/package.json")

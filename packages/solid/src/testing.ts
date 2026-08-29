@@ -16,6 +16,11 @@ interface NativeTestRendererApi {
   simulateKeystrokes(keystrokes: string): void
   focusElement(elementId: number): void
   simulateClick(x: number, y: number): void
+  simulateKeyDown(keystroke: string, isHeld?: boolean): void
+  simulateKeyUp(keystroke: string): void
+  simulateMouseDown(x: number, y: number, button?: number): void
+  simulateMouseUp(x: number, y: number, button?: number): void
+  simulateMouseMove(x: number, y: number, pressedButton?: number): void
   simulateScrollWheel(x: number, y: number, deltaX: number, deltaY: number): void
   scrollToItem(elementId: number, index: number): void
   scrollTo(elementId: number, x: number, y: number): void
@@ -25,9 +30,33 @@ interface NativeTestRendererApi {
   getAllText(): string[]
   getPaintedText(): string[]
   getAutomationTree(): string
+  getTreeJson(): string
   dragSelect(x1: number, y1: number, x2: number, y2: number): void
   getSelectedText(): string | null
   captureScreenshot(path: string): void
+}
+
+export interface NativeTestElement {
+  id: number
+  type: string
+  style: Record<string, unknown>
+  text: string | null
+  events: Set<string>
+  children: number[]
+  parentId: number | null
+  customProps?: Record<string, unknown>
+}
+
+interface SolidNativeTestRendererApi extends NativeTestRendererApi {
+  findByType(type: string): NativeTestElement[]
+  nativeSimulateKeystrokes(elementId: number, keystrokes: string): void
+  nativeSimulateClick(x: number, y: number): void
+  nativeSimulateKeyDown(elementId: number, keystroke: string, isHeld?: boolean): void
+  nativeSimulateKeyUp(elementId: number, keystroke: string): void
+  nativeSimulateMouseDown(x: number, y: number, button?: number): void
+  nativeSimulateMouseUp(x: number, y: number, button?: number): void
+  nativeSimulateMouseMove(x: number, y: number, pressedButton?: number): void
+  nativeSimulateScrollWheel(x: number, y: number, deltaX: number, deltaY: number): void
 }
 
 interface NativeTestRendererConstructor {
@@ -51,19 +80,25 @@ export const hasNativeTestRenderer = NativeTestRenderer != null
 
 /** Mounted Solid tree against the native GPU-backed renderer. */
 export interface SolidNativeTestRoot {
-  renderer: NativeTestRendererApi
+  renderer: SolidNativeTestRendererApi
   render: (code: () => unknown) => void
   unmount: () => void
 
   // ── inspection ──
   getAllText(): string[]
   getPaintedText(): string[]
-  findByType(type: string): Array<{ id: number }>
+  findByType(type: string): NativeTestElement[]
+  getElement(elementId: number): NativeTestElement | undefined
   getElementBounds(elementId: number): number[] | null
   // ── simulation ──
   nativeSimulateKeystrokes(elementId: number, keystrokes: string): void
   simulateKeystrokes(keystrokes: string): void
   nativeSimulateClick(x: number, y: number): void
+  nativeSimulateKeyDown(elementId: number, keystroke: string, isHeld?: boolean): void
+  nativeSimulateKeyUp(elementId: number, keystroke: string): void
+  nativeSimulateMouseDown(x: number, y: number, button?: number): void
+  nativeSimulateMouseUp(x: number, y: number, button?: number): void
+  nativeSimulateMouseMove(x: number, y: number, pressedButton?: number): void
   focusElement(elementId: number): void
   nativeSimulateScrollWheel(x: number, y: number, deltaX: number, deltaY: number): void
   scrollToItem(elementId: number, index: number): void
@@ -95,36 +130,56 @@ export function createSolidNativeTestRoot(): SolidNativeTestRoot {
     }
   }
 
+  function buildElementMap(): Map<number, NativeTestElement> {
+    const json = JSON.parse(native.getTreeJson()) as Record<string, unknown> | null
+    const map = new Map<number, NativeTestElement>()
+    const walk = (node: Record<string, unknown> | null, parentId: number | null): void => {
+      if (!node) return
+      const id = node.id as number
+      const children = (node.children ?? []) as Array<Record<string, unknown>>
+      map.set(id, {
+        id,
+        type: node.type as string,
+        style: (node.style ?? {}) as Record<string, unknown>,
+        text: (node.text ?? null) as string | null,
+        events: new Set((node.events ?? []) as string[]),
+        children: children.map((child) => child.id as number),
+        parentId,
+        ...(node.customProps
+          ? { customProps: node.customProps as Record<string, unknown> }
+          : {}),
+      })
+      for (const child of children) walk(child, id)
+    }
+    walk(json, null)
+    return map
+  }
+
   const root: SolidNativeTestRoot = {
-    renderer: native,
+    renderer: native as SolidNativeTestRendererApi,
     render(code) {
       if (dispose) dispose()
       resetIdCounter()
       clearEventHandlers()
       dispose = mountTree(code as never, batched as never)
+      flushMutations()
       native.flush()
     },
     unmount() {
       dispose?.()
       dispose = null
+      flushMutations()
       native.flush()
     },
 
-    getAllText: () => native.getAllText(),
+    getAllText: () => native.getAllText().filter((text) => text.length > 0),
     getPaintedText: () => native.getPaintedText(),
 
     findByType(type) {
-      const raw = JSON.parse(native.getAutomationTree()) as {
-        children?: Array<{ id: number; type: string; children?: unknown[] }>
-      } | null
-      const found: Array<{ id: number }> = []
-      const walk = (node: { id: number; type: string; children?: unknown[] }): void => {
-        if (node.type === type) found.push({ id: node.id })
-        for (const child of node.children ?? []) walk(child as never)
-      }
-      for (const child of raw?.children ?? []) walk(child as never)
-      return found
+      return [...buildElementMap().values()].filter((element) => element.type === type)
     },
+
+    getElement: (id) => buildElementMap().get(id),
 
     getElementBounds: (id) => native.getElementBounds(id),
 
@@ -139,6 +194,43 @@ export function createSolidNativeTestRoot(): SolidNativeTestRoot {
     nativeSimulateClick(x, y) {
       native.flush()
       native.simulateClick(x, y)
+      dispatchNativeEvents()
+      native.flush()
+    },
+
+    nativeSimulateKeyDown(elementId, keystroke, isHeld) {
+      native.flush()
+      native.focusElement(elementId)
+      native.simulateKeyDown(keystroke, isHeld)
+      dispatchNativeEvents()
+      native.flush()
+    },
+
+    nativeSimulateKeyUp(elementId, keystroke) {
+      native.flush()
+      native.focusElement(elementId)
+      native.simulateKeyUp(keystroke)
+      dispatchNativeEvents()
+      native.flush()
+    },
+
+    nativeSimulateMouseDown(x, y, button) {
+      native.flush()
+      native.simulateMouseDown(x, y, button)
+      dispatchNativeEvents()
+      native.flush()
+    },
+
+    nativeSimulateMouseUp(x, y, button) {
+      native.flush()
+      native.simulateMouseUp(x, y, button)
+      dispatchNativeEvents()
+      native.flush()
+    },
+
+    nativeSimulateMouseMove(x, y, pressedButton) {
+      native.flush()
+      native.simulateMouseMove(x, y, pressedButton)
       dispatchNativeEvents()
       native.flush()
     },
@@ -195,6 +287,31 @@ export function createSolidNativeTestRoot(): SolidNativeTestRoot {
       native.captureScreenshot(path)
     },
   }
+
+  root.renderer = new Proxy(native, {
+    get(target, property, receiver) {
+      switch (property) {
+        case "findByType": return root.findByType
+        case "getAllText": return root.getAllText
+        case "captureScreenshot": return root.captureScreenshot
+        case "dragSelect": return root.dragSelect
+        case "simulateKeystrokes": return root.simulateKeystrokes
+        case "focusElement": return root.focusElement
+        case "nativeSimulateKeystrokes": return root.nativeSimulateKeystrokes
+        case "nativeSimulateClick": return root.nativeSimulateClick
+        case "nativeSimulateKeyDown": return root.nativeSimulateKeyDown
+        case "nativeSimulateKeyUp": return root.nativeSimulateKeyUp
+        case "nativeSimulateMouseDown": return root.nativeSimulateMouseDown
+        case "nativeSimulateMouseUp": return root.nativeSimulateMouseUp
+        case "nativeSimulateMouseMove": return root.nativeSimulateMouseMove
+        case "nativeSimulateScrollWheel": return root.nativeSimulateScrollWheel
+        default: {
+          const value = Reflect.get(target, property, receiver) as unknown
+          return typeof value === "function" ? value.bind(target) : value
+        }
+      }
+    },
+  }) as SolidNativeTestRendererApi
 
   return root
 }

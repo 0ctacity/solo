@@ -25,6 +25,23 @@ export interface SoloIntrinsicProps {
   [key: string]: unknown
 }
 
+/// `<webview>` embeds a real WKWebView. macOS only — there is no WebView2 or
+/// WebKitGTK implementation, so on other platforms the element renders
+/// nothing. The web view is a native child view, not painted content: it
+/// composites above GPUI, takes part in normal layout, and owns its own input.
+export interface WebviewProps extends SoloIntrinsicProps {
+  /** Absolute URL to load. Changing it navigates the existing view. */
+  url?: string
+  /** Overrides WebKit's default user agent string. */
+  userAgent?: string
+  /** Fired when the main frame finishes loading. `value` is the URL. */
+  onLoad?: (event: EventPayload) => void
+  /** Fired when a navigation starts, including link clicks and redirects. */
+  onNavigation?: (event: EventPayload) => void
+  /** Fired when a load fails. `value` is `"<url> — <reason>"`. */
+  onLoadError?: (event: EventPayload) => void
+}
+
 export namespace JSX {
   export type Element = unknown
 
@@ -41,6 +58,7 @@ export namespace JSX {
     diff: SoloIntrinsicProps
     markdown: SoloIntrinsicProps
     "virtual-list": SoloIntrinsicProps
+    webview: WebviewProps
   }
 }
 

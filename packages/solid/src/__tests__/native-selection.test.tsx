@@ -3,6 +3,7 @@
 
 import { describe, expect, it } from "vitest"
 import { createSolidNativeTestRoot, hasNativeTestRenderer } from "../testing.js"
+import { Text } from "../components.js"
 
 const describeNative = hasNativeTestRenderer ? describe : describe.skip
 
