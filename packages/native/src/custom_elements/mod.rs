@@ -1,7 +1,7 @@
 /// Custom element trait infrastructure for Solo.
 ///
 /// Allows native GPUI components (input, editor, diff) to be used as
-/// React custom elements with props and callbacks. The renderer dispatches
+/// Solid custom elements with props and callbacks. The renderer dispatches
 /// to trait objects at render time — each custom element lives in its own
 /// file with its own dependencies, cleanly separated from the core renderer.
 ///
@@ -26,9 +26,9 @@ pub mod markdown;
 /// Context passed to CustomElement::render() with everything needed
 /// to build GPUI elements with events and focus.
 pub struct CustomRenderContext<'a> {
-    /// Numeric element ID (matches React's instance ID).
+    /// Numeric element ID (matches Solid's renderer node ID).
     pub id: u64,
-    /// Event types registered by React (e.g. "keyDown", "click").
+    /// Event types registered by Solid (e.g. "keyDown", "click").
     pub events: &'a HashSet<String>,
     /// Callback for emitting events back to JS.
     pub event_callback: &'a Option<EventCallback>,
@@ -89,9 +89,9 @@ impl CustomRenderContext<'_> {
 ///
 /// Lifecycle:
 ///   1. Factory creates instance via CustomElementFactory::create()
-///   2. React sends props via set_prop() (called each GPUI frame before render)
+///   2. Solid sends props via set_prop() (called each GPUI frame before render)
 ///   3. Each GPUI frame calls render() → returns AnyElement
-///   4. React unmounts → destroy() for cleanup
+///   4. Solid unmounts → destroy() for cleanup
 pub trait CustomElement: 'static {
     /// Build GPUI elements for this frame.
     /// Called on every GPUI render cycle (immediate mode).
@@ -103,7 +103,7 @@ pub trait CustomElement: 'static {
     ) -> gpui::AnyElement;
 
     /// Set a named prop from JS. Values are JSON-encoded.
-    /// Called when React updates props on this element.
+    /// Called when Solid updates props on this element.
     fn set_prop(&mut self, key: &str, value: serde_json::Value);
 
     /// Return known prop keys. Missing keys are reset to null/default each frame.
@@ -122,7 +122,7 @@ pub trait CustomElement: 'static {
 /// Factory for creating CustomElement instances.
 /// One factory per element type, registered at startup.
 pub trait CustomElementFactory: 'static {
-    /// The element type name that React uses (e.g. "input", "editor", "diff").
+    /// The element type name that Solid uses (e.g. "input", "editor", "diff").
     fn element_type(&self) -> &str;
 
     /// Create a new element instance.
@@ -179,7 +179,7 @@ impl CustomElementRegistry {
         self.instances.get_mut(&id)
     }
 
-    /// Called when React destroys an element.
+    /// Called when Solid destroys an element.
     /// Destroy every live instance, releasing any GPUI entities they hold.
     /// Called on app quit so gpui's exit leak check sees a clean slate.
     pub fn destroy_all(&mut self) {

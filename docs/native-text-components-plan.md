@@ -6,6 +6,11 @@ description: Port Comet's selectable text, syntax highlighting, markdown and dif
 # Native text components plan
 
 > [!NOTE]
+> This is a historical design record from before Solo became Solid-only.
+> React references below describe the removed implementation, not a supported
+> API or a planned frontend extension point.
+
+> [!NOTE]
 > **Shipped.** Stages 0 through 5 are implemented. Stage 6 (a generic `<list>`)
 > was dropped for a reason worth recording: gpui's `list()` takes a `'static`
 > render closure that runs during layout, so it cannot borrow the renderer's

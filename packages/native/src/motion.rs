@@ -1,4 +1,4 @@
-//! Native motion tracks resolved during GPUI rendering, outside React.
+//! Native motion tracks resolved during GPUI rendering, outside Solid.
 
 use std::time::{Duration, Instant};
 

@@ -558,7 +558,7 @@ export async function connectTest(
   const app = new App(new InProcessBackend(renderer))
   await app.call("initialize", {
     protocolVersion: PROTOCOL_VERSION,
-    client: "@solo/core/automation",
+    client: "@solo/solid/automation",
   })
   return app
 }
@@ -573,7 +573,7 @@ export async function connectStdio(options: {
   )
   await app.call("initialize", {
     protocolVersion: PROTOCOL_VERSION,
-    client: "@solo/core/automation",
+    client: "@solo/solid/automation",
   })
   return app
 }

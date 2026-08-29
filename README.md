@@ -4,6 +4,10 @@ Build native GPU-accelerated desktop apps with **Solid** and TypeScript.
 Your components render directly to the GPU via Metal, DirectX, or Vulkan —
 no Electron, no web views.
 
+Solid is Solo's only supported frontend. Application code imports
+`@solo/solid`; `@solo/core` is private and `@solo/native` is an internal
+transitive dependency, not an application API.
+
 ```tsx
 import { createSignal } from "solid-js"
 import { render, View, Text, Button } from "@solo/solid"
@@ -28,14 +32,14 @@ TypeScript / TSX
       ↓
     Solid          ← custom renderer (babel-preset-solid, universal mode)
       ↓
-@solo/core        ← framework-neutral: mutation protocol types, batching,
-      ↓               event registry, automation client, frame loop
-@solo/native      ← napi-rs bridge; retained element tree in Rust
+@solo/core        ← private mutation kernel: types, batching, events
+      ↓
+@solo/native      ← internal napi-rs bridge; retained element tree in Rust
       ↓
      GPUI           ← Zed's GPU UI framework (pinned revision)
 ```
 
-Solo is **description-driven**, not DOM-like. Frameworks never mutate a
+Solo is **description-driven**, not DOM-like. Solid never mutates a
 retained JS tree: each commit queues a minimal batch of native mutations
 (`createElement`, `appendChild`, `setText`, `setStyle`, `setCustomProp`,
 `setEventListener`) that is flushed to Rust through a single `applyBatch`
@@ -45,9 +49,9 @@ FFI call. GPUI's retained tree owns all real state.
 
 | package | role |
 |---|---|
-| [`@solo/native`](packages/native) | Rust/napi bridge. Retained tree, GPUI element building, text selection, syntax highlighting, markdown, diffs, input editors, automation host, GPU-backed test renderer (macOS). |
-| [`@solo/core`](packages/core) | Framework-neutral primitives: protocol/style types, event-handler registry, mutation batching (`wrapWithBatching`), frame loop, automation client/server, mock renderer for tests. |
-| [`@solo/solid`](packages/solid) | Solid custom renderer. Maps Solid's universal ops onto the native mutation protocol with fine-grained updates; semantic primitives (`View`, `Text`, `Button`); window `render()`; automation wiring; test harness. |
+| [`@solo/solid`](packages/solid) | **The public application package.** Solid components and JSX types, window `render()`, Vite integration via `@solo/solid/vite`, automation, and testing. |
+| [`@solo/core`](packages/core) | Private TypeScript implementation: protocol/style types, event registry, mutation batching, frame loop, automation implementation, and mock renderer. |
+| [`@solo/native`](packages/native) | Internal Rust/napi implementation and transitive dependency: retained tree, GPUI element building, text, custom elements, automation host, and GPU-backed test renderer. |
 
 ## Runtime model
 
@@ -75,16 +79,17 @@ overflow scrolling, opacity, borders, and text metrics.
 Solo ships a Playwright-style automation protocol over stdio (SSE
 framing). Any app whose stdin is not a TTY serves it automatically:
 tree queries by testId/text/type, click/mouse/keyboard/wheel injection,
-programmatic scrolling, bounds, screenshots, clock control. The client
-lives in `@solo/core/automation`; see `examples/tasks/diagnose-scroll.mts`.
+programmatic scrolling, bounds, screenshots, clock control. Import the client
+from `@solo/solid/automation`; see `examples/tasks/diagnose-scroll.mts`.
 
 ## Testing
 
 - Headless (all platforms): `MockNativeRenderer` records every mutation op
   for protocol-level assertions. See
   `packages/solid/src/__tests__/lifecycle.test.tsx`.
-- GPU-backed (macOS): `createSolidNativeTestRoot()` drives real frames,
-  hit testing, selection, and screenshots through `TestGpuixRenderer`.
+- GPU-backed (macOS): `createSolidNativeTestRoot()` from
+  `@solo/solid/testing` drives real frames, hit testing, selection, and
+  screenshots through `TestGpuixRenderer`.
 
 Run tests:
 

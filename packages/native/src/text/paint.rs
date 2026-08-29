@@ -273,7 +273,7 @@ fn register_link_listener(
 /// end of a document clamp sensibly.
 ///
 /// Comet compares Y only, because its transcript is a single column where two
-/// texts never share a vertical band. Solo lays out arbitrary React trees: a
+/// texts never share a vertical band. Solo lays out arbitrary Solid trees: a
 /// Y-only match picks the leftmost text in a flex row no matter where the
 /// pointer actually is.
 fn registry_point(position: gpui::Point<gpui::Pixels>) -> Option<(usize, usize)> {

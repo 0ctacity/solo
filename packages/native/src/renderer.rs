@@ -1,13 +1,13 @@
 //! SoloRenderer — napi-rs binding exposed to Node.js.
 //!
-//! Mutation-based API: React's reconciler sends individual mutations
+//! Mutation-based API: Solid's universal renderer sends individual mutations
 //! (createElement, appendChild, setStyle, etc.) instead of a full JSON tree.
 //! Rust maintains a RetainedTree and rebuilds GPUI elements from it each frame.
 //!
 //! Lifecycle:
 //!   const renderer = new SoloRenderer(eventCallback)
 //!   renderer.init({ title: 'My App', width: 800, height: 600 })
-//!   renderer.createElement(1, "div")     // mutations from React reconciler
+//!   renderer.createElement(1, "div")     // mutations from Solid renderer
 //!   renderer.appendChild(0, 1)
 //!   renderer.commitMutations()           // signal batch complete
 //!   setTimeout(function loop() {         // drive AppKit on macOS
@@ -1367,7 +1367,7 @@ pub(crate) struct SoloView {
     pub(crate) motion_states: HashMap<u64, crate::motion::MotionState>,
     /// Live text selection, shared with the paint closures and the napi methods.
     pub(crate) selection: SharedSelection,
-    /// Persistent measurement and scroll state for React-backed virtual lists.
+    /// Persistent measurement and scroll state for Solid-backed virtual lists.
     virtual_lists: HashMap<u64, VirtualListEntry>,
     /// Motion / review clock. Live wall time unless automation freezes it.
     pub(crate) clock: crate::automation::AutomationClock,
@@ -2436,7 +2436,7 @@ pub(crate) fn build_div(
 
             // ── Hover (mouseEnter + mouseLeave) ──────────────────
             // GPUI's on_hover fires with true on enter, false on leave.
-            // We split into two distinct event types for the React side.
+            // We split into two distinct event types for the Solid side.
             "mouseEnter" | "mouseLeave" => {
                 // Only wire once even if both mouseEnter and mouseLeave are registered.
                 // Check if we already wired on_hover via the other event.

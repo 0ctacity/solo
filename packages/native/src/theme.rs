@@ -196,7 +196,7 @@ impl SyntaxPalette {
 ///
 /// These used to be Rust `const`s, which meant that tuning a row height needed
 /// a native rebuild. They travel in the `theme` prop instead, so the whole
-/// design surface changes with a React re-render and no rebuild at all. The
+/// design surface changes with a Solid update and no rebuild at all. The
 /// defaults are Comet's numbers.
 ///
 /// Row heights in particular are load-bearing: `<diff>` virtualizes with a

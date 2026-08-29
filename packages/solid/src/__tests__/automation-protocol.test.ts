@@ -10,7 +10,7 @@ import {
   parseWireMessage,
   PROTOCOL_VERSION,
   type WireMessage,
-} from "@solo/core/automation"
+} from "../automation.js"
 
 describe("automation protocol", () => {
   it("encodes one JSON object as an SSE data event", () => {

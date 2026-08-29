@@ -1,6 +1,5 @@
 /// Frame loop for platforms where GPUI does not own a blocking UI thread.
-/// Framework-neutral: any renderer package can drive the embedded event loop
-/// with this.
+/// The Solid renderer uses this to drive the embedded event loop.
 
 import type { SoloRenderer } from "@solo/native"
 

@@ -1,6 +1,6 @@
 /// Retained element tree — the Rust-side source of truth for the UI.
 ///
-/// React's reconciler sends mutations (create, append, remove, etc.) via napi.
+/// Solid's universal renderer sends mutations (create, append, remove, etc.) via napi.
 /// This tree stores those mutations. SoloView builds ephemeral GPUI elements
 /// from it, while virtual lists defer offscreen subtrees until layout requests them.
 ///
@@ -26,7 +26,7 @@ pub struct RetainedElement {
     pub auto_focus: bool,
     /// Last mutation applied to this element or one of its descendants.
     pub subtree_revision: u64,
-    /// Stable locator id from the React `testId` prop.
+    /// Stable locator id from the Solid `testId` prop.
     pub test_id: Option<String>,
 }
 

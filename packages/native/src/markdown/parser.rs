@@ -8,7 +8,7 @@
 //! run list per paragraph to hand to `gpui::StyledText`, not a nested AST.
 //!
 //! No incremental parsing here. Comet needs it because it streams LLM output
-//! token by token; Solo renders whatever React hands it, and a full reparse of
+//! token by token; Solo renders whatever Solid hands it, and a full reparse of
 //! a document is cheap next to laying it out.
 
 use std::ops::Range;

@@ -2,7 +2,7 @@ import { defineConfig } from "vitest/config"
 import { dirname } from "node:path"
 import { fileURLToPath } from "node:url"
 import { createRequire } from "node:module"
-import { solidUniversal } from "./scripts/solid-universal-plugin.js"
+import { solidUniversal } from "./src/vite.js"
 
 const req = createRequire(import.meta.url)
 // Resolve each package's dist directory, then point at the client dev

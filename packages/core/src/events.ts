@@ -2,8 +2,7 @@ import type { EventPayload } from "@solo/native"
 import { registerEventHandler, unregisterEventHandler } from "./event-registry.js"
 
 /// Mapping from framework event prop names (onClick, onKeyDown, ...) to the
-/// native event types Rust emits in EventPayload.eventType. Shared by the
-/// React and Solid integrations so both speak the same protocol.
+/// native event types Rust emits in EventPayload.eventType for Solid props.
 
 export const EVENT_PROPS = [
   // Custom element events
@@ -58,4 +57,3 @@ export function attachEventHandler(
     renderer.setEventListener(id, eventType, false)
   }
 }
-

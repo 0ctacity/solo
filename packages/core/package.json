@@ -1,6 +1,7 @@
 {
   "name": "@solo/core",
   "version": "0.4.0",
+  "private": true,
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -23,12 +24,7 @@
     "type": "git",
     "url": "https://github.com/0ctacity/solo"
   },
-  "publishConfig": {
-    "registry": "https://registry.npmjs.org/",
-    "access": "public"
-  },
   "scripts": {
-    "prepublishOnly": "node -e \"if (!process.env.CI) { console.error('Never publish @solo/core locally. There is no automated release path; see AGENTS.md.'); process.exit(1) }\"",
     "build": "rm -rf dist *.tsbuildinfo && tsc",
     "dev": "tsc --watch",
     "test": "vitest run",

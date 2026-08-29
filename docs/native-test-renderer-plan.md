@@ -5,6 +5,11 @@ description: Migrate from mocked TypeScript TestRenderer to real GPUI-backed tes
 
 # Native Test Renderer Plan
 
+> [!NOTE]
+> This is a historical design record from before Solo became Solid-only.
+> React paths below describe the removed implementation, not a supported API
+> or a planned frontend extension point.
+
 ## Goal
 
 Replace the mocked `TestRenderer` (pure TypeScript, in-memory element tree) with a real native test renderer backed by GPUI's test infrastructure. Tests run the **same Rust code** as production — `build_element()`, `apply_styles()`, event wiring, focus management — but with no GPU and no visible window.

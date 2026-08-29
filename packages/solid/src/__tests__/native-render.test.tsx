@@ -1,7 +1,7 @@
-/// Persist-and-remount semantics for Solid's window render(). Mirrors
-/// packages/react render.test.tsx. The React suite also covered `bun --hot`
-/// subprocess reloads; Solid apps build once (`vite build`) and run from
-/// dist, so that path is structurally N/A here.
+/// Persist-and-remount semantics for Solid's window render(). The retired
+/// renderer suite also covered `bun --hot` subprocess reloads; Solid apps
+/// build once (`vite build`) and run from dist, so that path is structurally
+/// N/A here.
 
 import { beforeEach, describe, expect, it } from "vitest"
 import { createSignal } from "solid-js"

@@ -1,6 +1,6 @@
 /// Automation regression: drive the REAL Solid tasks app in its real Solo
-/// window over the stdio automation protocol — the same path a controller
-/// uses for React apps.
+/// window over the stdio automation protocol — the same path application
+/// controllers use for Solid apps.
 ///
 /// Platform note: live input synthesis (click/wheel) is implemented only on
 /// macOS today (renderer.rs gates simulate_* behind target_os = "macos").
@@ -9,8 +9,8 @@
 /// everywhere, and pins down the wheel capability per platform.
 
 import { describe, expect, it } from "vitest"
-import { launch } from "@solo/core/automation"
-import type { App } from "@solo/core/automation"
+import { launch } from "@solo/solid/automation"
+import type { App } from "@solo/solid/automation"
 
 const ENTRY = new URL("./dist/index.js", import.meta.url).pathname
 

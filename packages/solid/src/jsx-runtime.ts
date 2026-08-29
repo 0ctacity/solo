@@ -7,19 +7,20 @@
 /// protocol accepts style objects, event handlers and custom props.
 
 import type { StyleDesc } from "@solo/core"
+import type { EventPayload } from "@solo/native"
 
 export interface SoloIntrinsicProps {
   style?: StyleDesc
   children?: unknown
-  onClick?: (event: unknown) => void
-  onMouseDown?: (event: unknown) => void
-  onMouseUp?: (event: unknown) => void
-  onMouseEnter?: (event: unknown) => void
-  onMouseLeave?: (event: unknown) => void
-  onKeyDown?: (event: unknown) => void
-  onKeyUp?: (event: unknown) => void
-  onFocus?: (event: unknown) => void
-  onBlur?: (event: unknown) => void
+  onClick?: (event: EventPayload) => void
+  onMouseDown?: (event: EventPayload) => void
+  onMouseUp?: (event: EventPayload) => void
+  onMouseEnter?: (event: EventPayload) => void
+  onMouseLeave?: (event: EventPayload) => void
+  onKeyDown?: (event: EventPayload) => void
+  onKeyUp?: (event: EventPayload) => void
+  onFocus?: (event: EventPayload) => void
+  onBlur?: (event: EventPayload) => void
   testId?: string
   [key: string]: unknown
 }

@@ -16,7 +16,7 @@
 import { createSignal, For, Show } from "solid-js"
 import { createStore } from "solid-js"
 import { View, Text, Button } from "@solo/solid"
-import type { StyleDesc } from "@solo/core"
+import type { StyleDesc } from "@solo/solid"
 
 interface Task {
   id: number

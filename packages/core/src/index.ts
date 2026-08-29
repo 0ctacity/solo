@@ -1,8 +1,7 @@
-// Solo Core — framework-neutral primitives shared by every renderer package.
+// Solo Core — private implementation kernel for @solo/solid.
 //
-// This package must never depend on React, Solid, or any UI framework. It
-// owns the native mutation protocol vocabulary (types + batching), the event
-// handler registry that native events dispatch into, and the frame loop.
+// It deliberately does not import Solid: it owns the native mutation protocol
+// vocabulary, event registry, batching, and frame loop used by the Solid host.
 
 export * from "./types.js"
 export {

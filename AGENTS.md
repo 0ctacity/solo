@@ -9,7 +9,7 @@ TypeScript / TSX
       ↓
     Solid          ← custom renderer (babel-preset-solid, universal mode)
       ↓
-@solo/core        ← framework-neutral primitives
+@solo/core        ← private, framework-free mutation kernel
       ↓
 @solo/native      ← napi-rs bridge, retained tree in Rust
       ↓
@@ -23,17 +23,19 @@ TypeScript / TSX
   `apply_styles`), text selection registry, Tree-sitter syntax
   highlighting, markdown/diff rendering, native input editors, motion,
   automation host + GPU-backed test renderer (macOS), and the frame clock.
-- **`packages/core`** (`@solo/core`): framework-neutral TypeScript. The
+- **`packages/core`** (`@solo/core`): private, framework-free TypeScript
+  implementation. The
   mutation protocol vocabulary (`StyleDesc`, `NativeRenderer`), event-handler
   registry, `wrapWithBatching` (queues ops → one `applyBatch` FFI call),
   frame loop, event-prop mapping, `MockNativeRenderer`, and the automation
-  client/protocol (`@solo/core/automation`). Must never depend on a UI
-  framework.
+  client/protocol. Application code must not import this package directly;
+  it remains framework-free as an internal architectural boundary.
 - **`packages/solid`** (`@solo/solid`): Solid custom renderer. `src/runtime.ts`
   is the `moduleName` target for babel-preset-solid (`generate: "universal"`);
   every op maps onto a native mutation. Ships `View`/`Text`/`Button`
-  primitives, window `render()`, automation wiring, `@solo/solid/testing`
-  harness, and a types-only jsx-runtime.
+  primitives, window `render()`, `@solo/solid/automation`,
+  `@solo/solid/testing`, `@solo/solid/vite`, and a types-only jsx-runtime.
+  This is the only `@solo/*` package application developers import.
 - React support was removed; see git history.
 - Naming: packages/product are `@solo/*` / Solo; the Rust crate
   (`gpuix-native`), napi binary name and internal symbols like `GpuixView`
@@ -85,18 +87,19 @@ All painted strings route through `crate::text` (`selectable_text` /
 Apps serve a Playwright-style protocol over stdio whenever stdin is not a
 TTY (`serveAutomationStdio`). Methods cover tree lookup (testId/text/type),
 click/mouse/keyboard/wheel injection, programmatic scrolling, bounds,
-screenshots, and clock control. Client lives in `@solo/core/automation`;
+screenshots, and clock control. The public client is
+`@solo/solid/automation`;
 see `examples/tasks/diagnose-scroll.mts`.
 
 ## Testing
 
 - Headless everywhere: `MockNativeRenderer` records each mutation op —
   assert protocol traffic directly (`lifecycle.test.tsx`).
-- macOS GPU-backed: `createSolidNativeTestRoot()` from `@solo/solid/testing`
-  (mirrors the old React harness). Gate with `hasNativeTestRenderer`.
+- macOS GPU-backed: `createSolidNativeTestRoot()` from `@solo/solid/testing`.
+  Gate with `hasNativeTestRenderer`.
 - Layout ground-truth: `packages/native/tests/layout_probe.rs` draws the
   real builder chain headlessly and asserts ScrollHandle geometry.
-- Run: `bun run test` inside packages/solid|core|react-less workspaces;
+- Run: `bun run test` inside packages/solid or packages/core;
   `cargo test --lib --test layout_probe` in packages/native. Use `bun run
   test`, not `bun test` (vitest).
 
@@ -137,8 +140,9 @@ rewrites them.
 ## Releasing
 
 There is no automated release path: CI builds and tests only, and the
-packages are not published anywhere. Every `packages/*/package.json`
-carries a `prepublishOnly` guard that aborts a local `npm publish`, so
+packages are not published anywhere. Public package manifests carry a
+`prepublishOnly` guard that aborts a local `npm publish`, while `@solo/core`
+is explicitly private, so
 releasing takes a deliberate decision rather than an accidental version
 bump. When publishing returns, stand up a versioning workflow
 (changesets or equivalent) in the same change — `CHANGELOG.md` is
@@ -154,5 +158,6 @@ package.
 ## Contributing
 
 1. Rust changes: `packages/native/src/`.
-2. TS changes: `packages/core` (neutral) or `packages/solid` (renderer).
-3. Keep `@solo/core` free of framework imports.
+2. TS changes: `packages/core` (private kernel) or `packages/solid` (public
+   Solid API and renderer).
+3. Keep `@solo/core` free of framework imports and out of application code.

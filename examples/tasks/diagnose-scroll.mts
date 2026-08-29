@@ -14,7 +14,7 @@
 ///       -> loss is hit-test gating or scroll-handle wiring in GPUIX.
 
 import { spawn } from "node:child_process"
-import { connectStdio } from "@solo/core/automation"
+import { connectStdio } from "@solo/solid/automation"
 
 const ENTRY = new URL("./dist/index.js", import.meta.url).pathname
 

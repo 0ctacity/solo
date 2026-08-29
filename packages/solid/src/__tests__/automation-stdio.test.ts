@@ -7,8 +7,8 @@ import {
   handleAutomationRequest,
   InProcessBackend,
   PROTOCOL_VERSION,
-} from "@solo/core/automation"
-import type { TestAutomationRenderer } from "@solo/core/automation"
+} from "../automation.js"
+import type { TestAutomationRenderer } from "../automation.js"
 
 function fakeRenderer(): TestAutomationRenderer {
   let clicks = 0

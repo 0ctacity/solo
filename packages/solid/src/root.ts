@@ -1,8 +1,8 @@
 /// Solo — render Solid apps into a native Solo window.
 ///
-/// Mirrors the previous React package's render(): creates the napi SoloRenderer,
-/// opens the window, wires native events into the shared handler registry,
-/// batches mutations, and drives the frame loop where the platform needs it.
+/// Creates the napi SoloRenderer, opens the window, wires native events into
+/// Solid's handler registry, batches mutations, and drives the frame loop
+/// where the platform needs it.
 
 import { SoloRenderer } from "@solo/native"
 import type { EventPayload, WindowOptions } from "@solo/native"

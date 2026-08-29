@@ -1,8 +1,7 @@
-/// Framework-neutral Solo types shared by every renderer package.
+/// Internal protocol and style types used by the Solid renderer.
 ///
-/// Nothing in this file may import React, Solid, or any other UI framework.
-/// These describe the native mutation protocol and the style vocabulary that
-/// Rust's `apply_styles` understands.
+/// These stay independent of Solid because they describe the native mutation
+/// protocol and the style vocabulary that Rust's `apply_styles` understands.
 
 export type DimensionValue = number | string
 

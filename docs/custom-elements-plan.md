@@ -1,9 +1,14 @@
 ---
 title: Custom Elements via Polymorphic Trait Interface
-description: Plan for exposing Zed components (Editor, DiffView) as GPUIX React custom elements using a trait-based plugin architecture.
+description: Historical plan for exposing Zed components as native custom elements.
 ---
 
 # Custom Elements via Polymorphic Trait Interface
+
+> [!NOTE]
+> This is a historical design record from before Solo became Solid-only.
+> React references below describe the removed implementation, not a supported
+> API or a planned frontend extension point.
 
 ## Goal
 

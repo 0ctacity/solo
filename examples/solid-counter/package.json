@@ -7,15 +7,10 @@
     "start": "vite build && node dist/index.js"
   },
   "dependencies": {
-    "@solo/core": "workspace:^",
-    "@solo/native": "workspace:^",
     "@solo/solid": "workspace:^",
-    "solid-js": "^2.0.0-rc.1",
-    "@solidjs/universal": "^2.0.0-rc.1"
+    "solid-js": "^2.0.0-rc.1"
   },
   "devDependencies": {
-    "@babel/core": "^7.26.0",
-    "babel-preset-solid": "^2.0.0-rc.1",
     "vite": "^7.0.0"
   }
 }

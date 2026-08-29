@@ -24,7 +24,7 @@ use crate::theme::{Metrics, Theme};
 // ── Metrics ──────────────────────────────────────────────────────────
 //
 // Everything that decides layout lives in `Theme::metrics`, so a design tweak
-// is a React prop change and not a native rebuild. Only the hairline and the
+// is a Solid prop change and not a native rebuild. Only the hairline and the
 // inline-code wash overhang stay fixed: they are paint geometry, and neither
 // can move a glyph.
 
