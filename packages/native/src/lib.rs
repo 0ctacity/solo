@@ -4,6 +4,8 @@ mod automation;
 mod custom_elements;
 mod diff;
 mod element_tree;
+#[cfg(target_os = "macos")]
+mod macos_event_pump;
 mod markdown;
 mod motion;
 mod native_view;

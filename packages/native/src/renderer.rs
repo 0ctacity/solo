@@ -563,7 +563,7 @@ impl SoloRenderer {
             Ok(window_handle) => window_handle,
             Err(error) => {
                 app_handle.update(|cx| cx.quit());
-                if platform.pump_events() {
+                if crate::macos_event_pump::pump_events(&platform)? {
                     MAC_PLATFORM.with(|stored| {
                         *stored.borrow_mut() = Some(platform.clone());
                     });
@@ -827,10 +827,10 @@ impl SoloRenderer {
             let running = MAC_PLATFORM.with(|p| {
                 p.borrow()
                     .as_ref()
-                    .map(|platform| platform.pump_events())
-                    .unwrap_or(false)
+                    .map(|platform| crate::macos_event_pump::pump_events(platform))
+                    .unwrap_or(Ok(false))
             });
-            return Ok(running);
+            return running;
         }
 
         #[cfg(any(target_os = "windows", target_os = "linux", target_os = "freebsd"))]
