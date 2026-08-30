@@ -34,6 +34,24 @@ gpui_macos    = { git = "https://github.com/remorses/zed", rev = "<same>", ... }
 
 The exact rev is `db0820f6756b9d789707a3de01cee72ff5251941`.
 
+## Embedded pump wake boundary
+
+Solo wraps the pinned `MacPlatform::pump_events()` in
+`packages/native/src/macos_event_pump.rs`. The fork stops AppKit from an
+`AfterWaiting` observer, but its pre-posted wake event can be consumed before
+the run loop sleeps. With no further input or scheduled frame, a synchronous
+`tick()` can then strand JavaScript inside `NSApplication.run` (issue #6).
+
+The wrapper installs a scoped `BeforeWaiting` observer that queues a run-loop
+wake at the actual sleep boundary. GPUI still handles the after-wake phase,
+frame callbacks, termination, and its embedded lifecycle. The observer is
+invalidated as soon as the pump returns; it never runs between JavaScript
+ticks. Do not replace it with an early stop that prevents frame callbacks.
+
+The Solid suite includes bounded child-process regressions for idle ticks,
+repeated input, painting, and WKWebView creation/destruction. The watchdog is
+outside the native process so a blocked `tick()` cannot freeze the test runner.
+
 ## Fork vs upstream
 
 The fork branch is upstream `zed-industries/zed@fd82517a11` plus four commits:
