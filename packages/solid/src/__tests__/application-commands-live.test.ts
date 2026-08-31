@@ -64,6 +64,50 @@ describe.skipIf(process.platform !== "darwin")("packaged application commands", 
 })
 
 // Keep packaged fixtures in one test file: they build the same public dist.
+describe.skipIf(process.platform !== "darwin")("packaged system appearance", () => {
+  it("reads native appearance and keeps explicit choices separate without remounting", async () => {
+    const packager = fileURLToPath(new URL("./fixtures/package-commands.ts", import.meta.url))
+    const { stdout } = await promisify(execFile)("bun", [packager, "system-appearance"], { timeout: 30_000 })
+    const executable = stdout.match(/^commands-executable:(.+)$/m)?.[1]
+    expect(executable).toBeTruthy()
+    const child = spawn(executable!, [], { stdio: ["pipe", "pipe", "pipe"] })
+    let stderr = ""
+    child.stderr.on("data", (chunk) => { stderr += chunk })
+    const watchdog = setTimeout(() => child.kill("SIGKILL"), 20_000)
+    const exited = new Promise<never>((_resolve, reject) => {
+      child.once("error", reject)
+      child.once("exit", (code, signal) => reject(new Error(`Fixture exited: ${code ?? signal}`)))
+    })
+    try {
+      await Promise.race([exited, (async () => {
+        const app = await connectStdio({
+          write: (chunk) => { child.stdin.write(chunk) },
+          feed: (listener) => { child.stdout.on("data", (chunk) => listener(String(chunk))) },
+          close: async () => { child.kill() },
+        })
+        const flatten = (node: TreeNode): string => (node.text ?? "") + (node.children ?? []).map(flatten).join("")
+        const text = async (id: string): Promise<string> => flatten(await app.getByTestId(id).element())
+        await expect.poll(() => text("system")).toMatch(/^System: (light|dark)$/)
+        const initial = (await text("system")).slice("System: ".length)
+        expect(await text("effective")).toBe(`Effective: ${initial}`)
+        for (const choice of ["dark", "light", "follow"]) {
+          await app.getByTestId(choice).click()
+          await expect.poll(() => text("effective")).toBe(`Effective: ${choice === "follow" ? initial : choice}`)
+          expect(await text("preference")).toBe(`Preference: ${choice === "follow" ? "system" : choice}`)
+          expect(await text("system")).toBe(`System: ${initial}`)
+          expect(await text("mount")).toBe("Mount: 1")
+        }
+        await app.getByTestId("editor").fill("still responsive")
+      })()])
+    } catch (error) {
+      throw new Error(`Appearance fixture failed. Native stderr:\n${stderr}`, { cause: error })
+    } finally {
+      clearTimeout(watchdog)
+      child.kill("SIGKILL")
+    }
+  }, 60_000)
+})
+
 describe.skipIf(process.platform !== "darwin")("packaged desktop actions", () => {
   it("exposes the native bridge and catches invalid URLs without launching another app", async () => {
     const packager = fileURLToPath(new URL("./fixtures/package-commands.ts", import.meta.url))

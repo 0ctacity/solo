@@ -197,6 +197,19 @@ impl TestSoloRenderer {
     }
 
     #[napi]
+    pub fn set_system_appearance_subscription(&self, token: Option<String>) -> Result<String> {
+        with_test_state(|cx, window, view| {
+            let view = view.clone();
+            cx.update_window(window, |_, window, app| {
+                view.update(app, |view, cx| {
+                    view.set_system_appearance_subscription(token, window, cx)
+                })
+            })
+            .map_err(|error| Error::from_reason(error.to_string()))?
+        })
+    }
+
+    #[napi]
     pub fn create_element(&self, id: f64, element_type: String) -> Result<()> {
         let id = to_element_id(id)?;
         self.tree.lock().unwrap().create_element(id, element_type);
