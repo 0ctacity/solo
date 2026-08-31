@@ -34,6 +34,10 @@ export default defineConfig({
     include: ["src/**/*.test.{ts,tsx}"],
     // The mock renderer needs no DOM environment.
     environment: "node",
+    // macOS suites create Metal-backed test windows and standalone .app
+    // processes. Running those files concurrently starves GPUI's event pump
+    // and makes otherwise unrelated hooks cross their timeout in CI.
+    fileParallelism: process.platform !== "darwin",
     // Inline the Solid packages so solidUniversal's resolveId pinning
     // also applies to their INTERNAL imports. Externalized, they would load
     // solid-js's server build natively and lose all reactivity.
