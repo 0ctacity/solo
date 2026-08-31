@@ -14,6 +14,7 @@ mod native_view;
 mod renderer;
 mod retained_tree;
 mod style;
+mod system_appearance;
 mod syntax;
 mod text;
 mod theme;

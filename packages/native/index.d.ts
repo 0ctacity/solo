@@ -59,6 +59,12 @@ export declare class SoloRenderer {
   getWindowSize(): WindowSize
   /** Replace application commands atomically. macOS only for now. */
   setApplicationCommands(json: string): void
+  /**
+   * Replace or remove the macOS system-appearance observer and return the
+   * current normalized appearance. The token is echoed in change events so
+   * the Solid layer can discard notifications queued for an old owner.
+   */
+  setSystemAppearanceSubscription(token?: string | undefined | null): string
   /** `"hidden"` | `"minimal"` | `"full"`. Paints into the scene after layout. */
   setDebugFrameOverlay(mode: string): string
   /** Hidden → minimal → full → hidden. */

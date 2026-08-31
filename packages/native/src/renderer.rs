@@ -86,6 +86,50 @@ pub(crate) fn to_element_id(id: f64) -> Result<u64> {
     Ok(id as u64)
 }
 
+#[cfg(test)]
+mod system_appearance_tests {
+    use super::*;
+
+    #[gpui::test]
+    fn registers_replaces_and_disposes_system_appearance(cx: &mut gpui::TestAppContext) {
+        let handle = cx.add_window(|_, _| {
+            SoloView::new(
+                Arc::new(Mutex::new(RetainedTree::new())),
+                None,
+                "Appearance test".into(),
+                SharedSelection::default(),
+            )
+        });
+        handle
+            .update(cx, |view, window, cx| {
+                assert!(view.system_appearance_subscription.is_none());
+                assert_eq!(
+                    view.set_system_appearance_subscription(Some("first".into()), window, cx)
+                        .unwrap(),
+                    "light"
+                );
+                assert!(view.system_appearance_subscription.is_some());
+                assert!(view
+                    .set_system_appearance_subscription(Some(String::new()), window, cx)
+                    .is_err());
+                assert!(view.system_appearance_subscription.is_some());
+                assert_eq!(
+                    view.set_system_appearance_subscription(Some("second".into()), window, cx)
+                        .unwrap(),
+                    "light"
+                );
+                assert!(view.system_appearance_subscription.is_some());
+                assert_eq!(
+                    view.set_system_appearance_subscription(None, window, cx)
+                        .unwrap(),
+                    "light"
+                );
+                assert!(view.system_appearance_subscription.is_none());
+            })
+            .unwrap();
+    }
+}
+
 thread_local! {
     #[cfg(target_os = "macos")]
     static MAC_PLATFORM: RefCell<Option<Rc<gpui_macos::MacPlatform>>> = const { RefCell::new(None) };
@@ -903,6 +947,26 @@ impl SoloRenderer {
         }
     }
 
+    /// Replace or remove the macOS system-appearance observer and return the
+    /// current normalized appearance. The token is echoed in change events so
+    /// the Solid layer can discard notifications queued for an old owner.
+    #[napi]
+    pub fn set_system_appearance_subscription(&self, token: Option<String>) -> Result<String> {
+        #[cfg(target_os = "macos")]
+        {
+            return update_window(move |view, window, cx| {
+                view.set_system_appearance_subscription(token, window, cx)
+            })?;
+        }
+        #[cfg(not(target_os = "macos"))]
+        {
+            let _ = token;
+            Err(Error::from_reason(
+                "System appearance is supported only on macOS",
+            ))
+        }
+    }
+
     /// `"hidden"` | `"minimal"` | `"full"`. Paints into the scene after layout.
     #[napi]
     pub fn set_debug_frame_overlay(&self, mode: String) -> Result<String> {
@@ -1598,6 +1662,9 @@ pub(crate) struct SoloView {
     virtual_lists: HashMap<u64, VirtualListEntry>,
     /// Motion / review clock. Live wall time unless automation freezes it.
     pub(crate) clock: crate::automation::AutomationClock,
+    /// The single live system-appearance observer, when subscribed by Solid.
+    /// Replacing this subscription drops the previous observer first.
+    system_appearance_subscription: Option<gpui::Subscription>,
     /// Releases custom-element entities on app quit. Without this, gpui's
     /// exit leak check panics because quitting does not drop root views.
     quit_hook: Option<gpui::Subscription>,
@@ -1622,8 +1689,45 @@ impl SoloView {
             selection,
             virtual_lists: HashMap::new(),
             clock: crate::automation::AutomationClock::new(),
+            system_appearance_subscription: None,
             quit_hook: None,
         }
+    }
+
+    pub(crate) fn set_system_appearance_subscription(
+        &mut self,
+        token: Option<String>,
+        window: &mut gpui::Window,
+        cx: &mut gpui::Context<Self>,
+    ) -> Result<String> {
+        if token.as_deref().is_some_and(str::is_empty) {
+            return Err(Error::from_reason(
+                "System appearance subscription token must not be empty",
+            ));
+        }
+
+        self.system_appearance_subscription.take();
+        let current = window.appearance();
+
+        if let Some(token) = token {
+            self.system_appearance_subscription = Some(cx.observe_window_appearance(
+                window,
+                move |view, window, _cx| {
+                    let value = crate::system_appearance::appearance_event_value(
+                        &token,
+                        window.appearance(),
+                    );
+                    emit_event_full(
+                        &view.event_callback,
+                        0,
+                        "systemAppearanceChange",
+                        |payload| payload.value = Some(value),
+                    );
+                },
+            ));
+        }
+
+        Ok(crate::system_appearance::normalized_appearance(current).to_string())
     }
 
     fn build_virtual_child(
@@ -2097,6 +2201,7 @@ impl gpui::Render for SoloView {
 
         if self.quit_hook.is_none() {
             self.quit_hook = Some(cx.on_app_quit(|view, _cx| {
+                view.system_appearance_subscription.take();
                 view.custom_registry.destroy_all();
                 // Native child views (WKWebView) outlive the retained tree, so
                 // they need their own teardown or AppKit keeps the web process
