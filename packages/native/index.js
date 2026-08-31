@@ -577,3 +577,5 @@ if (!nativeBinding) {
 
 module.exports = nativeBinding
 module.exports.SoloRenderer = nativeBinding.SoloRenderer
+module.exports.openExternalUrl = nativeBinding.openExternalUrl
+module.exports.writeClipboardText = nativeBinding.writeClipboardText

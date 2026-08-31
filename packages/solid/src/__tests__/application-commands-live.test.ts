@@ -62,3 +62,41 @@ describe.skipIf(process.platform !== "darwin")("packaged application commands", 
     }
   }, 60_000)
 })
+
+// Keep packaged fixtures in one test file: they build the same public dist.
+describe.skipIf(process.platform !== "darwin")("packaged desktop actions", () => {
+  it("exposes the native bridge and catches invalid URLs without launching another app", async () => {
+    const packager = fileURLToPath(new URL("./fixtures/package-commands.ts", import.meta.url))
+    const { stdout } = await promisify(execFile)("bun", [packager, "desktop"], { timeout: 30_000 })
+    const executable = stdout.match(/^commands-executable:(.+)$/m)?.[1]
+    expect(executable).toBeTruthy()
+    const child = spawn(executable!, [], { stdio: ["pipe", "pipe", "pipe"] })
+    let stderr = ""
+    child.stderr.on("data", (chunk) => { stderr += chunk })
+    const watchdog = setTimeout(() => child.kill("SIGKILL"), 20_000)
+    const exited = new Promise<never>((_resolve, reject) => {
+      child.once("error", reject)
+      child.once("exit", (code, signal) => reject(new Error(`Fixture exited: ${code ?? signal}`)))
+    })
+    try {
+      await Promise.race([exited, (async () => {
+        const app = await connectStdio({
+          write: (chunk) => { child.stdin.write(chunk) },
+          feed: (listener) => { child.stdout.on("data", (chunk) => listener(String(chunk))) },
+          close: async () => { child.kill() },
+        })
+        await expect.poll(async () => (await app.getByTestId("invalid").bounds()).height).toBeGreaterThan(0)
+        await app.getByTestId("invalid").click()
+        const flatten = (node: TreeNode): string => (node.text ?? "") + (node.children ?? []).map(flatten).join("")
+        await expect.poll(async () => flatten(await app.getByTestId("status").element())).toContain("absolute HTTP/HTTPS URL")
+        // Validation failures leave the application responsive.
+        await app.getByTestId("editor").fill("still responsive 世界")
+      })()])
+    } catch (error) {
+      throw new Error(`Desktop fixture failed. Native stderr:\n${stderr}`, { cause: error })
+    } finally {
+      clearTimeout(watchdog)
+      child.kill("SIGKILL")
+    }
+  }, 60_000)
+})

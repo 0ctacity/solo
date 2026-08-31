@@ -1,0 +1,29 @@
+import { createSignal } from "solid-js"
+import { Button, openExternalUrl, registerApplicationCommand, render, Text, View, writeClipboardText } from "@solo/solid"
+
+const article = "https://example.com/世界?q=İstanbul#solo-desktop-check"
+
+function App() {
+  const [status, setStatus] = createSignal("Ready")
+  const run = (action: () => void, success: string) => {
+    try { action(); setStatus(success) }
+    catch (error) { setStatus(`Error: ${error instanceof Error ? error.message : String(error)}`) }
+  }
+  const open = () => run(() => openExternalUrl("https://example.com/#solo-desktop-check"), "Browser request accepted")
+  const copy = () => run(() => writeClipboardText(article), "Copied Unicode article URL")
+  const invalid = () => run(() => openExternalUrl("javascript:alert(1)"), "Unexpected success")
+  registerApplicationCommand({ id: "open", label: "Open test URL", menu: "Desktop", shortcut: "cmd-shift-b", run: open })
+  registerApplicationCommand({ id: "copy", label: "Copy Unicode URL", menu: "Desktop", shortcut: "cmd-shift-y", run: copy })
+  registerApplicationCommand({ id: "invalid", label: "Reject invalid URL", menu: "Desktop", run: invalid })
+  return <View style={{ display: "flex", flexDirection: "column", padding: 24, gap: 16, width: "100%", height: "100%", backgroundColor: "#202433", color: "#ffffff" }}>
+    <Text>Desktop integration verification</Text>
+    <Text testId="status">{status()}</Text>
+    <Text>{article}</Text>
+    <Button testId="open" onClick={open}><Text>Open test URL</Text></Button>
+    <Button testId="copy" onClick={copy}><Text>Copy Unicode URL</Text></Button>
+    <Button testId="invalid" onClick={invalid}><Text>Reject invalid URL</Text></Button>
+    <input testId="editor" placeholder="Existing native copy/paste still works" style={{ width: 480, height: 44 }} />
+  </View>
+}
+
+render(() => <App />, { title: "Solo Desktop", width: 560, height: 420 })

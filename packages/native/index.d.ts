@@ -216,6 +216,12 @@ export interface EventPayload {
   modifiers?: EventModifiers
 }
 
+/**
+ * Ask macOS to open an absolute HTTP/HTTPS URL in its default browser.
+ * Success means the OS accepted the request, not that the page loaded.
+ */
+export declare function openExternalUrl(url: string): void
+
 export interface WindowOptions {
   title?: string
   width?: number
@@ -241,3 +247,6 @@ export interface WindowSize {
   width: number
   height: number
 }
+
+/** Replace the system clipboard with plain Unicode text. macOS only. */
+export declare function writeClipboardText(text: string): void
