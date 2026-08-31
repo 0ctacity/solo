@@ -60,6 +60,18 @@ export declare class SoloRenderer {
   /** Replace application commands atomically. macOS only for now. */
   setApplicationCommands(json: string): void
   /**
+   * Show the macOS file-open dialog without blocking the JavaScript or UI
+   * thread. The returned promise resolves to selected paths, or `null` on
+   * cancellation.
+   */
+  selectFiles(optionsJson: string): Promise<Array<string> | null>
+  /**
+   * Show the macOS save-destination dialog without blocking the JavaScript
+   * or UI thread. The returned promise resolves to a path, or `null` on
+   * cancellation. Solo never creates or writes the selected path.
+   */
+  selectSavePath(optionsJson: string): Promise<string | null>
+  /**
    * Replace or remove the macOS system-appearance observer and return the
    * current normalized appearance. The token is echoed in change events so
    * the Solid layer can discard notifications queued for an old owner.

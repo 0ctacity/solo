@@ -6,6 +6,7 @@ mod custom_elements;
 mod desktop;
 mod diff;
 mod element_tree;
+mod file_dialogs;
 #[cfg(target_os = "macos")]
 mod macos_event_pump;
 mod markdown;

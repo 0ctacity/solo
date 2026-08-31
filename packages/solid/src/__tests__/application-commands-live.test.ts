@@ -64,6 +64,44 @@ describe.skipIf(process.platform !== "darwin")("packaged application commands", 
 })
 
 // Keep packaged fixtures in one test file: they build the same public dist.
+describe.skipIf(process.platform !== "darwin")("packaged file dialogs", () => {
+  it("keeps JavaScript and automation responsive while a native dialog is open", async () => {
+    const packager = fileURLToPath(new URL("./fixtures/package-commands.ts", import.meta.url))
+    const { stdout } = await promisify(execFile)("bun", [packager, "file-dialogs"], { timeout: 30_000 })
+    const executable = stdout.match(/^commands-executable:(.+)$/m)?.[1]
+    expect(executable).toBeTruthy()
+    const child = spawn(executable!, [], { stdio: ["pipe", "pipe", "pipe"] })
+    let stderr = ""
+    child.stderr.on("data", (chunk) => { stderr += chunk })
+    const watchdog = setTimeout(() => child.kill("SIGKILL"), 20_000)
+    const exited = new Promise<never>((_resolve, reject) => {
+      child.once("error", reject)
+      child.once("exit", (code, signal) => reject(new Error(`Fixture exited: ${code ?? signal}`)))
+    })
+    try {
+      await Promise.race([exited, (async () => {
+        const app = await connectStdio({
+          write: (chunk) => { child.stdin.write(chunk) },
+          feed: (listener) => { child.stdout.on("data", (chunk) => listener(String(chunk))) },
+          close: async () => { child.kill() },
+        })
+        await expect.poll(async () => (await app.getByTestId("open").bounds()).height).toBeGreaterThan(0)
+        const before = stderr.match(/dialog-heartbeat/g)?.length ?? 0
+        await app.getByTestId("open").click()
+        const flatten = (node: TreeNode): string => (node.text ?? "") + (node.children ?? []).map(flatten).join("")
+        await expect.poll(async () => flatten(await app.getByTestId("status").element())).toBe("Open pending")
+        await expect.poll(() => stderr.match(/dialog-heartbeat/g)?.length ?? 0).toBeGreaterThan(before + 5)
+        await expect.poll(async () => flatten(await app.getByTestId("ticks").element())).toMatch(/^Ticks: [1-9]/)
+      })()])
+    } catch (error) {
+      throw new Error(`Dialog fixture failed. Native stderr:\n${stderr}`, { cause: error })
+    } finally {
+      clearTimeout(watchdog)
+      child.kill("SIGKILL")
+    }
+  }, 60_000)
+})
+
 describe.skipIf(process.platform !== "darwin")("packaged system appearance", () => {
   it("reads native appearance and keeps explicit choices separate without remounting", async () => {
     const packager = fileURLToPath(new URL("./fixtures/package-commands.ts", import.meta.url))
