@@ -450,6 +450,7 @@ pub struct SoloRenderer {
     event_callback: Mutex<Option<Arc<ThreadsafeFunction<EventPayload>>>>,
     tree: Arc<Mutex<RetainedTree>>,
     initialized: Arc<Mutex<bool>>,
+    file_dialog_state: Arc<Mutex<crate::file_dialogs::DialogState>>,
     /// Shared with SoloView so napi methods can read the live selection
     /// without an App context. Paint and napi calls can use different threads.
     selection: SharedSelection,
@@ -503,6 +504,7 @@ impl SoloRenderer {
             event_callback: Mutex::new(event_callback.map(Arc::new)),
             tree: Arc::new(Mutex::new(RetainedTree::new())),
             initialized: Arc::new(Mutex::new(false)),
+            file_dialog_state: Arc::new(Mutex::new(Default::default())),
             selection: SharedSelection::default(),
             #[cfg(any(target_os = "windows", target_os = "linux", target_os = "freebsd"))]
             ui_commands: Mutex::new(None),
@@ -943,6 +945,71 @@ impl SoloRenderer {
             let _ = json;
             Err(Error::from_reason(
                 "Application commands are supported only on macOS",
+            ))
+        }
+    }
+
+    /// Show the macOS file-open dialog without blocking the JavaScript or UI
+    /// thread. The returned promise resolves to selected paths, or `null` on
+    /// cancellation.
+    #[napi]
+    pub fn select_files(
+        &self,
+        options_json: String,
+    ) -> Result<AsyncTask<crate::file_dialogs::OpenDialogTask>> {
+        #[cfg(target_os = "macos")]
+        {
+            if !*self.initialized.lock().unwrap() {
+                return Err(Error::from_reason(
+                    "Renderer is not initialized. Call init() first.",
+                ));
+            }
+            let options = crate::file_dialogs::parse_open_options(&options_json)?;
+            let lease = crate::file_dialogs::DialogLease::acquire(self.file_dialog_state.clone())?;
+            let receiver = update_window(move |_view, _window, cx| {
+                cx.prompt_for_paths(options.to_path_prompt_options())
+            })?;
+            return Ok(crate::file_dialogs::OpenDialogTask::new(receiver, lease));
+        }
+        #[cfg(not(target_os = "macos"))]
+        {
+            let _ = options_json;
+            Err(Error::from_reason(
+                "File dialogs are supported only on macOS",
+            ))
+        }
+    }
+
+    /// Show the macOS save-destination dialog without blocking the JavaScript
+    /// or UI thread. The returned promise resolves to a path, or `null` on
+    /// cancellation. Solo never creates or writes the selected path.
+    #[napi]
+    pub fn select_save_path(
+        &self,
+        options_json: String,
+    ) -> Result<AsyncTask<crate::file_dialogs::SaveDialogTask>> {
+        #[cfg(target_os = "macos")]
+        {
+            if !*self.initialized.lock().unwrap() {
+                return Err(Error::from_reason(
+                    "Renderer is not initialized. Call init() first.",
+                ));
+            }
+            let options = crate::file_dialogs::parse_save_options(&options_json)?;
+            let lease = crate::file_dialogs::DialogLease::acquire(self.file_dialog_state.clone())?;
+            let receiver = update_window(move |_view, _window, cx| {
+                cx.prompt_for_new_path(
+                    &options.initial_directory,
+                    options.suggested_name.as_deref(),
+                )
+            })?;
+            return Ok(crate::file_dialogs::SaveDialogTask::new(receiver, lease));
+        }
+        #[cfg(not(target_os = "macos"))]
+        {
+            let _ = options_json;
+            Err(Error::from_reason(
+                "File dialogs are supported only on macOS",
             ))
         }
     }

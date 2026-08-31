@@ -245,6 +245,10 @@ export type DebugFrameOverlayMode = "hidden" | "minimal" | "full"
 /// reconciler. Implemented by the real napi SoloRenderer and by TestRenderer
 /// (which delegates to native TestSoloRenderer for tests).
 export interface NativeRenderer {
+  /** Show the native file-open dialog. Resolves null only when cancelled. */
+  selectFiles?(optionsJson: string): Promise<string[] | null>
+  /** Show the native save-destination dialog. Resolves null only when cancelled. */
+  selectSavePath?(optionsJson: string): Promise<string | null>
   /** Replace/drop the native appearance observer and return its current snapshot. */
   setSystemAppearanceSubscription?(token: string | null): string
   /** Replace the application command descriptors atomically (native capability). */

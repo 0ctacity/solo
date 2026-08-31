@@ -111,6 +111,7 @@ fn ensure_macos_display_available() -> Result<()> {
 pub struct TestSoloRenderer {
     tree: Arc<Mutex<RetainedTree>>,
     events: Arc<Mutex<Vec<EventPayload>>>,
+    file_dialog_state: Arc<Mutex<crate::file_dialogs::DialogState>>,
     /// Same handle SoloView paints against, so tests can assert on the live
     /// selection after simulating a drag.
     selection: crate::text::SharedSelection,
@@ -176,6 +177,7 @@ impl TestSoloRenderer {
         Ok(Self {
             tree,
             events,
+            file_dialog_state: Arc::new(Mutex::new(Default::default())),
             selection,
         })
     }
@@ -194,6 +196,41 @@ impl TestSoloRenderer {
                 crate::application_commands::replace_application_commands(commands, callback, cx)
             })
         })
+    }
+
+    #[napi]
+    pub fn select_files(
+        &self,
+        options_json: String,
+    ) -> Result<AsyncTask<crate::file_dialogs::OpenDialogTask>> {
+        let options = crate::file_dialogs::parse_open_options(&options_json)?;
+        let lease = crate::file_dialogs::DialogLease::acquire(self.file_dialog_state.clone())?;
+        let receiver = with_test_state(|cx, window, _view| {
+            cx.update_window(window, |_, _window, app| {
+                app.prompt_for_paths(options.to_path_prompt_options())
+            })
+            .map_err(|error| Error::from_reason(error.to_string()))
+        })?;
+        Ok(crate::file_dialogs::OpenDialogTask::new(receiver, lease))
+    }
+
+    #[napi]
+    pub fn select_save_path(
+        &self,
+        options_json: String,
+    ) -> Result<AsyncTask<crate::file_dialogs::SaveDialogTask>> {
+        let options = crate::file_dialogs::parse_save_options(&options_json)?;
+        let lease = crate::file_dialogs::DialogLease::acquire(self.file_dialog_state.clone())?;
+        let receiver = with_test_state(|cx, window, _view| {
+            cx.update_window(window, |_, _window, app| {
+                app.prompt_for_new_path(
+                    &options.initial_directory,
+                    options.suggested_name.as_deref(),
+                )
+            })
+            .map_err(|error| Error::from_reason(error.to_string()))
+        })?;
+        Ok(crate::file_dialogs::SaveDialogTask::new(receiver, lease))
     }
 
     #[napi]
