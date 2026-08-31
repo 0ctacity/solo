@@ -183,6 +183,20 @@ impl TestSoloRenderer {
     // ── Mutation API (same interface as SoloRenderer) ────────────────
 
     #[napi]
+    pub fn set_application_commands(&self, json: String) -> Result<()> {
+        let commands = crate::application_commands::parse_application_commands(&json)?;
+        let events = self.events.clone();
+        let callback: Option<EventCallback> = Some(Arc::new(move |event| {
+            events.lock().unwrap().push(event);
+        }));
+        with_test_state(|cx, _window, _view| {
+            cx.update(|cx| {
+                crate::application_commands::replace_application_commands(commands, callback, cx)
+            })
+        })
+    }
+
+    #[napi]
     pub fn create_element(&self, id: f64, element_type: String) -> Result<()> {
         let id = to_element_id(id)?;
         self.tree.lock().unwrap().create_element(id, element_type);

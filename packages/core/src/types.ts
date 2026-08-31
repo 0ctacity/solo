@@ -245,6 +245,8 @@ export type DebugFrameOverlayMode = "hidden" | "minimal" | "full"
 /// reconciler. Implemented by the real napi SoloRenderer and by TestRenderer
 /// (which delegates to native TestSoloRenderer for tests).
 export interface NativeRenderer {
+  /** Replace the application command descriptors atomically (native capability). */
+  setApplicationCommands?(json: string): void
   createElement(id: number, elementType: string): void
   destroyElement(id: number): Array<number>
   appendChild(parentId: number, childId: number): void

@@ -572,6 +572,16 @@ impl SoloRenderer {
             }
         };
 
+        // GPUI's default menu validator checks only action types. Solo commands
+        // share one type but have independent enabled states and lifetimes.
+        use gpui::Platform as _;
+        platform.on_validate_app_menu_command(Box::new(|action| {
+            GPUI_APP.with(|app| {
+                app.borrow().as_ref().is_some_and(|app| {
+                    app.update(|cx| crate::application_commands::is_menu_action_available(action, cx))
+                })
+            })
+        }));
         MAC_PLATFORM.with(|stored| {
             *stored.borrow_mut() = Some(platform);
         });
@@ -864,6 +874,33 @@ impl SoloRenderer {
             width: 800.0,
             height: 600.0,
         })
+    }
+
+    /// Replace application commands atomically. macOS only for now.
+    #[napi]
+    pub fn set_application_commands(&self, json: String) -> Result<()> {
+        #[cfg(target_os = "macos")]
+        {
+            let commands = crate::application_commands::parse_application_commands(&json)?;
+            return update_window(move |view, window, cx| {
+                // init transfers callback ownership into SoloView and clears
+                // the constructor slot. Reuse the live view's callback.
+                crate::application_commands::replace_application_commands(
+                    commands,
+                    view.event_callback.clone(),
+                    cx,
+                )?;
+                window.refresh();
+                Ok(())
+            })?;
+        }
+        #[cfg(not(target_os = "macos"))]
+        {
+            let _ = json;
+            Err(Error::from_reason(
+                "Application commands are supported only on macOS",
+            ))
+        }
     }
 
     /// `"hidden"` | `"minimal"` | `"full"`. Paints into the scene after layout.
