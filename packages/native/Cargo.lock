@@ -5284,6 +5284,7 @@ dependencies = [
  "tree-sitter-typescript",
  "tree-sitter-yaml",
  "unicode-segmentation",
+ "url",
 ]
 
 [[package]]

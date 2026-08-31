@@ -3,6 +3,7 @@
 mod automation;
 mod application_commands;
 mod custom_elements;
+mod desktop;
 mod diff;
 mod element_tree;
 #[cfg(target_os = "macos")]
