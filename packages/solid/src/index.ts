@@ -2,6 +2,8 @@
 
 export { render } from "./root.js"
 export type { Root, RenderOptions, FrameLoop } from "./root.js"
+export { registerApplicationCommand } from "./commands.js"
+export type { ApplicationCommand } from "./commands.js"
 export { View, Text, Button } from "./components.js"
 export type { ViewProps, TextProps, ButtonProps } from "./components.js"
 export {

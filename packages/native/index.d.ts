@@ -57,6 +57,8 @@ export declare class SoloRenderer {
   /** Whether JavaScript must drive the native event loop with tick(). */
   requiresTick(): boolean
   getWindowSize(): WindowSize
+  /** Replace application commands atomically. macOS only for now. */
+  setApplicationCommands(json: string): void
   /** `"hidden"` | `"minimal"` | `"full"`. Paints into the scene after layout. */
   setDebugFrameOverlay(mode: string): string
   /** Hidden → minimal → full → hidden. */

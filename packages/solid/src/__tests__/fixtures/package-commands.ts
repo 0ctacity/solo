@@ -1,0 +1,38 @@
+// Build a real standalone .app for both regression automation and manual UI QA.
+import { execFileSync } from "node:child_process"
+import { chmodSync, mkdirSync, mkdtempSync, symlinkSync, writeFileSync } from "node:fs"
+import { tmpdir } from "node:os"
+import { dirname, join, resolve } from "node:path"
+import { fileURLToPath } from "node:url"
+import { build } from "vite"
+import { solidUniversal } from "../../vite.js"
+
+const root = resolve(dirname(fileURLToPath(import.meta.url)), "../../..")
+// CI runs Solid tests before its package build. Build the public package here
+// so this fixture verifies the same exports that a consuming app bundles.
+execFileSync("bun", ["run", "build"], { cwd: root, stdio: "inherit" })
+const output = mkdtempSync(join(tmpdir(), "solo-commands-"))
+const bundle = join(output, "Solo Commands.app")
+const executable = join(bundle, "Contents", "MacOS", "SoloCommands")
+mkdirSync(dirname(executable), { recursive: true })
+mkdirSync(join(output, "node_modules", "@solo"), { recursive: true })
+symlinkSync(root, join(output, "node_modules", "@solo", "solid"), "dir")
+await build({
+  root, configFile: false, plugins: [solidUniversal()],
+  ssr: { noExternal: true },
+  build: { ssr: "src/__tests__/fixtures/application-commands.tsx", outDir: join(output, "js"), target: "node20" },
+})
+execFileSync("bun", ["build", join(output, "js", "application-commands.js"), "--compile", "--outfile", executable], { cwd: root, stdio: "inherit" })
+chmodSync(executable, 0o755)
+writeFileSync(join(bundle, "Contents", "Info.plist"), `<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "https://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+<key>CFBundleExecutable</key><string>SoloCommands</string>
+<key>CFBundleIdentifier</key><string>dev.solo.commands-test</string>
+<key>CFBundleName</key><string>Solo Commands</string>
+<key>CFBundlePackageType</key><string>APPL</string>
+<key>CFBundleVersion</key><string>1</string>
+<key>NSHighResolutionCapable</key><true/>
+</dict></plist>`)
+execFileSync("/usr/bin/codesign", ["--force", "--deep", "--sign", "-", bundle], { stdio: "inherit" })
+console.log(`commands-executable:${executable}`)
