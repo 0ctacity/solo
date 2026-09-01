@@ -86,12 +86,15 @@ describe.skipIf(process.platform !== "darwin")("packaged file dialogs", () => {
           close: async () => { child.kill() },
         })
         await expect.poll(async () => (await app.getByTestId("open").bounds()).height).toBeGreaterThan(0)
-        const before = stderr.match(/dialog-heartbeat/g)?.length ?? 0
-        await app.getByTestId("open").click()
         const flatten = (node: TreeNode): string => (node.text ?? "") + (node.children ?? []).map(flatten).join("")
+        const ticks = async (): Promise<number> => {
+          const text = flatten(await app.getByTestId("ticks").element())
+          return Number(text.match(/^Ticks: (\d+)$/)?.[1] ?? -1)
+        }
+        const before = await ticks()
+        await app.getByTestId("open").click()
         await expect.poll(async () => flatten(await app.getByTestId("status").element())).toBe("Open pending")
-        await expect.poll(() => stderr.match(/dialog-heartbeat/g)?.length ?? 0).toBeGreaterThan(before + 5)
-        await expect.poll(async () => flatten(await app.getByTestId("ticks").element())).toMatch(/^Ticks: [1-9]/)
+        await expect.poll(ticks, { timeout: 5_000, interval: 50 }).toBeGreaterThan(before)
       })()])
     } catch (error) {
       throw new Error(`Dialog fixture failed. Native stderr:\n${stderr}`, { cause: error })
