@@ -33,11 +33,10 @@ describe("Solid runtime dependency contract", () => {
     expect(solidManifest.dependencies?.["@solidjs/universal"]).toBe(
       "2.0.0-rc.4",
     )
-    // RC.2 is the newest release of the legacy compiler. The compiler/plugin
-    // migration is intentionally tracked separately from this runtime bump.
-    expect(solidManifest.dependencies?.["babel-preset-solid"]).toBe(
-      "2.0.0-rc.2",
+    expect(solidManifest.dependencies?.["@solidjs/babel-plugin"]).toBe(
+      "2.0.0-rc.4",
     )
+    expect(solidManifest.dependencies?.["babel-preset-solid"]).toBeUndefined()
   })
 
   it("resolves one RC.4 runtime and signals package in bun.lock", () => {
@@ -59,6 +58,10 @@ describe("Solid runtime dependency contract", () => {
     expect(signalsEntries[0]).toBe(
       '"@solidjs/signals": ["@solidjs/signals@2.0.0-rc.4"',
     )
+    expect(lock).toMatch(
+      /"@solidjs\/babel-plugin": \["@solidjs\/babel-plugin@2\.0\.0-rc\.4"/,
+    )
+    expect(lock).not.toMatch(/"babel-preset-solid": \[/)
     expect(lock).not.toMatch(
       /"(?:solid-js|@solidjs\/signals)": \["(?:solid-js|@solidjs\/signals)@2\.0\.0-rc\.[123]"/,
     )

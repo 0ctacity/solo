@@ -30,7 +30,7 @@ render(() => <Counter />, { title: "Counter", width: 480, height: 320 })
 ```
 TypeScript / TSX
       ↓
-    Solid          ← custom renderer (babel-preset-solid, universal mode)
+    Solid          ← custom renderer (@solidjs/babel-plugin, universal mode)
       ↓
 @solo/core        ← private mutation kernel: types, batching, events
       ↓
