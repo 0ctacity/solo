@@ -1,0 +1,66 @@
+import { readFileSync } from "node:fs"
+import { describe, expect, it } from "vitest"
+
+type PackageManifest = {
+  dependencies?: Record<string, string>
+}
+
+const repositoryRoot = new URL("../../../../", import.meta.url)
+
+function readJson<T>(relativePath: string): T {
+  return JSON.parse(
+    readFileSync(new URL(relativePath, repositoryRoot), "utf8"),
+  ) as T
+}
+
+describe("Solid runtime dependency contract", () => {
+  it("pins the runtime stack to the supported RC versions", () => {
+    const packagePaths = [
+      "packages/solid/package.json",
+      "examples/solid-counter/package.json",
+      "examples/tasks/package.json",
+      "examples/webview-preview/package.json",
+    ]
+
+    for (const packagePath of packagePaths) {
+      const manifest = readJson<PackageManifest>(packagePath)
+      expect(manifest.dependencies?.["solid-js"], packagePath).toBe(
+        "2.0.0-rc.4",
+      )
+    }
+
+    const solidManifest = readJson<PackageManifest>("packages/solid/package.json")
+    expect(solidManifest.dependencies?.["@solidjs/universal"]).toBe(
+      "2.0.0-rc.4",
+    )
+    // RC.2 is the newest release of the legacy compiler. The compiler/plugin
+    // migration is intentionally tracked separately from this runtime bump.
+    expect(solidManifest.dependencies?.["babel-preset-solid"]).toBe(
+      "2.0.0-rc.2",
+    )
+  })
+
+  it("resolves one RC.4 runtime and signals package in bun.lock", () => {
+    // bun.lock is JSON5-like (it contains trailing commas), so keep this
+    // contract independent of a parser dependency and inspect package records.
+    const lock = readFileSync(new URL("bun.lock", repositoryRoot), "utf8")
+    const solidRuntimeEntries = lock.match(
+      /"solid-js": \["solid-js@[^\"]+"/g,
+    ) ?? []
+    const signalsEntries = lock.match(
+      /"@solidjs\/signals": \["@solidjs\/signals@[^\"]+"/g,
+    ) ?? []
+
+    expect(solidRuntimeEntries).toHaveLength(1)
+    expect(signalsEntries).toHaveLength(1)
+    expect(solidRuntimeEntries[0]).toBe(
+      '"solid-js": ["solid-js@2.0.0-rc.4"',
+    )
+    expect(signalsEntries[0]).toBe(
+      '"@solidjs/signals": ["@solidjs/signals@2.0.0-rc.4"',
+    )
+    expect(lock).not.toMatch(
+      /"(?:solid-js|@solidjs\/signals)": \["(?:solid-js|@solidjs\/signals)@2\.0\.0-rc\.[123]"/,
+    )
+  })
+})

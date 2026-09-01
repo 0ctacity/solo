@@ -10,7 +10,7 @@
   },
   "dependencies": {
     "@solo/solid": "workspace:^",
-    "solid-js": "^2.0.0-rc.1"
+    "solid-js": "2.0.0-rc.4"
   },
   "devDependencies": {
     "vite": "^7.0.0",
