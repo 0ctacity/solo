@@ -6,7 +6,6 @@ function App() {
   const [status, setStatus] = createSignal("Ready")
   const timer = setInterval(() => {
     setTicks((value) => value + 1)
-    console.error("dialog-heartbeat")
   }, 25)
   onCleanup(() => clearInterval(timer))
   const open = () => {
