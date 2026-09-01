@@ -19,6 +19,12 @@ import { mount, resetIdCounter } from "./runtime.js"
 
 export interface Root {
   unmount: () => void
+  /** Reopen a closed background-app window, or activate the existing one. */
+  showWindow: () => void
+  /** Close the current window without necessarily quitting a background app. */
+  closeWindow: () => void
+  /** Explicitly terminate the native application. */
+  quitApplication: () => void
 }
 
 export type { FrameLoop }
@@ -101,6 +107,18 @@ export function render(code: () => SolidElement, options: RenderOptions = {}): R
       disposeTree()
       disposeTree = () => {}
       slot.root = undefined
+    },
+    showWindow: () => {
+      if (!host.showWindow) throw new Error("This renderer does not support showing windows")
+      host.showWindow()
+    },
+    closeWindow: () => {
+      if (!host.closeWindow) throw new Error("This renderer does not support closing windows")
+      host.closeWindow()
+    },
+    quitApplication: () => {
+      if (!host.quitApplication) throw new Error("This renderer does not support quitting applications")
+      host.quitApplication()
     },
   }
 

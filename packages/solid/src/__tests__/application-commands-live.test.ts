@@ -31,7 +31,7 @@ describe.skipIf(process.platform !== "darwin")("packaged application commands", 
         let count = 0
         for (const target of ["focus-target", "native-input", "native-textarea"]) {
           // Focus handlers are installed during paint, not retained-tree creation.
-          await expect.poll(async () => (await app.getByTestId(target).bounds()).height).toBeGreaterThan(0)
+          await expect.poll(async () => (await app.getByTestId(target).bounds()).height, { timeout: 5_000 }).toBeGreaterThan(0)
           await app.getByTestId(target).press("cmd-r")
           await expect.poll(() => text("count")).toBe(`Refresh: ${++count}`)
         }
@@ -63,6 +63,80 @@ describe.skipIf(process.platform !== "darwin")("packaged application commands", 
   }, 60_000)
 })
 
+describe.skipIf(process.platform !== "darwin")("packaged background lifecycle", () => {
+  it("keeps timers alive across repeated close/reopen cycles and quits explicitly", async () => {
+    const packager = fileURLToPath(new URL("./fixtures/package-commands.ts", import.meta.url))
+    const { stdout } = await promisify(execFile)("bun", [packager, "background-lifecycle"], { timeout: 30_000 })
+    const executable = stdout.match(/^commands-executable:(.+)$/m)?.[1]
+    expect(executable).toBeTruthy()
+    const child = spawn(executable!, [], { stdio: ["pipe", "pipe", "pipe"] })
+    let stderr = ""
+    child.stderr.on("data", (chunk) => { stderr += chunk })
+    const watchdog = setTimeout(() => child.kill("SIGKILL"), 20_000)
+    const exit = new Promise<{ code: number | null; signal: NodeJS.Signals | null }>((resolve, reject) => {
+      child.once("error", reject)
+      child.once("exit", (code, signal) => resolve({ code, signal }))
+    })
+    try {
+      const app = await connectStdio({
+        write: (chunk) => { child.stdin.write(chunk) },
+        feed: (listener) => { child.stdout.on("data", (chunk) => listener(String(chunk))) },
+        close: async () => { child.kill() },
+      })
+      const flatten = (node: TreeNode): string => (node.text ?? "") + (node.children ?? []).map(flatten).join("")
+      const ticks = async (): Promise<number> => Number(flatten(await app.getByTestId("ticks").element()).match(/\d+/)?.[0] ?? -1)
+      let previous = await ticks()
+      for (let cycle = 0; cycle < 2; cycle += 1) {
+        await expect.poll(async () => (await app.getByTestId("close").bounds()).height, { timeout: 5_000 }).toBeGreaterThan(0)
+        const marker = stderr.length
+        await app.getByTestId("close").click()
+        await expect.poll(() => stderr.slice(marker), { timeout: 5_000 }).toContain("background:timer-progressed")
+        await expect.poll(() => stderr.slice(marker), { timeout: 5_000 }).toContain("background:window-reopened")
+        await expect.poll(ticks, { timeout: 5_000 }).toBeGreaterThan(previous)
+        previous = await ticks()
+      }
+      await app.getByTestId("quit").click()
+      await expect(exit).resolves.toEqual({ code: 0, signal: null })
+    } catch (error) {
+      throw new Error(`Background lifecycle fixture failed. Native stderr:\n${stderr}`, { cause: error })
+    } finally {
+      clearTimeout(watchdog)
+      child.kill("SIGKILL")
+    }
+  }, 60_000)
+
+  it("preserves default last-window-close termination", async () => {
+    const packager = fileURLToPath(new URL("./fixtures/package-commands.ts", import.meta.url))
+    const { stdout } = await promisify(execFile)("bun", [packager, "background-lifecycle"], { timeout: 30_000 })
+    const executable = stdout.match(/^commands-executable:(.+)$/m)?.[1]
+    expect(executable).toBeTruthy()
+    const child = spawn(executable!, [], { env: { ...process.env, SOLO_BACKGROUND: "0" }, stdio: ["pipe", "pipe", "pipe"] })
+    let stderr = ""
+    child.stderr.on("data", (chunk) => { stderr += chunk })
+    const exit = new Promise<{ code: number | null; signal: NodeJS.Signals | null }>((resolve, reject) => {
+      child.once("error", reject)
+      child.once("exit", (code, signal) => resolve({ code, signal }))
+    })
+    const watchdog = setTimeout(() => child.kill("SIGKILL"), 10_000)
+    try {
+      const app = await connectStdio({
+        write: (chunk) => { child.stdin.write(chunk) },
+        feed: (listener) => { child.stdout.on("data", (chunk) => listener(String(chunk))) },
+        close: async () => { child.kill() },
+      })
+      await expect.poll(async () => (await app.getByTestId("close").bounds()).height, { timeout: 5_000 }).toBeGreaterThan(0)
+      await app.getByTestId("close").click()
+      const result = await exit
+      if (result.code !== 0 || result.signal !== null) {
+        throw new Error(`Default lifecycle fixture exited unexpectedly: ${result.code ?? result.signal}\n${stderr}`)
+      }
+    } finally {
+      clearTimeout(watchdog)
+      child.kill("SIGKILL")
+    }
+  }, 60_000)
+})
+
 // Keep packaged fixtures in one test file: they build the same public dist.
 describe.skipIf(process.platform !== "darwin")("packaged file dialogs", () => {
   it("keeps JavaScript and automation responsive while a native dialog is open", async () => {
@@ -85,7 +159,7 @@ describe.skipIf(process.platform !== "darwin")("packaged file dialogs", () => {
           feed: (listener) => { child.stdout.on("data", (chunk) => listener(String(chunk))) },
           close: async () => { child.kill() },
         })
-        await expect.poll(async () => (await app.getByTestId("open").bounds()).height).toBeGreaterThan(0)
+        await expect.poll(async () => (await app.getByTestId("open").bounds()).height, { timeout: 5_000 }).toBeGreaterThan(0)
         const flatten = (node: TreeNode): string => (node.text ?? "") + (node.children ?? []).map(flatten).join("")
         const ticks = async (): Promise<number> => {
           const text = flatten(await app.getByTestId("ticks").element())
@@ -132,6 +206,7 @@ describe.skipIf(process.platform !== "darwin")("packaged system appearance", () 
         const initial = (await text("system")).slice("System: ".length)
         expect(await text("effective")).toBe(`Effective: ${initial}`)
         for (const choice of ["dark", "light", "follow"]) {
+          await expect.poll(async () => (await app.getByTestId(choice).bounds()).height, { timeout: 5_000 }).toBeGreaterThan(0)
           await app.getByTestId(choice).click()
           await expect.poll(() => text("effective")).toBe(`Effective: ${choice === "follow" ? initial : choice}`)
           expect(await text("preference")).toBe(`Preference: ${choice === "follow" ? "system" : choice}`)
@@ -170,7 +245,7 @@ describe.skipIf(process.platform !== "darwin")("packaged desktop actions", () =>
           feed: (listener) => { child.stdout.on("data", (chunk) => listener(String(chunk))) },
           close: async () => { child.kill() },
         })
-        await expect.poll(async () => (await app.getByTestId("invalid").bounds()).height).toBeGreaterThan(0)
+        await expect.poll(async () => (await app.getByTestId("invalid").bounds()).height, { timeout: 5_000 }).toBeGreaterThan(0)
         await app.getByTestId("invalid").click()
         const flatten = (node: TreeNode): string => (node.text ?? "") + (node.children ?? []).map(flatten).join("")
         await expect.poll(async () => flatten(await app.getByTestId("status").element())).toContain("absolute HTTP/HTTPS URL")

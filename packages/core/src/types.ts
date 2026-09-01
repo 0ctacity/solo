@@ -287,6 +287,9 @@ export interface NativeRenderer {
   clearSelection?(): void
 
   // ── Window API ─────────────────────────────────────────────────
+  showWindow?(): void
+  closeWindow?(): void
+  quitApplication?(): void
   getWindowSize?(): { width: number; height: number }
   setWindowTitle?(title: string): void
   setDebugFrameOverlay?(mode: DebugFrameOverlayMode): string

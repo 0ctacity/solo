@@ -56,6 +56,12 @@ export declare class SoloRenderer {
   isInitialized(): boolean
   /** Whether JavaScript must drive the native event loop with tick(). */
   requiresTick(): boolean
+  /** Reopen a closed background window or activate the existing window. */
+  showWindow(): void
+  /** Close the current macOS window. Background applications keep running. */
+  closeWindow(): void
+  /** Explicitly terminate the application, including background apps. */
+  quitApplication(): void
   getWindowSize(): WindowSize
   /** Replace application commands atomically. macOS only for now. */
   setApplicationCommands(json: string): void
@@ -234,6 +240,12 @@ export interface EventPayload {
   modifiers?: EventModifiers
 }
 
+export interface MenuBarOptions {
+  /** Absolute path to a template image displayed in the macOS menu bar. */
+  iconPath: string
+  tooltip?: string
+}
+
 /**
  * Ask macOS to open an absolute HTTP/HTTPS URL in its default browser.
  * Success means the OS accepted the request, not that the page loaded.
@@ -259,6 +271,11 @@ export interface WindowOptions {
   windowBackground?: string
   trafficLightX?: number
   trafficLightY?: number
+  /**
+   * Keep the application alive after its window closes and install a macOS
+   * status item with built-in Open and Quit actions.
+   */
+  menuBar?: MenuBarOptions
 }
 
 export interface WindowSize {

@@ -9,8 +9,8 @@ import { solidUniversal } from "../../vite.js"
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "../../..")
 const fixture = process.argv[2] ?? "application-commands"
-if (!["application-commands", "desktop", "system-appearance", "file-dialogs"].includes(fixture)) throw new Error("Unknown app fixture")
-const name = fixture === "desktop" ? "Desktop" : fixture === "system-appearance" ? "Appearance" : fixture === "file-dialogs" ? "Dialogs" : "Commands"
+if (!["application-commands", "desktop", "system-appearance", "file-dialogs", "background-lifecycle"].includes(fixture)) throw new Error("Unknown app fixture")
+const name = fixture === "desktop" ? "Desktop" : fixture === "system-appearance" ? "Appearance" : fixture === "file-dialogs" ? "Dialogs" : fixture === "background-lifecycle" ? "Background" : "Commands"
 // CI runs Solid tests before its package build. Build the public package here
 // so this fixture verifies the same exports that a consuming app bundles.
 execFileSync("bun", ["run", "build"], { cwd: root, stdio: "inherit" })
@@ -18,6 +18,11 @@ const output = mkdtempSync(join(tmpdir(), "solo-commands-"))
 const bundle = join(output, `Solo ${name}.app`)
 const executable = join(bundle, "Contents", "MacOS", `Solo${name}`)
 mkdirSync(dirname(executable), { recursive: true })
+if (fixture === "background-lifecycle") {
+  const resources = join(bundle, "Contents", "Resources")
+  mkdirSync(resources, { recursive: true })
+  writeFileSync(join(resources, "menu.png"), Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=", "base64"))
+}
 mkdirSync(join(output, "node_modules", "@solo"), { recursive: true })
 symlinkSync(root, join(output, "node_modules", "@solo", "solid"), "dir")
 await build({
