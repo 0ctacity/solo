@@ -130,6 +130,62 @@ mod system_appearance_tests {
     }
 }
 
+#[cfg(test)]
+mod application_lifecycle_tests {
+    use super::*;
+
+    #[test]
+    fn menu_bar_apps_require_explicit_quit() {
+        let ordinary = WindowOptions::default();
+        assert_eq!(quit_mode_for_options(&ordinary), gpui::QuitMode::LastWindowClosed);
+
+        let background = WindowOptions {
+            menu_bar: Some(MenuBarOptions {
+                icon_path: "/tmp/solo-menu-icon.png".into(),
+                tooltip: Some("Solo".into()),
+            }),
+            ..WindowOptions::default()
+        };
+        assert_eq!(quit_mode_for_options(&background), gpui::QuitMode::Explicit);
+    }
+
+    #[test]
+    fn menu_bar_icon_path_must_be_absolute() {
+        let relative = MenuBarOptions {
+            icon_path: "assets/icon.png".into(),
+            tooltip: None,
+        };
+        assert!(validate_menu_bar_options(&relative)
+            .unwrap_err()
+            .to_string()
+            .contains("absolute"));
+
+        let absolute = MenuBarOptions {
+            icon_path: "/Applications/Newsprint.app/Contents/Resources/menu.png".into(),
+            tooltip: None,
+        };
+        validate_menu_bar_options(&absolute).unwrap();
+    }
+}
+
+#[cfg(target_os = "macos")]
+#[derive(Clone)]
+struct MacWindowConfig {
+    options: WindowOptions,
+    tree: Arc<Mutex<RetainedTree>>,
+    callback: Option<EventCallback>,
+    selection: SharedSelection,
+}
+
+#[cfg(target_os = "macos")]
+struct MacApplicationState {
+    window: MacWindowConfig,
+    menu_bar: Option<crate::menu_bar::MenuBar>,
+    subscriptions: Vec<gpui::Subscription>,
+    appearance_token: Option<String>,
+    last_appearance: String,
+}
+
 thread_local! {
     #[cfg(target_os = "macos")]
     static MAC_PLATFORM: RefCell<Option<Rc<gpui_macos::MacPlatform>>> = const { RefCell::new(None) };
@@ -137,6 +193,8 @@ thread_local! {
     static GPUI_APP: RefCell<Option<gpui::ApplicationHandle>> = const { RefCell::new(None) };
     #[cfg(target_os = "macos")]
     static GPUI_WINDOW: RefCell<Option<gpui::WindowHandle<SoloView>>> = const { RefCell::new(None) };
+    #[cfg(target_os = "macos")]
+    static MAC_APPLICATION: RefCell<Option<MacApplicationState>> = const { RefCell::new(None) };
     /// Shared scroll handles — SoloView writes here during render(),
     /// platform-local handlers read from here for programmatic scroll control.
     /// ScrollHandle is Rc<RefCell<...>> so its methods (set_offset, offset,
@@ -147,6 +205,102 @@ thread_local! {
     /// TODO: Scope by renderer/window ID when multi-window support is added.
     static SCROLL_HANDLES: RefCell<HashMap<u64, gpui::ScrollHandle>> = RefCell::new(HashMap::new());
     static VIRTUAL_LIST_STATES: RefCell<HashMap<u64, gpui::ListState>> = RefCell::new(HashMap::new());
+}
+
+#[cfg(target_os = "macos")]
+fn open_macos_window(cx: &mut gpui::App) -> Result<gpui::WindowHandle<SoloView>> {
+    let config = MAC_APPLICATION
+        .with(|state| state.borrow().as_ref().map(|state| state.window.clone()))
+        .ok_or_else(|| Error::from_reason("GPUI application lifecycle is not initialized"))?;
+    let width = config.options.width.unwrap_or(800.0);
+    let height = config.options.height.unwrap_or(600.0);
+    let title = config
+        .options
+        .title
+        .clone()
+        .unwrap_or_else(|| "Solo".to_string());
+    let bounds = gpui::Bounds::centered(
+        None,
+        gpui::size(gpui::px(width as f32), gpui::px(height as f32)),
+        cx,
+    );
+    let window_options = config.options.clone();
+    let tree = config.tree;
+    let callback = config.callback;
+    let selection = config.selection;
+    let window = cx
+        .open_window(
+            to_gpui_window_options(&window_options, bounds),
+            |_window, cx| {
+                cx.new(|_| SoloView::new(tree, callback, title, selection))
+            },
+        )
+        .map_err(|error| Error::from_reason(format!("Failed to open the GPUI window: {error}")))?;
+    GPUI_WINDOW.with(|stored| *stored.borrow_mut() = Some(window));
+
+    let token = MAC_APPLICATION.with(|state| {
+        state
+            .borrow()
+            .as_ref()
+            .and_then(|state| state.appearance_token.clone())
+    });
+    if token.is_some() {
+        let appearance = window
+            .update(cx, move |view, window, cx| {
+                view.set_system_appearance_subscription(token, window, cx)
+            })
+            .map_err(|error| Error::from_reason(error.to_string()))??;
+        MAC_APPLICATION.with(|state| {
+            if let Some(state) = state.borrow_mut().as_mut() {
+                state.last_appearance = appearance;
+            }
+        });
+    }
+    Ok(window)
+}
+
+#[cfg(target_os = "macos")]
+fn show_macos_window_in_app(cx: &mut gpui::App) -> Result<()> {
+    if let Some(window) = GPUI_WINDOW.with(|stored| *stored.borrow()) {
+        if window
+            .update(cx, |_view, window, _cx| window.activate_window())
+            .is_ok()
+        {
+            cx.activate(true);
+            return Ok(());
+        }
+        GPUI_WINDOW.with(|stored| stored.borrow_mut().take());
+    }
+
+    let window = open_macos_window(cx)?;
+    window
+        .update(cx, |_view, window, _cx| window.activate_window())
+        .map_err(|error| Error::from_reason(error.to_string()))?;
+    cx.activate(true);
+    Ok(())
+}
+
+#[cfg(target_os = "macos")]
+pub(crate) fn show_macos_window() -> Result<()> {
+    GPUI_APP.with(|app| {
+        let app = app.borrow();
+        let app = app
+            .as_ref()
+            .ok_or_else(|| Error::from_reason("GPUI application is not initialized"))?;
+        app.update(show_macos_window_in_app)
+    })
+}
+
+#[cfg(target_os = "macos")]
+pub(crate) fn quit_macos_application() -> Result<()> {
+    GPUI_APP.with(|app| {
+        let app = app.borrow();
+        let app = app
+            .as_ref()
+            .ok_or_else(|| Error::from_reason("GPUI application is not initialized"))?;
+        app.update(|cx| cx.quit());
+        Ok(())
+    })
 }
 
 pub(crate) fn parse_debug_frame_overlay_mode(mode: &str) -> Result<gpui::DebugFrameOverlayMode> {
@@ -166,6 +320,17 @@ pub(crate) fn debug_frame_overlay_mode_name(mode: gpui::DebugFrameOverlayMode) -
         gpui::DebugFrameOverlayMode::Minimal => "minimal",
         gpui::DebugFrameOverlayMode::Full => "full",
     }
+}
+
+fn record_system_appearance(appearance: &str) {
+    #[cfg(target_os = "macos")]
+    MAC_APPLICATION.with(|state| {
+        if let Some(state) = state.borrow_mut().as_mut() {
+            state.last_appearance = appearance.to_string();
+        }
+    });
+    #[cfg(not(target_os = "macos"))]
+    let _ = appearance;
 }
 
 #[cfg(any(target_os = "windows", target_os = "linux", target_os = "freebsd"))]
@@ -229,6 +394,20 @@ fn update_window_for_input<R>(
 
 #[cfg(target_os = "macos")]
 fn invalidate_window() -> Result<()> {
+    let has_window = GPUI_WINDOW.with(|window| window.borrow().is_some());
+    if !has_window {
+        let background = MAC_APPLICATION.with(|state| {
+            state
+                .borrow()
+                .as_ref()
+                .is_some_and(|state| state.window.options.menu_bar.is_some())
+        });
+        return if background {
+            Ok(())
+        } else {
+            Err(Error::from_reason("GPUI window is not initialized"))
+        };
+    }
     update_window(|_view, window, cx| {
         cx.notify();
         window.refresh();
@@ -538,6 +717,10 @@ impl SoloRenderer {
     fn init_macos(&self, options: Option<WindowOptions>) -> Result<()> {
         let options = options.unwrap_or_default();
 
+        if let Some(menu_bar) = options.menu_bar.as_ref() {
+            validate_menu_bar_options(menu_bar)?;
+        }
+
         {
             let initialized = self.initialized.lock().unwrap();
             if *initialized {
@@ -550,42 +733,35 @@ impl SoloRenderer {
             ));
         }
 
-        let width = options.width.unwrap_or(800.0);
-        let height = options.height.unwrap_or(600.0);
         let title = options.title.clone().unwrap_or_else(|| "Solo".to_string());
-        let window_options = options.clone();
 
         let platform = Rc::new(gpui_macos::MacPlatform::new_embedded());
-
-        let tree = self.tree.clone();
         let callback = self.event_callback_for_view();
-
-        let selection = self.selection.clone();
         let opened_window = Rc::new(RefCell::new(None));
         let startup_error = Rc::new(RefCell::new(None));
         let opened_window_for_app = opened_window.clone();
         let startup_error_for_app = startup_error.clone();
-        // bun/node is not a .app. A Dock icon with no window cannot relaunch.
-        // Last window close quits AppKit; tick() returns false and JS exits.
+        MAC_APPLICATION.with(|state| {
+            *state.borrow_mut() = Some(MacApplicationState {
+                window: MacWindowConfig {
+                    options: options.clone(),
+                    tree: self.tree.clone(),
+                    callback,
+                    selection: self.selection.clone(),
+                },
+                menu_bar: None,
+                subscriptions: Vec::new(),
+                appearance_token: None,
+                last_appearance: "light".to_string(),
+            });
+        });
+
         let app = gpui::Application::with_platform(platform.clone())
-            .with_quit_mode(gpui::QuitMode::LastWindowClosed);
+            .with_quit_mode(quit_mode_for_options(&options));
         let app_handle = app.run_embedded(move |cx: &mut gpui::App| {
             init_key_bindings(cx);
             crate::custom_elements::input::init(cx);
-            let bounds = gpui::Bounds::centered(
-                None,
-                gpui::size(gpui::px(width as f32), gpui::px(height as f32)),
-                cx,
-            );
-
-            match cx.open_window(
-                to_gpui_window_options(&window_options, bounds),
-                |_window, cx| {
-                    cx.new(|_| {
-                        SoloView::new(tree.clone(), callback.clone(), title, selection.clone())
-                    })
-                },
-            ) {
+            match open_macos_window(cx) {
                 Ok(window_handle) => {
                     *opened_window_for_app.borrow_mut() = Some(window_handle);
                     cx.activate(true);
@@ -594,6 +770,38 @@ impl SoloRenderer {
                     *startup_error_for_app.borrow_mut() = Some(error.to_string());
                 }
             }
+
+            let closed = cx.on_window_closed(|_cx, window_id| {
+                let matches_current = GPUI_WINDOW.with(|stored| {
+                    stored.borrow().is_some_and(|window| {
+                        gpui::AnyWindowHandle::from(window).window_id() == window_id
+                    })
+                });
+                if matches_current {
+                    GPUI_WINDOW.with(|stored| stored.borrow_mut().take());
+                    SCROLL_HANDLES.with(|handles| handles.borrow_mut().clear());
+                    VIRTUAL_LIST_STATES.with(|states| states.borrow_mut().clear());
+                    crate::native_view::with_registry(|registry| registry.destroy_all());
+                }
+            });
+            let quitting = cx.on_app_quit(|_cx| {
+                crate::native_view::with_registry(|registry| registry.destroy_all());
+                async {}
+            });
+            MAC_APPLICATION.with(|state| {
+                if let Some(state) = state.borrow_mut().as_mut() {
+                    state.subscriptions.extend([closed, quitting]);
+                    if let Some(menu_options) = state.window.options.menu_bar.as_ref() {
+                        match crate::menu_bar::MenuBar::new(menu_options, &title) {
+                            Ok(menu_bar) => state.menu_bar = Some(menu_bar),
+                            Err(error) => {
+                                *startup_error_for_app.borrow_mut() = Some(error.to_string());
+                                cx.quit();
+                            }
+                        }
+                    }
+                }
+            });
         });
 
         let startup_result = match startup_error.borrow_mut().take() {
@@ -608,6 +816,7 @@ impl SoloRenderer {
         let window_handle = match startup_result {
             Ok(window_handle) => window_handle,
             Err(error) => {
+                MAC_APPLICATION.with(|state| state.borrow_mut().take());
                 app_handle.update(|cx| cx.quit());
                 if crate::macos_event_pump::pump_events(&platform)? {
                     MAC_PLATFORM.with(|stored| {
@@ -639,7 +848,6 @@ impl SoloRenderer {
         });
 
         *self.initialized.lock().unwrap() = true;
-        self.event_callback.lock().unwrap().take();
         Ok(())
     }
 
@@ -885,8 +1093,24 @@ impl SoloRenderer {
                     .as_ref()
                     .map(|platform| crate::macos_event_pump::pump_events(platform))
                     .unwrap_or(Ok(false))
-            });
-            return running;
+            })?;
+            if !running {
+                GPUI_WINDOW.with(|window| window.borrow_mut().take());
+                GPUI_APP.with(|app| app.borrow_mut().take());
+                MAC_APPLICATION.with(|state| {
+                    if let Some(mut state) = state.borrow_mut().take() {
+                        if let Some(menu_bar) = state.menu_bar.take() {
+                            // A menu target may have initiated Quit. Release it only
+                            // after the event pump returns, never from inside its own
+                            // Objective-C action method.
+                            menu_bar.remove();
+                        }
+                    }
+                });
+                MAC_PLATFORM.with(|platform| platform.borrow_mut().take());
+                *self.initialized.lock().unwrap() = false;
+            }
+            Ok(running)
         }
 
         #[cfg(any(target_os = "windows", target_os = "linux", target_os = "freebsd"))]
@@ -912,6 +1136,54 @@ impl SoloRenderer {
     #[napi]
     pub fn requires_tick(&self) -> bool {
         cfg!(target_os = "macos")
+    }
+
+    /// Reopen a closed background window or activate the existing window.
+    #[napi]
+    pub fn show_window(&self) -> Result<()> {
+        #[cfg(target_os = "macos")]
+        return show_macos_window();
+
+        #[cfg(not(target_os = "macos"))]
+        Err(Error::from_reason(
+            "Background window lifecycle is supported only on macOS",
+        ))
+    }
+
+    /// Close the current macOS window. Background applications keep running.
+    #[napi]
+    pub fn close_window(&self) -> Result<()> {
+        #[cfg(target_os = "macos")]
+        return GPUI_APP.with(|app| {
+            let app = app.borrow();
+            let app = app
+                .as_ref()
+                .ok_or_else(|| Error::from_reason("GPUI application is not initialized"))?;
+            let window = GPUI_WINDOW
+                .with(|window| *window.borrow())
+                .ok_or_else(|| Error::from_reason("GPUI window is not open"))?;
+            app.update(|cx| {
+                cx.update_window(window.into(), |_view, window, _cx| window.remove_window())
+                    .map_err(|error| Error::from_reason(error.to_string()))
+            })
+        });
+
+        #[cfg(not(target_os = "macos"))]
+        Err(Error::from_reason(
+            "Background window lifecycle is supported only on macOS",
+        ))
+    }
+
+    /// Explicitly terminate the application, including background apps.
+    #[napi]
+    pub fn quit_application(&self) -> Result<()> {
+        #[cfg(target_os = "macos")]
+        return quit_macos_application();
+
+        #[cfg(not(target_os = "macos"))]
+        Err(Error::from_reason(
+            "Explicit application quit is supported only on macOS",
+        ))
     }
 
     #[napi]
@@ -1021,9 +1293,35 @@ impl SoloRenderer {
     pub fn set_system_appearance_subscription(&self, token: Option<String>) -> Result<String> {
         #[cfg(target_os = "macos")]
         {
-            return update_window(move |view, window, cx| {
+            if token.as_deref().is_some_and(str::is_empty) {
+                return Err(Error::from_reason(
+                    "System appearance subscription token must not be empty",
+                ));
+            }
+            MAC_APPLICATION.with(|state| {
+                if let Some(state) = state.borrow_mut().as_mut() {
+                    state.appearance_token = token.clone();
+                }
+            });
+            if GPUI_WINDOW.with(|window| window.borrow().is_none()) {
+                return MAC_APPLICATION
+                    .with(|state| {
+                        state
+                            .borrow()
+                            .as_ref()
+                            .map(|state| state.last_appearance.clone())
+                    })
+                    .ok_or_else(|| Error::from_reason("GPUI application is not initialized"));
+            }
+            let appearance = update_window(move |view, window, cx| {
                 view.set_system_appearance_subscription(token, window, cx)
-            })?;
+            })??;
+            MAC_APPLICATION.with(|state| {
+                if let Some(state) = state.borrow_mut().as_mut() {
+                    state.last_appearance = appearance.clone();
+                }
+            });
+            Ok(appearance)
         }
         #[cfg(not(target_os = "macos"))]
         {
@@ -1784,6 +2082,11 @@ impl SoloView {
                         &token,
                         window.appearance(),
                     );
+                    let appearance = crate::system_appearance::normalized_appearance(
+                        window.appearance(),
+                    )
+                    .to_string();
+                    record_system_appearance(&appearance);
                     emit_event_full(
                         &view.event_callback,
                         0,
@@ -3633,6 +3936,34 @@ pub struct WindowOptions {
     pub window_background: Option<String>,
     pub traffic_light_x: Option<f64>,
     pub traffic_light_y: Option<f64>,
+    /// Keep the application alive after its window closes and install a macOS
+    /// status item with built-in Open and Quit actions.
+    pub menu_bar: Option<MenuBarOptions>,
+}
+
+#[derive(Debug, Clone)]
+#[napi(object)]
+pub struct MenuBarOptions {
+    /// Absolute path to a template image displayed in the macOS menu bar.
+    pub icon_path: String,
+    pub tooltip: Option<String>,
+}
+
+fn quit_mode_for_options(options: &WindowOptions) -> gpui::QuitMode {
+    if options.menu_bar.is_some() {
+        gpui::QuitMode::Explicit
+    } else {
+        gpui::QuitMode::LastWindowClosed
+    }
+}
+
+fn validate_menu_bar_options(options: &MenuBarOptions) -> Result<()> {
+    if !std::path::Path::new(&options.icon_path).is_absolute() {
+        return Err(Error::from_reason(
+            "Menu-bar iconPath must be an absolute file path",
+        ));
+    }
+    Ok(())
 }
 
 impl Default for WindowOptions {
@@ -3650,6 +3981,7 @@ impl Default for WindowOptions {
             window_background: None,
             traffic_light_x: None,
             traffic_light_y: None,
+            menu_bar: None,
         }
     }
 }

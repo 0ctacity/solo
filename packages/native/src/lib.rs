@@ -9,6 +9,8 @@ mod element_tree;
 mod file_dialogs;
 #[cfg(target_os = "macos")]
 mod macos_event_pump;
+#[cfg(target_os = "macos")]
+mod menu_bar;
 mod markdown;
 mod motion;
 mod native_view;
