@@ -7,7 +7,7 @@ over [GPUI](https://github.com/zed-industries/zed/tree/main/crates/gpui)
 ```
 TypeScript / TSX
       ↓
-    Solid          ← custom renderer (babel-preset-solid, universal mode)
+    Solid          ← custom renderer (@solidjs/babel-plugin, universal mode)
       ↓
 @solo/core        ← private, framework-free mutation kernel
       ↓
@@ -31,7 +31,8 @@ TypeScript / TSX
   client/protocol. Application code must not import this package directly;
   it remains framework-free as an internal architectural boundary.
 - **`packages/solid`** (`@solo/solid`): Solid custom renderer. `src/runtime.ts`
-  is the `moduleName` target for babel-preset-solid (`generate: "universal"`);
+  is the `moduleName` target for `@solidjs/babel-plugin`
+  (`generate: "universal"`);
   every op maps onto a native mutation. Ships `View`/`Text`/`Button`
   primitives, window `render()`, `@solo/solid/automation`,
   `@solo/solid/testing`, `@solo/solid/vite`, and a types-only jsx-runtime.

@@ -3,16 +3,18 @@ import type { ParserPlugin } from "@babel/parser"
 import { createRequire } from "node:module"
 import { dirname } from "node:path"
 import type { Plugin } from "vite"
+import { universalPatchCompiler } from "./universal-patch.js"
 
 // Solid's package exports select the server build under Node. Native Solo apps
 // need the reactive client builds even though Vite produces an SSR bundle.
 const req = createRequire(import.meta.url)
 const solidJsDist = dirname(req.resolve("solid-js"))
 const nativeBridge = "@solo/solid/_native"
-// Resolved from @solo/solid, which declares the preset as a dependency. Babel
-// resolves a bare preset name against the file being compiled, so passing the
-// string would make every consumer depend on hoisting.
-const babelPresetSolid = req.resolve("babel-preset-solid")
+// Resolved from @solo/solid, which declares the compiler plugin as a
+// dependency. Babel resolves a bare plugin name against the file being
+// compiled, so passing the string would make every consumer depend on
+// hoisting.
+const babelPluginSolid = req.resolve("@solidjs/babel-plugin")
 const signalsDist = dirname(
   createRequire(req.resolve("solid-js")).resolve("@solidjs/signals"),
 )
@@ -49,11 +51,16 @@ export function solidUniversal(): Plugin {
       const out = transformSync(code, {
         filename: path,
         parserOpts: { plugins: parserPlugins },
-        presets: [
+        plugins: [
           [
-            babelPresetSolid,
-            { generate: "universal", moduleName: "@solo/solid/runtime" },
+            babelPluginSolid,
+            {
+              generate: "universal",
+              moduleName: "@solo/solid/runtime",
+              patchDriver: true,
+            },
           ],
+          universalPatchCompiler,
         ],
         sourceMaps: true,
       })

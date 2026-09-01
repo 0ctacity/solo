@@ -1,6 +1,6 @@
 /// Solid 2 runtime for Solo.
 ///
-/// This is the `moduleName` target for babel-preset-solid compiled with
+/// This is the `moduleName` target for @solidjs/babel-plugin compiled with
 /// `{ generate: "universal", moduleName: "@solo/solid/runtime" }`. The
 /// compiler emits calls against the functions re-exported here, and each one
 /// maps onto the native mutation protocol (createElement / appendChild /
@@ -11,7 +11,7 @@
 /// produces a single `setText` op in the next batch, never a tree rebuild.
 
 import { createRenderer } from "@solidjs/universal"
-import { flush } from "solid-js"
+import { flush, getOwner, runWithOwner } from "solid-js"
 import { For, Show, Switch, Match, Repeat, Reveal, Loading } from "solid-js"
 import type { Element as SolidElement } from "solid-js"
 import type { EventPayload } from "@solo/native"
@@ -22,6 +22,12 @@ import {
   wrapWithBatching,
 } from "@solo/core"
 import type { NativeRenderer, StyleDesc } from "@solo/core"
+import {
+  driveList,
+  patchDriver,
+  rowProof,
+  type PatchListAccessor,
+} from "./list-driver.js"
 
 // ── Node bookkeeping ─────────────────────────────────────────────────
 
@@ -35,6 +41,7 @@ export interface SoloSolidNode {
 }
 
 let idCounter = 0
+let createdNodeCollector: SoloSolidNode[] | null = null
 
 /** Reset element IDs so tests are deterministic. */
 export function resetIdCounter(): void {
@@ -159,6 +166,7 @@ export function createElement(tag: string, staticProps?: Record<string, unknown>
     children: [],
   }
   r.createElement(node.id, node.type)
+  createdNodeCollector?.push(node)
   // Solid 2 passes static (non-reactive) props at creation instead of via
   // setProp calls afterwards.
   if (staticProps) applyProps(node, staticProps)
@@ -175,6 +183,7 @@ export function createTextNode(value: string | number): SoloSolidNode {
     children: [],
   }
   r.createElement(node.id, "text")
+  createdNodeCollector?.push(node)
   // Solid 2 passes numbers straight through; native wants strings.
   r.setText(node.id, String(value))
   return node
@@ -228,6 +237,30 @@ function removeNode(parent: SoloSolidNode, node: SoloSolidNode): void {
   node.parent = null
   r.removeChild(parent.id, node.id)
   detached.add(node)
+}
+
+function discardNode(node: SoloSolidNode): void {
+  detached.delete(node)
+  getSoloRenderer().destroyElement(node.id)
+}
+
+function buildRowNode(build: () => SoloSolidNode): SoloSolidNode {
+  const previous = createdNodeCollector
+  const created: SoloSolidNode[] = []
+  createdNodeCollector = created
+  try {
+    const node = build()
+    previous?.push(...created)
+    return node
+  } catch (error) {
+    const createdSet = new Set(created)
+    for (const node of created) {
+      if (node.parent == null || !createdSet.has(node.parent)) discardNode(node)
+    }
+    throw error
+  } finally {
+    createdNodeCollector = previous
+  }
 }
 
 /** Destroy every node still detached at commit time. */
@@ -295,10 +328,39 @@ export const universal = createRenderer<SoloSolidNode>({
   getNextSibling,
 })
 
-// Re-exported under the exact names babel-preset-solid emits. Compiled JSX
+// Re-exported under the exact names @solidjs/babel-plugin emits. Compiled JSX
 // does `import { createElement, insertNode, ... } from "@solo/solid/runtime"`
 // — these must be named exports of this module.
-export const insert = universal.insert
+export { patchDriver, rowProof }
+
+export function insert<T>(
+  parent: SoloSolidNode,
+  accessor: (() => T) | T,
+  marker?: SoloSolidNode | null,
+  initial?: unknown,
+): SoloSolidNode {
+  if (typeof accessor === "function") {
+    const list = accessor as PatchListAccessor<unknown, SoloSolidNode>
+    if (list.$ll !== undefined) {
+      const owner = getOwner()
+      const handled = driveList(
+        parent,
+        list,
+        marker ?? undefined,
+        () => runWithOwner(owner, () => void universal.insert(parent, accessor, marker, initial)),
+        {
+          build: buildRowNode,
+          insert: insertNode,
+          remove: removeNode,
+          discard: discardNode,
+          parent: getParentNode,
+        },
+      )
+      if (handled) return parent
+    }
+  }
+  return universal.insert(parent, accessor, marker, initial)
+}
 export const spread = universal.spread
 export const setProp = universal.setProp
 export const effect = universal.effect

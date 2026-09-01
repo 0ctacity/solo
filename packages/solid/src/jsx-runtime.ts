@@ -1,6 +1,6 @@
 /// JSX types for @solo/solid.
 ///
-/// babel-preset-solid compiles user JSX to universal runtime calls and never
+/// @solidjs/babel-plugin compiles user JSX to universal runtime calls and never
 /// imports this module at runtime — it exists so TypeScript can type-check
 /// Solid JSX with `"jsxImportSource": "@solo/solid"` (see the
 /// solid-js/universal README). Types are deliberately permissive: the native
@@ -62,13 +62,13 @@ export namespace JSX {
   }
 }
 
-// Never called at runtime — babel-preset-solid emits universal ops instead.
+// Never called at runtime — @solidjs/babel-plugin emits universal ops instead.
 export function jsx(_type: string, _props: Record<string, unknown>, _key?: string): JSX.Element {
-  throw new Error("jsx-runtime is types-only; compile JSX with babel-preset-solid")
+  throw new Error("jsx-runtime is types-only; compile JSX with @solidjs/babel-plugin")
 }
 
 export const jsxs = jsx
 
 export function Fragment(_props: { children?: unknown }): JSX.Element {
-  throw new Error("jsx-runtime is types-only; compile JSX with babel-preset-solid")
+  throw new Error("jsx-runtime is types-only; compile JSX with @solidjs/babel-plugin")
 }
