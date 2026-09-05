@@ -82,8 +82,18 @@ pub struct EventPayload {
     /// Element-defined string payload.
     /// Populated for: `<diff>` toggleFile (the file path), showMore (the
     /// hidden line count), and lineClick (the line text); `<markdown>`
-    /// linkClick (the URL).
+    /// linkClick (the URL); `<webview>` navigation requests (the URL).
     pub value: Option<String>,
+
+    /// Stable ID for a pending `<webview>` navigation decision.
+    pub navigation_id: Option<f64>,
+    /// URL for a `<webview>` navigation request.
+    pub navigation_url: Option<String>,
+    /// Whether a navigation only changes the current document fragment and is
+    /// therefore allowed immediately.
+    pub is_same_document: Option<bool>,
+    /// Whether the request targets a new window. Solo cancels these.
+    pub is_new_window: Option<bool>,
 
     /// Line number on the pre-change side. Populated for: `<diff>` lineClick.
     pub old_line: Option<f64>,
@@ -115,6 +125,10 @@ impl Default for EventPayload {
             touch_phase: None,
             hovered: None,
             value: None,
+            navigation_id: None,
+            navigation_url: None,
+            is_same_document: None,
+            is_new_window: None,
             old_line: None,
             new_line: None,
             modifiers: None,

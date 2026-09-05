@@ -7,30 +7,72 @@
 //! GPUI owns layout; WebKit owns rendering and input. Nothing here is driven
 //! from JavaScript.
 //!
+use std::cell::RefCell;
+use std::collections::HashMap;
 use std::ffi::c_void;
+use std::rc::Rc;
 
+use block2::RcBlock;
+use futures::channel::oneshot;
+use napi::bindgen_prelude::{AsyncTask, Error, Result, Task};
+use napi_derive::napi;
 use objc2::rc::Retained;
-use objc2::runtime::ProtocolObject;
-use objc2::{define_class, msg_send, DefinedClass, MainThreadMarker, MainThreadOnly};
+use objc2::runtime::{AnyObject, ProtocolObject};
+use objc2::{DefinedClass, MainThreadMarker, MainThreadOnly, define_class, msg_send};
 use objc2_app_kit::NSView;
 use objc2_core_foundation::{CGPoint, CGRect, CGSize};
-use objc2_foundation::{NSError, NSObject, NSObjectProtocol, NSString, NSURLRequest, NSURL};
-use objc2_web_kit::{WKNavigation, WKNavigationDelegate, WKWebView, WKWebViewConfiguration};
+use objc2_foundation::{NSError, NSObject, NSObjectProtocol, NSString, NSURL, NSURLRequest};
+use objc2_web_kit::{
+    WKContentWorld, WKNavigation, WKNavigationAction, WKNavigationActionPolicy,
+    WKNavigationDelegate, WKNavigationType, WKWebView, WKWebViewConfiguration,
+};
 
 use super::{NativeViewFrame, NativeViewInstance};
-use crate::renderer::{emit_event_full, EventCallback};
+use crate::renderer::{EventCallback, emit_event_full};
 
 // ── Event names ──────────────────────────────────────────────────────
 
 /// Must match the native event types in `EVENT_PROPS`
 /// (`packages/core/src/events.ts`).
 const EVENT_NAVIGATION: &str = "navigation";
+const EVENT_NAVIGATION_REQUEST: &str = "navigationRequest";
 const EVENT_LOAD: &str = "load";
 const EVENT_LOAD_ERROR: &str = "loadError";
 
 /// Property keys accepted by [`MacWebView::set_content`].
 const PROP_URL: &str = "url";
+const PROP_HTML: &str = "html";
+const PROP_BASE_URL: &str = "baseUrl";
 const PROP_USER_AGENT: &str = "userAgent";
+
+pub(crate) type EvaluateReceiver = oneshot::Receiver<anyhow::Result<String>>;
+pub(crate) type ReadyReceiver = oneshot::Receiver<anyhow::Result<u64>>;
+type EvaluateSender = oneshot::Sender<anyhow::Result<String>>;
+type ReadySender = oneshot::Sender<anyhow::Result<u64>>;
+type DecisionHandler = RcBlock<dyn Fn(WKNavigationActionPolicy)>;
+
+#[derive(Default)]
+struct NavigationState {
+    intercept: bool,
+    controlled_load: bool,
+    next_id: u64,
+    pending: HashMap<u64, DecisionHandler>,
+}
+
+type EvaluationState = Rc<RefCell<HashMap<u64, EvaluateSender>>>;
+
+#[derive(Default)]
+struct ReadinessState {
+    generation: u64,
+    ready: bool,
+    /// Identity of the navigation whose completion can make this generation
+    /// ready. Keeping this identity prevents a late callback for the previous
+    /// document from masquerading as the current document's load.
+    expected_navigation: Option<usize>,
+    waiters: HashMap<u64, Vec<ReadySender>>,
+}
+
+type SharedReadiness = Rc<RefCell<ReadinessState>>;
 
 // ── Navigation delegate ──────────────────────────────────────────────
 
@@ -42,6 +84,9 @@ const PROP_USER_AGENT: &str = "userAgent";
 struct DelegateIvars {
     element_id: u64,
     callback: Option<EventCallback>,
+    navigation: RefCell<NavigationState>,
+    evaluations: EvaluationState,
+    readiness: SharedReadiness,
 }
 
 define_class!(
@@ -65,6 +110,90 @@ define_class!(
     unsafe impl NSObjectProtocol for SoloNavigationDelegate {}
 
     unsafe impl WKNavigationDelegate for SoloNavigationDelegate {
+        /// Intercept main-frame navigation before WebKit commits it. When the
+        /// public Solid listener is absent, preserve WKWebView's normal allow
+        /// behavior; with a listener, keep the decision handler alive until
+        /// the controller explicitly allows or cancels it.
+        #[unsafe(method(webView:decidePolicyForNavigationAction:decisionHandler:))]
+        unsafe fn webView_decidePolicyForNavigationAction_decisionHandler(
+            &self,
+            web_view: &WKWebView,
+            navigation_action: &WKNavigationAction,
+            decision_handler: &block2::DynBlock<dyn Fn(WKNavigationActionPolicy)>,
+        ) {
+            let ivars = self.ivars();
+            let requested_url = action_url(navigation_action);
+            let current = current_url(web_view);
+            let same_document = requested_url
+                .as_deref()
+                .zip(current.as_deref())
+                .is_some_and(|(requested, current)| {
+                    without_fragment(requested) == without_fragment(current)
+                });
+            let new_window = navigation_action.targetFrame().is_none();
+            let navigation_type = navigation_action.navigationType();
+            let (intercept, controlled_load, navigation_id) = {
+                let mut state = ivars.navigation.borrow_mut();
+                let intercept = state.intercept;
+                let controlled_load = state.controlled_load;
+                state.controlled_load = false;
+                let navigation_id = state.next_id;
+                state.next_id = state.next_id.wrapping_add(1).max(1);
+                if intercept
+                    && navigation_type == WKNavigationType::LinkActivated
+                    && !same_document
+                    && !new_window
+                {
+                    state.pending.insert(navigation_id, decision_handler.copy());
+                }
+                (intercept, controlled_load, navigation_id)
+            };
+
+            if new_window {
+                emit_navigation_request(
+                    &ivars.callback,
+                    ivars.element_id,
+                    navigation_id,
+                    requested_url,
+                    false,
+                    true,
+                );
+                // Solo deliberately does not create a second native window.
+                // The Solid handler can open the URL externally.
+                decision_handler.call((WKNavigationActionPolicy::Cancel,));
+            } else if same_document {
+                emit_navigation_request(
+                    &ivars.callback,
+                    ivars.element_id,
+                    navigation_id,
+                    requested_url,
+                    true,
+                    false,
+                );
+                decision_handler.call((WKNavigationActionPolicy::Allow,));
+            } else if controlled_load {
+                decision_handler.call((WKNavigationActionPolicy::Allow,));
+            } else if navigation_type != WKNavigationType::LinkActivated {
+                // Redirects and programmatic location changes are allowed
+                // without waiting on application code. This keeps a source
+                // load from deadlocking while user article links remain
+                // cancellable through onNavigationRequest.
+                begin_document(&ivars.evaluations, &ivars.readiness);
+                decision_handler.call((WKNavigationActionPolicy::Allow,));
+            } else if intercept {
+                emit_navigation_request(
+                    &ivars.callback,
+                    ivars.element_id,
+                    navigation_id,
+                    requested_url,
+                    false,
+                    false,
+                );
+            } else {
+                decision_handler.call((WKNavigationActionPolicy::Allow,));
+            }
+        }
+
         /// A navigation started — the earliest meaningful signal, and the one
         /// that covers link clicks and redirects rather than just first loads.
         #[unsafe(method(webView:didStartProvisionalNavigation:))]
@@ -90,12 +219,14 @@ define_class!(
             _navigation: Option<&WKNavigation>,
         ) {
             let ivars = self.ivars();
-            emit(
-                &ivars.callback,
-                ivars.element_id,
-                EVENT_LOAD,
-                current_url(web_view),
-            );
+            if mark_ready(&ivars.readiness, _navigation) {
+                emit(
+                    &ivars.callback,
+                    ivars.element_id,
+                    EVENT_LOAD,
+                    current_url(web_view),
+                );
+            }
         }
 
         /// A committed navigation failed part-way through.
@@ -107,12 +238,18 @@ define_class!(
             error: &NSError,
         ) {
             let ivars = self.ivars();
-            emit(
-                &ivars.callback,
-                ivars.element_id,
-                EVENT_LOAD_ERROR,
-                failure_url(web_view, error),
-            );
+            if mark_failed(
+                &ivars.readiness,
+                _navigation,
+                &error.localizedDescription().to_string(),
+            ) {
+                emit(
+                    &ivars.callback,
+                    ivars.element_id,
+                    EVENT_LOAD_ERROR,
+                    failure_url(web_view, error),
+                );
+            }
         }
 
         /// The navigation failed before committing: bad host, no network, or
@@ -125,12 +262,18 @@ define_class!(
             error: &NSError,
         ) {
             let ivars = self.ivars();
-            emit(
-                &ivars.callback,
-                ivars.element_id,
-                EVENT_LOAD_ERROR,
-                failure_url(web_view, error),
-            );
+            if mark_failed(
+                &ivars.readiness,
+                _navigation,
+                &error.localizedDescription().to_string(),
+            ) {
+                emit(
+                    &ivars.callback,
+                    ivars.element_id,
+                    EVENT_LOAD_ERROR,
+                    failure_url(web_view, error),
+                );
+            }
         }
     }
 );
@@ -140,10 +283,15 @@ impl SoloNavigationDelegate {
         mtm: MainThreadMarker,
         element_id: u64,
         callback: Option<EventCallback>,
+        evaluations: EvaluationState,
+        readiness: SharedReadiness,
     ) -> Retained<Self> {
         let this = Self::alloc(mtm).set_ivars(DelegateIvars {
             element_id,
             callback,
+            navigation: RefCell::new(NavigationState::default()),
+            evaluations,
+            readiness,
         });
         unsafe { msg_send![super(this), init] }
     }
@@ -165,6 +313,118 @@ fn current_url(web_view: &WKWebView) -> Option<String> {
     Some(absolute.to_string())
 }
 
+fn action_url(action: &WKNavigationAction) -> Option<String> {
+    let request = unsafe { action.request() };
+    let url = request.URL()?;
+    let absolute = url.absoluteString()?;
+    Some(absolute.to_string())
+}
+
+fn without_fragment(url: &str) -> &str {
+    url.split_once('#').map_or(url, |(without, _)| without)
+}
+
+/// Start a new document generation and settle work that targeted the old one.
+/// The native callbacks are asynchronous, so dropping a sender is not enough:
+/// every caller must receive an explicit error and late WebKit callbacks must
+/// find no sender to complete.
+fn begin_document(evaluations: &EvaluationState, readiness: &SharedReadiness) {
+    for (_, sender) in evaluations.borrow_mut().drain() {
+        let _ = sender.send(Err(anyhow::anyhow!("WebView document changed")));
+    }
+
+    let waiters = {
+        let mut state = readiness.borrow_mut();
+        state.generation = state.generation.wrapping_add(1).max(1);
+        state.ready = false;
+        state.expected_navigation = None;
+        std::mem::take(&mut state.waiters)
+    };
+    for (_, senders) in waiters {
+        for sender in senders {
+            let _ = sender.send(Err(anyhow::anyhow!("WebView document changed")));
+        }
+    }
+}
+
+fn navigation_key(navigation: Option<&WKNavigation>) -> Option<usize> {
+    navigation.map(|navigation| std::ptr::from_ref(navigation) as usize)
+}
+
+/// Record the navigation returned by a controlled `loadRequest` or
+/// `loadHTMLString` call. This is the only callback allowed to complete that
+/// generation; an older navigation can still report completion after a source
+/// update.
+fn expect_navigation(readiness: &SharedReadiness, navigation: Option<&WKNavigation>) {
+    let mut state = readiness.borrow_mut();
+    if !state.ready {
+        state.expected_navigation = navigation_key(navigation);
+    }
+}
+
+fn navigation_matches(state: &mut ReadinessState, navigation: Option<&WKNavigation>) -> bool {
+    if state.ready {
+        return false;
+    }
+    let key = navigation_key(navigation);
+    match state.expected_navigation {
+        Some(expected) => key == Some(expected),
+        None => {
+            // User-approved links and WebKit redirects do not give us a
+            // WKNavigation at the policy callback. The first start/finish
+            // callback after that decision establishes the identity.
+            state.expected_navigation = key;
+            true
+        }
+    }
+}
+
+fn mark_ready(readiness: &SharedReadiness, navigation: Option<&WKNavigation>) -> bool {
+    let (generation, waiters) = {
+        let mut state = readiness.borrow_mut();
+        if !navigation_matches(&mut state, navigation) {
+            return false;
+        }
+        state.ready = true;
+        state.expected_navigation = None;
+        (state.generation, std::mem::take(&mut state.waiters))
+    };
+    for (_, senders) in waiters {
+        for sender in senders {
+            let _ = sender.send(Ok(generation));
+        }
+    }
+    true
+}
+
+fn mark_failed(
+    readiness: &SharedReadiness,
+    navigation: Option<&WKNavigation>,
+    reason: &str,
+) -> bool {
+    let waiters = {
+        let mut state = readiness.borrow_mut();
+        if !navigation_matches(&mut state, navigation) {
+            return false;
+        }
+        state.expected_navigation = None;
+        std::mem::take(&mut state.waiters)
+    };
+    for (_, senders) in waiters {
+        for sender in senders {
+            let _ = sender.send(Err(anyhow::anyhow!(reason.to_string())));
+        }
+    }
+    true
+}
+
+fn cancel_pending_navigation(navigation: &RefCell<NavigationState>) {
+    let pending = std::mem::take(&mut navigation.borrow_mut().pending);
+    for handler in pending.into_values() {
+        handler.call((WKNavigationActionPolicy::Cancel,));
+    }
+}
+
 fn emit(
     callback: &Option<EventCallback>,
     element_id: u64,
@@ -175,6 +435,28 @@ fn emit(
     emit_event_full(callback, element_id, event_type, move |payload| {
         payload.value = Some(value);
     });
+}
+
+fn emit_navigation_request(
+    callback: &Option<EventCallback>,
+    element_id: u64,
+    navigation_id: u64,
+    value: Option<String>,
+    same_document: bool,
+    new_window: bool,
+) {
+    emit_event_full(
+        callback,
+        element_id,
+        EVENT_NAVIGATION_REQUEST,
+        move |payload| {
+            payload.navigation_id = Some(navigation_id as f64);
+            payload.value = value.clone();
+            payload.navigation_url = value;
+            payload.is_same_document = Some(same_document);
+            payload.is_new_window = Some(new_window);
+        },
+    );
 }
 
 // ── The native view ──────────────────────────────────────────────────
@@ -193,10 +475,15 @@ pub struct MacWebView {
     /// Last URL requested. `set_prop` runs every frame, so without this a
     /// single `url` write would reload the page on every render.
     last_url: Option<String>,
+    last_html: Option<String>,
+    last_base_url: Option<String>,
     last_user_agent: Option<String>,
     /// Whether the view is currently shown. Driven by frame area: a zero-area
     /// view keeps a web process alive for nothing, so it is hidden instead.
     visible: bool,
+    evaluations: EvaluationState,
+    readiness: SharedReadiness,
+    next_evaluation_id: u64,
 }
 
 impl MacWebView {
@@ -212,8 +499,16 @@ impl MacWebView {
             delegate: None,
             last_frame: None,
             last_url: None,
+            last_html: None,
+            last_base_url: None,
             last_user_agent: None,
             visible: true,
+            evaluations: Rc::new(RefCell::new(HashMap::new())),
+            readiness: Rc::new(RefCell::new(ReadinessState {
+                ready: true,
+                ..ReadinessState::default()
+            })),
+            next_evaluation_id: 1,
         }
     }
 
@@ -222,6 +517,7 @@ impl MacWebView {
     /// A reactive `url` change must never rebuild the native view.
     fn load_url(&self, url: &str) {
         let Some(ns_url) = NSURL::URLWithString(&NSString::from_str(url)) else {
+            mark_failed(&self.readiness, None, &format!("{url} — invalid URL"));
             emit(
                 &self.callback,
                 self.element_id,
@@ -234,7 +530,115 @@ impl MacWebView {
             return;
         };
         let request = NSURLRequest::requestWithURL(&ns_url);
-        unsafe { view.loadRequest(&request) };
+        self.mark_controlled_load();
+        let navigation = unsafe { view.loadRequest(&request) };
+        expect_navigation(&self.readiness, navigation.as_deref());
+    }
+
+    fn load_html(&self, html: &str, base_url: Option<&str>) {
+        let base = match base_url {
+            Some(value) => match NSURL::URLWithString(&NSString::from_str(value)) {
+                Some(url) => Some(url),
+                None => {
+                    mark_failed(
+                        &self.readiness,
+                        None,
+                        &format!("{value} — invalid base URL"),
+                    );
+                    emit(
+                        &self.callback,
+                        self.element_id,
+                        EVENT_LOAD_ERROR,
+                        Some(format!("{value} — invalid base URL")),
+                    );
+                    return;
+                }
+            },
+            None => None,
+        };
+        let Some(view) = self.view.as_ref() else {
+            return;
+        };
+        self.mark_controlled_load();
+        let navigation =
+            unsafe { view.loadHTMLString_baseURL(&NSString::from_str(html), base.as_deref()) };
+        expect_navigation(&self.readiness, navigation.as_deref());
+    }
+
+    fn begin_document(&mut self) {
+        if let Some(delegate) = self.delegate.as_ref() {
+            cancel_pending_navigation(&delegate.ivars().navigation);
+        }
+        begin_document(&self.evaluations, &self.readiness);
+    }
+
+    fn mark_controlled_load(&self) {
+        if let Some(delegate) = self.delegate.as_ref() {
+            delegate.ivars().navigation.borrow_mut().controlled_load = true;
+        }
+    }
+
+    fn wait_for_ready_inner(&mut self) -> anyhow::Result<ReadyReceiver> {
+        let _view = self
+            .view
+            .as_ref()
+            .ok_or_else(|| anyhow::anyhow!("WebView is not mounted"))?;
+        let (sender, receiver) = oneshot::channel();
+        let (generation, ready) = {
+            let state = self.readiness.borrow();
+            (state.generation, state.ready)
+        };
+        if ready {
+            let _ = sender.send(Ok(generation));
+        } else {
+            self.readiness
+                .borrow_mut()
+                .waiters
+                .entry(generation)
+                .or_default()
+                .push(sender);
+        }
+        Ok(receiver)
+    }
+
+    fn evaluate_javascript_inner(&mut self, script: &str) -> anyhow::Result<EvaluateReceiver> {
+        let view = self
+            .view
+            .as_ref()
+            .ok_or_else(|| anyhow::anyhow!("WebView is not mounted"))?;
+        let (sender, receiver) = oneshot::channel();
+        let evaluation_id = self.next_evaluation_id;
+        self.next_evaluation_id = self.next_evaluation_id.wrapping_add(1).max(1);
+        self.evaluations.borrow_mut().insert(evaluation_id, sender);
+        let evaluations = self.evaluations.clone();
+        let callback = RcBlock::new(move |result: *mut AnyObject, error: *mut NSError| {
+            let response = if !error.is_null() {
+                let error = unsafe { &*error };
+                Err(anyhow::anyhow!(error.localizedDescription().to_string()))
+            } else if result.is_null() {
+                Err(anyhow::anyhow!("WebView JavaScript returned no result"))
+            } else {
+                let value = unsafe { &*(result as *const NSString) };
+                Ok(value.to_string())
+            };
+            if let Some(sender) = evaluations.borrow_mut().remove(&evaluation_id) {
+                let _ = sender.send(response);
+            }
+        });
+        let body = evaluation_script(script);
+        let content_world = unsafe {
+            WKContentWorld::defaultClientWorld(MainThreadMarker::new().expect("main thread"))
+        };
+        unsafe {
+            view.callAsyncJavaScript_arguments_inFrame_inContentWorld_completionHandler(
+                &NSString::from_str(&body),
+                None,
+                None,
+                &content_world,
+                Some(&callback),
+            );
+        }
+        Ok(receiver)
     }
 }
 
@@ -271,7 +675,13 @@ impl NativeViewInstance for MacWebView {
             )
         };
 
-        let delegate = SoloNavigationDelegate::new(mtm, self.element_id, self.callback.clone());
+        let delegate = SoloNavigationDelegate::new(
+            mtm,
+            self.element_id,
+            self.callback.clone(),
+            self.evaluations.clone(),
+            self.readiness.clone(),
+        );
         unsafe {
             view.setNavigationDelegate(Some(ProtocolObject::from_ref(&*delegate)));
         }
@@ -282,8 +692,10 @@ impl NativeViewInstance for MacWebView {
         host.addSubview(&view);
         self.view = Some(view);
 
-        // A URL set before the view existed still has to load.
-        if let Some(url) = self.last_url.clone() {
+        // Content set before the view existed still has to load.
+        if let Some(html) = self.last_html.clone() {
+            self.load_html(&html, self.last_base_url.as_deref());
+        } else if let Some(url) = self.last_url.clone() {
             self.load_url(&url);
         }
     }
@@ -312,12 +724,60 @@ impl NativeViewInstance for MacWebView {
     fn set_content(&mut self, key: &str, value: Option<&str>) {
         match key {
             PROP_URL => {
+                if value.is_some() && self.last_html.is_some() {
+                    emit(
+                        &self.callback,
+                        self.element_id,
+                        EVENT_LOAD_ERROR,
+                        Some("WebView url and html are mutually exclusive".to_string()),
+                    );
+                    return;
+                }
                 if self.last_url.as_deref() == value {
                     return;
                 }
+                self.begin_document();
                 self.last_url = value.map(str::to_string);
                 if let Some(url) = value {
                     self.load_url(url);
+                }
+            }
+            PROP_HTML => {
+                if value.is_some() && self.last_url.is_some() {
+                    emit(
+                        &self.callback,
+                        self.element_id,
+                        EVENT_LOAD_ERROR,
+                        Some("WebView url and html are mutually exclusive".to_string()),
+                    );
+                    return;
+                }
+                if self.last_html.as_deref() == value {
+                    return;
+                }
+                self.begin_document();
+                self.last_html = value.map(str::to_string);
+                if let Some(html) = value {
+                    self.load_html(html, self.last_base_url.as_deref());
+                }
+            }
+            PROP_BASE_URL => {
+                if value.is_some() && self.last_url.is_some() {
+                    emit(
+                        &self.callback,
+                        self.element_id,
+                        EVENT_LOAD_ERROR,
+                        Some("WebView baseUrl requires html and cannot be used with url".to_string()),
+                    );
+                    return;
+                }
+                if self.last_base_url.as_deref() == value {
+                    return;
+                }
+                self.begin_document();
+                self.last_base_url = value.map(str::to_string);
+                if let Some(html) = self.last_html.clone() {
+                    self.load_html(&html, self.last_base_url.as_deref());
                 }
             }
             PROP_USER_AGENT => {
@@ -334,7 +794,105 @@ impl NativeViewInstance for MacWebView {
         }
     }
 
+    fn set_webview_source(
+        &mut self,
+        url: Option<&str>,
+        html: Option<&str>,
+        base_url: Option<&str>,
+    ) {
+        if url.is_some() && html.is_some() {
+            emit(
+                &self.callback,
+                self.element_id,
+                EVENT_LOAD_ERROR,
+                Some("WebView url and html are mutually exclusive".to_string()),
+            );
+            return;
+        }
+        if base_url.is_some() && html.is_none() {
+            emit(
+                &self.callback,
+                self.element_id,
+                EVENT_LOAD_ERROR,
+                Some("WebView baseUrl requires html".to_string()),
+            );
+            return;
+        }
+        if self.last_url.as_deref() == url
+            && self.last_html.as_deref() == html
+            && self.last_base_url.as_deref() == base_url
+        {
+            return;
+        }
+
+        self.begin_document();
+        self.last_url = url.map(str::to_string);
+        self.last_html = html.map(str::to_string);
+        self.last_base_url = base_url.map(str::to_string);
+
+        if let Some(html) = html {
+            self.load_html(html, base_url);
+        } else if let Some(url) = url {
+            self.load_url(url);
+        } else if let Some(view) = self.view.as_ref() {
+            self.mark_controlled_load();
+            let navigation = unsafe { view.loadHTMLString_baseURL(&NSString::new(), None) };
+            expect_navigation(&self.readiness, navigation.as_deref());
+        }
+    }
+
+    #[cfg(target_os = "macos")]
+    fn evaluate_javascript(&mut self, script: &str) -> anyhow::Result<EvaluateReceiver> {
+        self.evaluate_javascript_inner(script)
+    }
+
+    #[cfg(target_os = "macos")]
+    fn wait_for_ready(&mut self) -> anyhow::Result<ReadyReceiver> {
+        self.wait_for_ready_inner()
+    }
+
+    fn set_navigation_interception(&mut self, enabled: bool) {
+        if let Some(delegate) = self.delegate.as_ref() {
+            let navigation = &delegate.ivars().navigation;
+            navigation.borrow_mut().intercept = enabled;
+            if !enabled {
+                cancel_pending_navigation(navigation);
+            }
+        }
+    }
+
+    #[cfg(target_os = "macos")]
+    fn decide_navigation(&mut self, navigation_id: u64, allow: bool) -> bool {
+        let Some(delegate) = self.delegate.as_ref() else {
+            return false;
+        };
+        let handler = delegate
+            .ivars()
+            .navigation
+            .borrow_mut()
+            .pending
+            .remove(&navigation_id);
+        if let Some(handler) = handler {
+            if allow {
+                self.begin_document();
+            }
+            handler.call((if allow {
+                WKNavigationActionPolicy::Allow
+            } else {
+                WKNavigationActionPolicy::Cancel
+            },));
+            true
+        } else {
+            false
+        }
+    }
+
     fn destroy(&mut self) {
+        self.begin_document();
+        mark_failed(&self.readiness, None, "WebView was destroyed");
+        if let Some(delegate) = self.delegate.as_ref() {
+            cancel_pending_navigation(&delegate.ivars().navigation);
+        }
         if let Some(view) = self.view.take() {
             view.removeFromSuperview();
         }
@@ -344,7 +902,89 @@ impl NativeViewInstance for MacWebView {
         self.callback = None;
         self.last_frame = None;
         self.last_url = None;
+        self.last_html = None;
+        self.last_base_url = None;
         self.last_user_agent = None;
+    }
+}
+
+/// Wrap an expression in an async function so Promise results are awaited and
+/// serialize only the documented JSON-compatible value space. Returning the
+/// JSON text (rather than an arbitrary Objective-C object) keeps the napi
+/// boundary deterministic and lets the Solid layer validate it once.
+fn evaluation_script(script: &str) -> String {
+    format!(
+        "const value = await ({script}); if (value === undefined) return \"null\"; const seen = new WeakSet(); return JSON.stringify(value, (_key, item) => {{ if (typeof item === \"number\" && !Number.isFinite(item)) throw new Error(\"unsupported non-finite number\"); if (typeof item === \"undefined\" || typeof item === \"function\" || typeof item === \"symbol\" || typeof item === \"bigint\") throw new Error(\"unsupported JavaScript result\"); if (item !== null && typeof item === \"object\") {{ if (seen.has(item)) throw new Error(\"unsupported cyclic result\"); seen.add(item); }} return item; }});"
+    )
+}
+
+/// Napi task that waits for the main-thread WebKit callback without blocking
+/// the JavaScript thread. Destruction/source changes drain the same channel,
+/// so every evaluation promise settles even when WebKit never calls back.
+pub struct EvaluateJavaScriptTask {
+    receiver: Option<EvaluateReceiver>,
+}
+
+/// Napi task that resolves when the intended WebView document has finished
+/// loading. The generation is returned for diagnostics; Solid only exposes the
+/// readiness promise and guards it against unmount/source changes.
+pub struct WebviewReadyTask {
+    receiver: Option<ReadyReceiver>,
+}
+
+impl WebviewReadyTask {
+    pub(crate) fn new(receiver: ReadyReceiver) -> AsyncTask<Self> {
+        AsyncTask::new(Self {
+            receiver: Some(receiver),
+        })
+    }
+}
+
+#[napi]
+impl Task for WebviewReadyTask {
+    type Output = u64;
+    type JsValue = f64;
+
+    fn compute(&mut self) -> Result<Self::Output> {
+        let receiver = self
+            .receiver
+            .take()
+            .ok_or_else(|| Error::from_reason("WebView readiness task was already consumed"))?;
+        futures::executor::block_on(receiver)
+            .map_err(|_| Error::from_reason("WebView readiness channel closed"))?
+            .map_err(|error| Error::from_reason(format!("WebView failed to become ready: {error}")))
+    }
+
+    fn resolve(&mut self, _env: napi::Env, output: Self::Output) -> Result<Self::JsValue> {
+        Ok(output as f64)
+    }
+}
+
+impl EvaluateJavaScriptTask {
+    pub(crate) fn new(receiver: EvaluateReceiver) -> AsyncTask<Self> {
+        AsyncTask::new(Self {
+            receiver: Some(receiver),
+        })
+    }
+}
+
+#[napi]
+impl Task for EvaluateJavaScriptTask {
+    type Output = String;
+    type JsValue = String;
+
+    fn compute(&mut self) -> Result<Self::Output> {
+        let receiver = self
+            .receiver
+            .take()
+            .ok_or_else(|| Error::from_reason("WebView evaluation task was already consumed"))?;
+        futures::executor::block_on(receiver)
+            .map_err(|_| Error::from_reason("WebView evaluation channel closed"))?
+            .map_err(|error| Error::from_reason(format!("WebView JavaScript failed: {error}")))
+    }
+
+    fn resolve(&mut self, _env: napi::Env, output: Self::Output) -> Result<Self::JsValue> {
+        Ok(output)
     }
 }
 
@@ -388,9 +1028,68 @@ mod tests {
         assert_eq!(events.len(), 1);
         assert_eq!(events[0].element_id, 42.0);
         assert_eq!(events[0].event_type, EVENT_LOAD_ERROR);
-        assert!(events[0]
-            .value
-            .as_deref()
-            .is_some_and(|value| value.contains("https://exa mple.com")));
+        assert!(
+            events[0]
+                .value
+                .as_deref()
+                .is_some_and(|value| value.contains("https://exa mple.com"))
+        );
+    }
+
+    #[test]
+    fn fragment_only_changes_are_same_document() {
+        assert_eq!(
+            without_fragment("https://example.com/article#one"),
+            "https://example.com/article"
+        );
+        assert_eq!(without_fragment("about:blank"), "about:blank");
+    }
+
+    #[test]
+    fn evaluation_wrapper_awaits_and_rejects_unsupported_values() {
+        let source = evaluation_script("Promise.resolve({ answer: 42 })");
+        assert!(source.contains("await (Promise.resolve({ answer: 42 }))"));
+        assert!(source.contains("value === undefined"));
+        assert!(source.contains("Number.isFinite"));
+        assert!(source.contains("unsupported JavaScript result"));
+        assert!(source.contains("unsupported cyclic result"));
+    }
+
+    #[test]
+    fn beginning_a_document_rejects_old_work_and_resets_readiness() {
+        let evaluations: EvaluationState = Rc::new(RefCell::new(HashMap::new()));
+        let readiness: SharedReadiness = Rc::new(RefCell::new(ReadinessState {
+            generation: 3,
+            ready: true,
+            ..ReadinessState::default()
+        }));
+        let (evaluation_sender, evaluation_receiver) = oneshot::channel();
+        evaluations.borrow_mut().insert(1, evaluation_sender);
+        let (ready_sender, ready_receiver) = oneshot::channel();
+        readiness
+            .borrow_mut()
+            .waiters
+            .entry(3)
+            .or_default()
+            .push(ready_sender);
+
+        begin_document(&evaluations, &readiness);
+
+        assert_eq!(readiness.borrow().generation, 4);
+        assert!(!readiness.borrow().ready);
+        assert!(
+            futures::executor::block_on(evaluation_receiver)
+                .unwrap()
+                .unwrap_err()
+                .to_string()
+                .contains("document changed")
+        );
+        assert!(
+            futures::executor::block_on(ready_receiver)
+                .unwrap()
+                .unwrap_err()
+                .to_string()
+                .contains("document changed")
+        );
     }
 }

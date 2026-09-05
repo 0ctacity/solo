@@ -20,6 +20,11 @@ export {
 export type { SoloSolidNode } from "./runtime.js"
 export type { StyleDesc } from "@solo/core"
 export type { EventPayload } from "@solo/native"
+export type {
+  WebviewController,
+  WebviewNavigationRequestEvent,
+  WebviewValue,
+} from "./webview.js"
 
 export {
   createSolidNativeTestRoot,

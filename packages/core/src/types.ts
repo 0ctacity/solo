@@ -245,6 +245,14 @@ export type DebugFrameOverlayMode = "hidden" | "minimal" | "full"
 /// reconciler. Implemented by the real napi SoloRenderer and by TestRenderer
 /// (which delegates to native TestSoloRenderer for tests).
 export interface NativeRenderer {
+  /** Evaluate JavaScript in a mounted WebView and resolve serialized JSON. */
+  evaluateWebviewJavaScript?(elementId: number, script: string): Promise<string>
+  /** Resolve when the intended WebView document has finished loading. */
+  waitWebviewReady?(elementId: number): Promise<number>
+  /** Resolve a native WebView navigation request. */
+  allowWebviewNavigation?(elementId: number, navigationId: number): void
+  /** Cancel a native WebView navigation request. */
+  cancelWebviewNavigation?(elementId: number, navigationId: number): void
   /** Show the native file-open dialog. Resolves null only when cancelled. */
   selectFiles?(optionsJson: string): Promise<string[] | null>
   /** Show the native save-destination dialog. Resolves null only when cancelled. */

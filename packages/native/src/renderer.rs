@@ -1037,6 +1037,90 @@ impl SoloRenderer {
             .map(|v| serde_json::to_string(v).unwrap_or_default()))
     }
 
+    /// Evaluate an expression in a mounted macOS WebView without blocking JS.
+    #[cfg(target_os = "macos")]
+    #[napi(js_name = "evaluateWebviewJavaScript")]
+    pub fn evaluate_webview_javascript(
+        &self,
+        element_id: f64,
+        script: String,
+    ) -> Result<AsyncTask<crate::native_view::webview::EvaluateJavaScriptTask>> {
+        let element_id = to_element_id(element_id)?;
+        if !*self.initialized.lock().unwrap() {
+            return Err(Error::from_reason(
+                "Renderer is not initialized. Call init() first.",
+            ));
+        }
+        let receiver = update_window(|_view, _window, _cx| {
+            crate::native_view::with_registry(|registry| {
+                registry
+                    .evaluate_javascript(element_id, &script)
+                    .map_err(|error| Error::from_reason(error.to_string()))
+            })
+        })??;
+        Ok(crate::native_view::webview::EvaluateJavaScriptTask::new(receiver))
+    }
+
+    /// Resolve when the intended macOS WebView document has finished loading.
+    #[cfg(target_os = "macos")]
+    #[napi]
+    pub fn wait_webview_ready(
+        &self,
+        element_id: f64,
+    ) -> Result<AsyncTask<crate::native_view::webview::WebviewReadyTask>> {
+        let element_id = to_element_id(element_id)?;
+        if !*self.initialized.lock().unwrap() {
+            return Err(Error::from_reason(
+                "Renderer is not initialized. Call init() first.",
+            ));
+        }
+        let receiver = update_window(|_view, _window, _cx| {
+            crate::native_view::with_registry(|registry| {
+                registry
+                    .wait_for_ready(element_id)
+                    .map_err(|error| Error::from_reason(error.to_string()))
+            })
+        })??;
+        Ok(crate::native_view::webview::WebviewReadyTask::new(receiver))
+    }
+
+    /// Resolve a pending native WebView navigation request.
+    #[cfg(target_os = "macos")]
+    #[napi]
+    pub fn allow_webview_navigation(&self, element_id: f64, navigation_id: f64) -> Result<()> {
+        self.decide_webview_navigation(element_id, navigation_id, true)
+    }
+
+    /// Cancel a pending native WebView navigation request.
+    #[cfg(target_os = "macos")]
+    #[napi]
+    pub fn cancel_webview_navigation(&self, element_id: f64, navigation_id: f64) -> Result<()> {
+        self.decide_webview_navigation(element_id, navigation_id, false)
+    }
+
+    #[cfg(target_os = "macos")]
+    fn decide_webview_navigation(
+        &self,
+        element_id: f64,
+        navigation_id: f64,
+        allow: bool,
+    ) -> Result<()> {
+        let element_id = to_element_id(element_id)?;
+        let navigation_id = to_element_id(navigation_id)?;
+        update_window(|_view, _window, _cx| {
+            let resolved = crate::native_view::with_registry(|registry| {
+                registry.decide_navigation(element_id, navigation_id, allow)
+            });
+            if resolved {
+                Ok(())
+            } else {
+                Err(Error::from_reason(format!(
+                    "WebView navigation request {navigation_id} is no longer pending"
+                )))
+            }
+        })?
+    }
+
     /// Signal that a batch of mutations is complete. Triggers re-render.
     #[napi]
     pub fn commit_mutations(&self) -> Result<()> {
