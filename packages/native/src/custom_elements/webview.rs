@@ -47,7 +47,10 @@ fn placeholder_style() -> Style {
 struct WebviewPlaceholder {
     element_id: u64,
     url: Option<String>,
+    html: Option<String>,
+    base_url: Option<String>,
     user_agent: Option<String>,
+    intercept_navigation: bool,
     callback: Option<EventCallback>,
 }
 
@@ -128,15 +131,26 @@ impl Element for WebviewPlaceholder {
 
         let element_id = self.element_id;
         let url = self.url.clone();
+        let html = self.html.clone();
+        let base_url = self.base_url.clone();
         let user_agent = self.user_agent.clone();
+        let intercept_navigation = self.intercept_navigation;
         let callback = self.callback.clone();
 
         crate::native_view::with_registry(|registry| {
             registry.ensure_mounted(element_id, host, || {
-                Box::new(crate::native_view::webview::MacWebView::new(element_id, callback))
+                Box::new(crate::native_view::webview::MacWebView::new(
+                    element_id, callback,
+                ))
             });
             registry.update_frame(element_id, frame);
-            registry.set_content(element_id, "url", url.as_deref());
+            registry.set_navigation_interception(element_id, intercept_navigation);
+            registry.set_webview_source(
+                element_id,
+                url.as_deref(),
+                html.as_deref(),
+                base_url.as_deref(),
+            );
             registry.set_content(element_id, "userAgent", user_agent.as_deref());
         });
     }
@@ -175,6 +189,8 @@ impl IntoElement for WebviewPlaceholder {
 pub struct WebviewElement {
     id: u64,
     url: Option<String>,
+    html: Option<String>,
+    base_url: Option<String>,
     user_agent: Option<String>,
     /// Emitted events carry the element ID, so it is captured at construction.
     callback: Option<EventCallback>,
@@ -185,6 +201,8 @@ impl WebviewElement {
         Self {
             id,
             url: None,
+            html: None,
+            base_url: None,
             user_agent: None,
             callback: None,
         }
@@ -220,7 +238,10 @@ impl CustomElement for WebviewElement {
             .child(WebviewPlaceholder {
                 element_id: self.id,
                 url: self.url.clone(),
+                html: self.html.clone(),
+                base_url: self.base_url.clone(),
                 user_agent: self.user_agent.clone(),
+                intercept_navigation: ctx.events.contains("navigationRequest"),
                 callback: self.callback.clone(),
             })
             .into_any_element()
@@ -236,18 +257,31 @@ impl CustomElement for WebviewElement {
         };
         match key {
             "url" => self.url = as_string(value),
+            "html" => self.html = as_string(value),
+            "baseUrl" => self.base_url = as_string(value),
             "userAgent" => self.user_agent = as_string(value),
             _ => {}
         }
     }
 
     fn supported_props(&self) -> &[&str] {
-        &["url", "userAgent"]
+        &["url", "html", "baseUrl", "userAgent"]
     }
 
     fn get_prop(&self, key: &str) -> Option<serde_json::Value> {
         match key {
-            "url" => self.url.as_ref().map(|u| serde_json::Value::String(u.clone())),
+            "url" => self
+                .url
+                .as_ref()
+                .map(|u| serde_json::Value::String(u.clone())),
+            "html" => self
+                .html
+                .as_ref()
+                .map(|u| serde_json::Value::String(u.clone())),
+            "baseUrl" => self
+                .base_url
+                .as_ref()
+                .map(|u| serde_json::Value::String(u.clone())),
             "userAgent" => self
                 .user_agent
                 .as_ref()
@@ -257,7 +291,7 @@ impl CustomElement for WebviewElement {
     }
 
     fn supported_events(&self) -> &[&str] {
-        &["load", "navigation", "loadError"]
+        &["load", "navigation", "navigationRequest", "loadError"]
     }
 
     fn destroy(&mut self) {

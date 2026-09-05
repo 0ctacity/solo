@@ -344,6 +344,82 @@ impl TestSoloRenderer {
             .map(|v| serde_json::to_string(v).unwrap_or_default()))
     }
 
+    /// Evaluate JavaScript in the mounted WebView through the native bridge.
+    #[napi(js_name = "evaluateWebviewJavaScript")]
+    pub fn evaluate_webview_javascript(
+        &self,
+        element_id: f64,
+        script: String,
+    ) -> Result<AsyncTask<crate::native_view::webview::EvaluateJavaScriptTask>> {
+        let element_id = to_element_id(element_id)?;
+        let receiver = with_test_state(|cx, window, _view| {
+            cx.update_window(window, |_, _window, _app| {
+                crate::native_view::with_registry(|registry| {
+                    registry
+                        .evaluate_javascript(element_id, &script)
+                        .map_err(|error| Error::from_reason(error.to_string()))
+                })
+            })
+            .map_err(|error| Error::from_reason(error.to_string()))?
+        })?;
+        Ok(crate::native_view::webview::EvaluateJavaScriptTask::new(receiver))
+    }
+
+    #[napi]
+    pub fn wait_webview_ready(
+        &self,
+        element_id: f64,
+    ) -> Result<AsyncTask<crate::native_view::webview::WebviewReadyTask>> {
+        let element_id = to_element_id(element_id)?;
+        let receiver = with_test_state(|cx, window, _view| {
+            cx.update_window(window, |_, _window, _app| {
+                crate::native_view::with_registry(|registry| {
+                    registry
+                        .wait_for_ready(element_id)
+                        .map_err(|error| Error::from_reason(error.to_string()))
+                })
+            })
+            .map_err(|error| Error::from_reason(error.to_string()))?
+        })?;
+        Ok(crate::native_view::webview::WebviewReadyTask::new(receiver))
+    }
+
+    #[napi]
+    pub fn allow_webview_navigation(&self, element_id: f64, navigation_id: f64) -> Result<()> {
+        self.decide_webview_navigation(element_id, navigation_id, true)
+    }
+
+    #[napi]
+    pub fn cancel_webview_navigation(&self, element_id: f64, navigation_id: f64) -> Result<()> {
+        self.decide_webview_navigation(element_id, navigation_id, false)
+    }
+
+    fn decide_webview_navigation(
+        &self,
+        element_id: f64,
+        navigation_id: f64,
+        allow: bool,
+    ) -> Result<()> {
+        let element_id = to_element_id(element_id)?;
+        let navigation_id = to_element_id(navigation_id)?;
+        with_test_state(|cx, window, _view| {
+            cx.update_window(window, |_, _window, _app| {
+                let resolved = crate::native_view::with_registry(|registry| {
+                    registry.decide_navigation(element_id, navigation_id, allow)
+                });
+                if resolved {
+                    Ok(())
+                } else {
+                    Err(Error::from_reason(format!(
+                        "WebView navigation request {navigation_id} is no longer pending"
+                    )))
+                }
+            })
+            .map_err(|error| Error::from_reason(error.to_string()))?
+        })?;
+        Ok(())
+    }
+
     /// Signal that a batch of mutations is complete.
     /// In tests, this is a no-op — flush() handles the actual re-render.
     #[napi]

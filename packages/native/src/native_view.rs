@@ -107,6 +107,44 @@ pub trait NativeViewInstance {
     /// has to touch layout, and a layout pass never reloads the page.
     fn set_content(&mut self, key: &str, value: Option<&str>);
 
+    /// Apply a WebView's mutually exclusive URL/HTML source as one update.
+    fn set_webview_source(
+        &mut self,
+        url: Option<&str>,
+        html: Option<&str>,
+        base_url: Option<&str>,
+    ) {
+        self.set_content("url", url);
+        self.set_content("baseUrl", base_url);
+        self.set_content("html", html);
+    }
+
+    /// Start evaluating JavaScript in this view. WebKit invokes the callback
+    /// on the main thread; the receiver is consumed by a napi async task.
+    #[cfg(target_os = "macos")]
+    fn evaluate_javascript(
+        &mut self,
+        script: &str,
+    ) -> anyhow::Result<crate::native_view::webview::EvaluateReceiver> {
+        let _ = script;
+        Err(anyhow::anyhow!("This native view does not support JavaScript"))
+    }
+
+    /// Wait until the current WebView document has finished loading.
+    #[cfg(target_os = "macos")]
+    fn wait_for_ready(&mut self) -> anyhow::Result<crate::native_view::webview::ReadyReceiver> {
+        Err(anyhow::anyhow!("This native view does not support WebView readiness"))
+    }
+
+    /// Enable the navigation-decision path while a Solid listener exists.
+    fn set_navigation_interception(&mut self, _enabled: bool) {}
+
+    /// Resolve or cancel a previously emitted navigation request.
+    #[cfg(target_os = "macos")]
+    fn decide_navigation(&mut self, _navigation_id: u64, _allow: bool) -> bool {
+        false
+    }
+
     /// Detach from the host and release every native object.
     ///
     /// Must be idempotent: [`NativeViewRegistry::destroy`] and
@@ -162,6 +200,54 @@ impl NativeViewRegistry {
         if let Some(view) = self.views.get_mut(&id) {
             view.set_content(key, value);
         }
+    }
+
+    pub fn set_webview_source(
+        &mut self,
+        id: u64,
+        url: Option<&str>,
+        html: Option<&str>,
+        base_url: Option<&str>,
+    ) {
+        if let Some(view) = self.views.get_mut(&id) {
+            view.set_webview_source(url, html, base_url);
+        }
+    }
+
+    #[cfg(target_os = "macos")]
+    pub fn evaluate_javascript(
+        &mut self,
+        id: u64,
+        script: &str,
+    ) -> anyhow::Result<crate::native_view::webview::EvaluateReceiver> {
+        self.views
+            .get_mut(&id)
+            .ok_or_else(|| anyhow::anyhow!("WebView {id} is not mounted"))?
+            .evaluate_javascript(script)
+    }
+
+    #[cfg(target_os = "macos")]
+    pub fn wait_for_ready(
+        &mut self,
+        id: u64,
+    ) -> anyhow::Result<crate::native_view::webview::ReadyReceiver> {
+        self.views
+            .get_mut(&id)
+            .ok_or_else(|| anyhow::anyhow!("WebView {id} is not mounted"))?
+            .wait_for_ready()
+    }
+
+    pub fn set_navigation_interception(&mut self, id: u64, enabled: bool) {
+        if let Some(view) = self.views.get_mut(&id) {
+            view.set_navigation_interception(enabled);
+        }
+    }
+
+    #[cfg(target_os = "macos")]
+    pub fn decide_navigation(&mut self, id: u64, navigation_id: u64, allow: bool) -> bool {
+        self.views
+            .get_mut(&id)
+            .is_some_and(|view| view.decide_navigation(navigation_id, allow))
     }
 
     /// Detach, release, and forget `id`. A no-op if it was never mounted.

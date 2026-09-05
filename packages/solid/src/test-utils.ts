@@ -16,8 +16,10 @@ export interface SolidTestRoot {
 }
 
 /** Mount a Solid app against an in-memory MockNativeRenderer. */
-export function mountTest(code: () => unknown): SolidTestRoot {
-  const renderer = new MockNativeRenderer()
+export function mountTest(
+  code: () => unknown,
+  renderer: MockNativeRendererType = new MockNativeRenderer()
+): SolidTestRoot {
   const root: { unmount(): void } | null = render(
     code as () => never,
     // The mock is not a SoloRenderer, so no window and no frame loop.

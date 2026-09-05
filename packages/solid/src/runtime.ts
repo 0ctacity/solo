@@ -28,6 +28,10 @@ import {
   rowProof,
   type PatchListAccessor,
 } from "./list-driver.js"
+import {
+  createWebviewController,
+  type InternalWebviewController,
+} from "./webview.js"
 
 // ── Node bookkeeping ─────────────────────────────────────────────────
 
@@ -38,10 +42,18 @@ export interface SoloSolidNode {
   isText: boolean
   parent: SoloSolidNode | null
   children: SoloSolidNode[]
+  /** Source values used to validate URL/HTML exclusivity. */
+  webviewSource?: {
+    url?: string
+    html?: string
+    baseUrl?: string
+  }
 }
 
 let idCounter = 0
 let createdNodeCollector: SoloSolidNode[] | null = null
+const nodesById = new Map<number, SoloSolidNode>()
+const webviewControllers = new Map<number, InternalWebviewController>()
 
 /** Reset element IDs so tests are deterministic. */
 export function resetIdCounter(): void {
@@ -94,6 +106,9 @@ export function setSoloRenderer(renderer: NativeRenderer): void {
         prop === "setCustomProp"
       ) {
         return (...args: unknown[]) => {
+          if (prop === "destroyElement" && typeof args[0] === "number") {
+            disposeNodeById(args[0])
+          }
           ;(target as unknown as Record<string, (...a: unknown[]) => unknown>)[prop](...args)
           armCommit()
           if (prop === "destroyElement") return []
@@ -110,6 +125,7 @@ export function setSoloRenderer(renderer: NativeRenderer): void {
     // Solid 2 may defer reaction re-runs to a microtask; drain them first
     // so the batch contains every op from this transaction.
     flush()
+    validateWebviewSources()
     destroyStillDetached()
     batched.commitMutations()
   }
@@ -151,8 +167,34 @@ const NATIVE_TYPES = new Set([
 ])
 
 function applyProps(node: SoloSolidNode, props: Record<string, unknown>): void {
+  validateWebviewProps(node, props)
   for (const name of Object.keys(props)) {
     setProperty(node, name, props[name])
+  }
+}
+
+function validateWebviewProps(node: SoloSolidNode, props: Record<string, unknown>): void {
+  if (node.type !== "webview") return
+  const url = props.url
+  const html = props.html
+  const baseUrl = props.baseUrl
+  if (url != null && typeof url !== "string") throw new TypeError("WebView url must be a string")
+  if (html != null && typeof html !== "string") throw new TypeError("WebView html must be a string")
+  if (baseUrl != null && typeof baseUrl !== "string") {
+    throw new TypeError("WebView baseUrl must be a string")
+  }
+  if (url != null && html != null) {
+    throw new TypeError("WebView url and html are mutually exclusive")
+  }
+  if (baseUrl != null && html == null) {
+    throw new TypeError("WebView baseUrl requires html")
+  }
+}
+
+function validateWebviewSources(): void {
+  for (const node of nodesById.values()) {
+    if (node.type !== "webview" || !node.webviewSource) continue
+    validateWebviewProps(node, node.webviewSource)
   }
 }
 
@@ -164,6 +206,21 @@ export function createElement(tag: string, staticProps?: Record<string, unknown>
     isText: false,
     parent: null,
     children: [],
+  }
+  if (staticProps) validateWebviewProps(node, staticProps)
+  nodesById.set(node.id, node)
+  if (node.type === "webview") {
+    const controller = createWebviewController(node.id, r)
+    webviewControllers.set(node.id, controller)
+    // The universal Solid renderer passes the raw host node to `ref`. Keep
+    // that node stable while giving WebView refs the public controller shape.
+    Object.assign(node, {
+      isMounted: controller.isMounted,
+      ready: controller.ready,
+      evaluateJavaScript: controller.evaluateJavaScript,
+      allowNavigation: controller.allowNavigation,
+      cancelNavigation: controller.cancelNavigation,
+    })
   }
   r.createElement(node.id, node.type)
   createdNodeCollector?.push(node)
@@ -241,7 +298,20 @@ function removeNode(parent: SoloSolidNode, node: SoloSolidNode): void {
 
 function discardNode(node: SoloSolidNode): void {
   detached.delete(node)
+  disposeNode(node)
   getSoloRenderer().destroyElement(node.id)
+}
+
+function disposeNode(node: SoloSolidNode): void {
+  for (const child of node.children) disposeNode(child)
+  webviewControllers.get(node.id)?.dispose()
+  webviewControllers.delete(node.id)
+  nodesById.delete(node.id)
+}
+
+function disposeNodeById(id: number): void {
+  const node = nodesById.get(id)
+  if (node) disposeNode(node)
 }
 
 function buildRowNode(build: () => SoloSolidNode): SoloSolidNode {
@@ -284,6 +354,9 @@ function setProperty(
   prev?: unknown
 ): void {
   const r = getSoloRenderer()
+  // `ref` is consumed by Solid's universal reconciler. It is not native
+  // content and must never become a custom property on the retained element.
+  if (name === "ref") return
   if (name === "style") {
     if (value != null && typeof value === "object") {
       r.setStyle(node.id, value as StyleDesc)
@@ -296,6 +369,19 @@ function setProperty(
   if (eventType) {
     attachEventHandler(r, node.id, eventType, value as ((e: EventPayload) => void) | null)
     return
+  }
+  if (node.type === "webview" && (name === "url" || name === "html" || name === "baseUrl")) {
+    const source = node.webviewSource ?? (node.webviewSource = {})
+    const normalized = value == null ? undefined : value
+    if (normalized !== undefined && typeof normalized !== "string") {
+      throw new TypeError(`WebView ${name} must be a string`)
+    }
+    const previous = source[name]
+    if (normalized === undefined) delete source[name]
+    else source[name] = normalized
+    if (previous !== normalized) {
+      webviewControllers.get(node.id)?.invalidateDocument("WebView document changed")
+    }
   }
   if (value === prev) return
   r.setCustomProp(

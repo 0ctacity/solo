@@ -59,7 +59,8 @@ objc2 = "0.6"
 objc2-app-kit = { version = "0.3.2", default-features = false, features = ["NSButton", "NSControl", "NSImage", "NSMenu", "NSMenuItem", "NSResponder", "NSScreen", "NSStatusBar", "NSStatusBarButton", "NSStatusItem", "NSView", "NSWorkspace", "NSPasteboard", "objc2-core-foundation"] }
 objc2-core-foundation = { version = "0.3.2", features = ["CFCGTypes"] }
 objc2-foundation = { version = "=0.3.2", default-features = false, features = ["NSError", "NSObject", "NSString", "NSURL", "NSURLRequest"] }
-objc2-web-kit = { version = "0.3.2", default-features = false, features = ["std", "objc2-app-kit", "objc2-core-foundation", "WKFoundation", "WKNavigation", "WKNavigationDelegate", "WKWebView", "WKWebViewConfiguration"] }
+block2 = "0.6.2"
+objc2-web-kit = { version = "0.3.2", default-features = false, features = ["std", "block2", "objc2-app-kit", "objc2-core-foundation", "WKFoundation", "WKContentWorld", "WKFrameInfo", "WKNavigation", "WKNavigationAction", "WKNavigationDelegate", "WKUIDelegate", "WKWebView", "WKWebViewConfiguration", "WKWindowFeatures"] }
 # Public route to the window's NSView, so <webview> needs no change to the
 # pinned GPUI fork.
 raw-window-handle = "0.6"

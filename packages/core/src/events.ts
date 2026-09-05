@@ -15,6 +15,7 @@ export const EVENT_PROPS = [
   // <webview> events (macOS only)
   ["onLoad", "load"],
   ["onNavigation", "navigation"],
+  ["onNavigationRequest", "navigationRequest"],
   ["onLoadError", "loadError"],
   // Mouse events
   ["onClick", "click"],

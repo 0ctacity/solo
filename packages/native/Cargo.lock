@@ -3887,6 +3887,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b2e5aaab980c433cf470df9d7af96a7b46a9d892d521a2cbbb2f8a4c16751e7f"
 dependencies = [
  "bitflags 2.10.0",
+ "block2 0.6.2",
  "objc2 0.6.4",
  "objc2-app-kit 0.3.2",
  "objc2-core-foundation",
@@ -5246,6 +5247,7 @@ name = "solo-native"
 version = "0.4.0"
 dependencies = [
  "anyhow",
+ "block2 0.6.2",
  "core-graphics 0.24.0",
  "core-text",
  "env_logger",

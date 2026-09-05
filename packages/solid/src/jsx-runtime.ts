@@ -8,6 +8,10 @@
 
 import type { StyleDesc } from "@solo/core"
 import type { EventPayload } from "@solo/native"
+import type {
+  WebviewController,
+  WebviewNavigationRequestEvent,
+} from "./webview.js"
 
 export interface SoloIntrinsicProps {
   style?: StyleDesc
@@ -32,14 +36,26 @@ export interface SoloIntrinsicProps {
 export interface WebviewProps extends SoloIntrinsicProps {
   /** Absolute URL to load. Changing it navigates the existing view. */
   url?: string
+  /** Generated HTML to load. Cannot be supplied together with `url`. */
+  html?: string
+  /** Base URL used to resolve relative links and resources in `html`. */
+  baseUrl?: string
   /** Overrides WebKit's default user agent string. */
   userAgent?: string
   /** Fired when the main frame finishes loading. `value` is the URL. */
   onLoad?: (event: EventPayload) => void
   /** Fired when a navigation starts, including link clicks and redirects. */
   onNavigation?: (event: EventPayload) => void
+  /**
+   * Fired before a link navigation is committed. Use the controller to allow
+   * or cancel it. Fragment-only requests are allowed automatically; requests
+   * for a new window are cancelled automatically.
+   */
+  onNavigationRequest?: (event: WebviewNavigationRequestEvent) => void
   /** Fired when a load fails. `value` is `"<url> — <reason>"`. */
   onLoadError?: (event: EventPayload) => void
+  /** Stable controller for the mounted WebView. */
+  ref?: (controller: WebviewController) => void
 }
 
 export namespace JSX {
