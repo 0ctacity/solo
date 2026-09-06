@@ -46,6 +46,16 @@ function invoke(id: string): void {
 }
 
 describe("application commands", () => {
+  it("forwards keyboard scope and repeat policy to native", () => {
+    const renderer = new CommandRenderer()
+    setSoloRenderer(renderer)
+    owned(() => registerApplicationCommand({
+      id: "star", label: "Star", shortcut: "s", scopeElementId: 42,
+      allowRepeat: true, run() {},
+    }))
+    expect(renderer.commands[0]).toMatchObject({ scopeElementId: 42, allowRepeat: true })
+  })
+
   it("exports registration through the Solid public API and routes native actions once", () => {
     const renderer = new CommandRenderer()
     setSoloRenderer(renderer)
@@ -172,7 +182,7 @@ describe("application commands", () => {
     const renderer = new CommandRenderer()
     setSoloRenderer(renderer)
     owned(() => {
-      for (const options of [{ id: "" }, { label: " " }, { menu: "" }, { shortcut: "" }, { enabled: "yes" }, { run: null }]) {
+      for (const options of [{ id: "" }, { label: " " }, { menu: "" }, { shortcut: "" }, { enabled: "yes" }, { run: null }, { scopeElementId: -1 }, { scopeElementId: 1.5 }, { allowRepeat: "yes" }]) {
         expect(() => registerApplicationCommand({ id: "r", label: "Refresh", run() {}, ...options } as never)).toThrow()
       }
     })

@@ -54,9 +54,24 @@ both emit the same application-command event to the Solid callback.
 
 ## Shortcuts and focus
 
-- Use a single GPUI chord such as `cmd-r` or `cmd-shift-r`: exactly one of
-  `cmd`, `ctrl`, or `alt`, optionally with `shift`. Multi-chord sequences and
-  Tab shortcuts are rejected. `super` and `win` are aliases of `cmd`.
+- Use one chord: `space`, `s`, `h`, `o`, `cmd-r`, or `cmd-option-p`.
+  Modifiers can be absent or combined in any order: `cmd`, `ctrl`, `alt`
+  (also spelled `option`), and `shift`. `super` and `win` alias `cmd`.
+  Use lowercase letters; uppercase `S` means `shift-s`, not plain `s`.
+  Named keys include `space`, `enter`, `escape`, `up`, `down`, `left`, `right`,
+  `home`, `end`, `pageup`, `pagedown`, `backspace`, `delete`, and `f1`–`f12`.
+  Multi-chord sequences, Tab shortcuts, and `fn` modifiers are rejected.
+- `scopeElementId` optionally limits keyboard dispatch to a retained element
+  and its focused descendants. Obtain its `id` from a native element's `ref`,
+  then register under a Solid owner once that ref is available. Detached or
+  destroyed scopes do not match. Use reactive `enabled` for application state
+  such as the active reader mode. Scope does not restrict an explicit menu click.
+- Scoped shortcuts never intercept native inputs, textareas, or WebView focus.
+  Unscoped shortcuts without Command also require non-editable native focus.
+  Space/Enter remain available to a focused clickable control. Use
+  `<Button tabIndex={0}>` for Tab focus and GPUI's Space/Enter release activation.
+- `allowRepeat` defaults to `false`: holding a matching shortcut consumes repeats
+  without repeatedly invoking the callback. Set it to `true` for repeatable actions.
 - Duplicate shortcuts are rejected even if one command is disabled. Existing
   GPUI editing/navigation bindings and Cmd+Q are reserved; registration cannot
   override them. Invalid replacements leave the previous bindings intact.
@@ -64,9 +79,12 @@ both emit the same application-command event to the Solid callback.
   in GPUI controls. Disabled/disposed commands no longer consume that shortcut.
   Ordinary typing, editing bindings, and Tab navigation remain native.
 - WKWebView is an AppKit child view, not part of GPUI's keyboard dispatch tree.
-  Give a command a `menu` to make its shortcut available through the macOS menu
-  key-equivalent path while web content has focus. Shortcut-only commands have
-  no such guarantee in web content. Solo does not intercept web-page key events.
+  Give an **unscoped Command-modified** command a `menu` to make its shortcut
+  available through the macOS menu key-equivalent path while web content has
+  focus. Shortcut-only commands have
+  no such guarantee in web content. Scoped and non-Command shortcuts have no
+  native menu accelerator, so they cannot steal web typing or composition.
+  Solo does not intercept web-page key events.
 
 ## Verification
 
@@ -74,6 +92,11 @@ Headless tests cover registration, disposal/remounts, duplicate IDs, failed
 registration, reactive enabled state, and stale native events. The packaged
 regression exercises commands across native controls and checks that text
 editing continues to work.
+`application-shortcuts-live.test.ts` additionally covers scoped and unscoped
+shortcuts, first-focus dispatch, modifier ordering, repeats, focused buttons,
+and input/contenteditable WebView first responders. Native parser/scope tests
+also cover detached scopes and reserved bindings. IME composition and physical
+AppKit menu accelerators still need manual macOS verification.
 
 To build the standalone macOS verification app after building the native addon
 and core package:

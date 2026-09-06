@@ -59,6 +59,8 @@ const BUTTON_BASE_STYLE: StyleDesc = {
 
 export interface ButtonProps extends Omit<ViewProps, "style"> {
   style?: StyleDesc
+  /** Opt into native Tab focus/Space/Enter activation, e.g. tabIndex={0}. */
+  tabIndex?: number
 }
 
 /** A clickable button. A native "div" with sensible default styles. */
