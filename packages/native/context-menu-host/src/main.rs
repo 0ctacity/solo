@@ -25,7 +25,10 @@ fn cleanup_staged_executable() {
     // The parent may have exited before its TempDir destructor could run.
     // Remove only this running image in the private staging layout, then its
     // empty directory. Never recursively remove a path or touch shipped files.
-    let Ok(executable) = std::env::current_exe() else {
+    // macOS commonly supplies /var/... while temp_dir().canonicalize() yields
+    // /private/var/.... Compare physical paths on BOTH sides. Canonicalizing
+    // first also prevents a staged symlink from authorizing a shipped image.
+    let Ok(executable) = std::env::current_exe().and_then(|path| path.canonicalize()) else {
         return;
     };
     if executable

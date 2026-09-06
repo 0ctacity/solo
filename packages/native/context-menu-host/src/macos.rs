@@ -173,6 +173,12 @@ pub fn run() -> Result<(), String> {
             }
         }
         reader_cancelled.store(true, Ordering::Release);
+        // If the parent has died, nobody remains to enforce its kill deadline.
+        // This thread is independent of AppKit: even stuck menu tracking must
+        // release the private executable and stop after owner disconnection.
+        std::thread::sleep(std::time::Duration::from_secs(1));
+        crate::cleanup_staged_executable();
+        std::process::exit(0);
     });
 
     let mtm = MainThreadMarker::new().ok_or("Menu helper must run on its main thread")?;
@@ -268,7 +274,10 @@ pub fn run() -> Result<(), String> {
             MenuItem::Action { id, .. } => Some(id.as_str()),
             _ => None,
         });
-    serde_json::to_writer(std::io::stdout(), &selected).map_err(|e| e.to_string())?;
-    writeln!(std::io::stdout()).map_err(|e| e.to_string())?;
-    Ok(())
+    let output = serde_json::to_string(&selected).map_err(|e| e.to_string())?;
+    match writeln!(std::io::stdout(), "{output}") {
+        // Losing the reader is ordinary parent shutdown, not a menu failure.
+        Err(error) if error.kind() == std::io::ErrorKind::BrokenPipe => Ok(()),
+        result => result.map_err(|error| error.to_string()),
+    }
 }
