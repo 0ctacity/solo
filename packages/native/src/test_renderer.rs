@@ -344,6 +344,27 @@ impl TestSoloRenderer {
             .map(|v| serde_json::to_string(v).unwrap_or_default()))
     }
 
+    /// Present a lifecycle-managed native menu for an element in this renderer.
+    #[napi]
+    pub fn show_context_menu(
+        &self,
+        json: String,
+    ) -> Result<AsyncTask<crate::context_menu::ContextMenuTask>> {
+        self.flush()?;
+        with_test_state(|cx, window, _view| {
+            cx.update_window(window, |_, window, _app| {
+                crate::context_menu::show(&json, &self.tree.lock().unwrap(), window)
+            })
+            .map_err(|error| Error::from_reason(error.to_string()))?
+        })
+    }
+
+    #[napi]
+    pub fn cancel_context_menu(&self, request_id: f64) -> Result<()> {
+        crate::context_menu::cancel(to_element_id(request_id)?);
+        Ok(())
+    }
+
     /// Evaluate JavaScript in the mounted WebView through the native bridge.
     #[napi(js_name = "evaluateWebviewJavaScript")]
     pub fn evaluate_webview_javascript(
@@ -481,6 +502,10 @@ impl TestSoloRenderer {
     /// The focused element receives keyDown/keyUp events.
     #[napi]
     pub fn simulate_keystrokes(&self, keystrokes: String) -> Result<()> {
+        let keys = crate::automation::parse_keystrokes(&keystrokes).map_err(Error::from_reason)?;
+        if crate::context_menu::dispatch_keys(&keys) {
+            return Ok(());
+        }
         with_test_state(|cx, window, _view| {
             cx.simulate_keystrokes(window, &keystrokes);
             Ok(())
@@ -494,6 +519,10 @@ impl TestSoloRenderer {
     /// fine-grained key event testing.
     #[napi]
     pub fn simulate_key_down(&self, keystroke: String, is_held: Option<bool>) -> Result<()> {
+        let key = crate::automation::parse_keystroke(&keystroke).map_err(Error::from_reason)?;
+        if crate::context_menu::dispatch_keys(std::slice::from_ref(&key)) {
+            return Ok(());
+        }
         with_test_state(|cx, window, _view| {
             let parsed = gpui::Keystroke::parse(&keystroke).map_err(|e| {
                 Error::from_reason(format!("Invalid keystroke '{}': {}", keystroke, e))

@@ -117,7 +117,9 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: bindings-${{ matrix.settings.target }}
-          path: packages/native/${{ env.APP_NAME }}.*.node
+          path: |
+            packages/native/${{ env.APP_NAME }}.*.node
+            packages/native/solo-context-menu.darwin-*
           if-no-files-found: error
 
   test:
@@ -151,6 +153,13 @@ jobs:
       - name: Run @solo/core tests
         run: bun run test
         working-directory: packages/core
+
+      # Artifact downloads do not preserve Unix executable permissions.
+      - name: Prepare native menu helper
+        run: chmod +x packages/native/solo-context-menu.darwin-arm64
+
+      - name: Test native menu helper protocol
+        run: cargo nextest run --manifest-path packages/native/context-menu-host/Cargo.toml
 
       - name: Build @solo/core
         run: bun run build

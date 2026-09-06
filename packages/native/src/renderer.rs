@@ -778,6 +778,7 @@ impl SoloRenderer {
                     })
                 });
                 if matches_current {
+                    crate::context_menu::cancel_all();
                     GPUI_WINDOW.with(|stored| stored.borrow_mut().take());
                     SCROLL_HANDLES.with(|handles| handles.borrow_mut().clear());
                     VIRTUAL_LIST_STATES.with(|states| states.borrow_mut().clear());
@@ -785,6 +786,7 @@ impl SoloRenderer {
                 }
             });
             let quitting = cx.on_app_quit(|_cx| {
+                crate::context_menu::cancel_all();
                 crate::native_view::with_registry(|registry| registry.destroy_all());
                 async {}
             });
@@ -1777,6 +1779,11 @@ impl SoloRenderer {
         let keys = crate::automation::parse_keystrokes(&keystrokes).map_err(Error::from_reason)?;
 
         #[cfg(target_os = "macos")]
+        if crate::context_menu::dispatch_keys(&keys) {
+            return Ok(());
+        }
+
+        #[cfg(target_os = "macos")]
         return update_window_for_input(move |window, cx| {
             crate::automation::dispatch_keystrokes(window, cx, &keys);
         });
@@ -1805,6 +1812,11 @@ impl SoloRenderer {
     pub fn simulate_key_down(&self, keystroke: String, is_held: Option<bool>) -> Result<()> {
         let key = crate::automation::parse_keystroke(&keystroke).map_err(Error::from_reason)?;
         let is_held = is_held.unwrap_or(false);
+
+        #[cfg(target_os = "macos")]
+        if crate::context_menu::dispatch_keys(std::slice::from_ref(&key)) {
+            return Ok(());
+        }
 
         #[cfg(target_os = "macos")]
         return update_window_for_input(move |window, cx| {
@@ -4031,6 +4043,23 @@ fn to_gpui_window_options(
 #[cfg(target_os = "macos")]
 #[napi]
 impl SoloRenderer {
+    /// Present a lifecycle-managed native menu without blocking the app loop.
+    #[napi]
+    pub fn show_context_menu(
+        &self,
+        json: String,
+    ) -> Result<AsyncTask<crate::context_menu::ContextMenuTask>> {
+        update_window(|_view, window, _cx| {
+            crate::context_menu::show(&json, &self.tree.lock().unwrap(), window)
+        })?
+    }
+
+    #[napi]
+    pub fn cancel_context_menu(&self, request_id: f64) -> Result<()> {
+        crate::context_menu::cancel(to_element_id(request_id)?);
+        Ok(())
+    }
+
     /// Evaluate an expression in a mounted macOS WebView without blocking JS.
     #[napi(js_name = "evaluateWebviewJavaScript")]
     pub fn evaluate_webview_javascript(

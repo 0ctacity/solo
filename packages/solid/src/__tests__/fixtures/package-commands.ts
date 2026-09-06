@@ -1,6 +1,6 @@
 // Build a real standalone .app for both regression automation and manual UI QA.
 import { execFileSync } from "node:child_process"
-import { chmodSync, mkdirSync, mkdtempSync, symlinkSync, writeFileSync } from "node:fs"
+import { chmodSync, copyFileSync, mkdirSync, mkdtempSync, symlinkSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { dirname, join, resolve } from "node:path"
 import { fileURLToPath } from "node:url"
@@ -9,8 +9,8 @@ import { solidUniversal } from "../../vite.js"
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "../../..")
 const fixture = process.argv[2] ?? "application-commands"
-if (!["application-commands", "desktop", "system-appearance", "file-dialogs", "background-lifecycle"].includes(fixture)) throw new Error("Unknown app fixture")
-const name = fixture === "desktop" ? "Desktop" : fixture === "system-appearance" ? "Appearance" : fixture === "file-dialogs" ? "Dialogs" : fixture === "background-lifecycle" ? "Background" : "Commands"
+if (!["application-commands", "desktop", "system-appearance", "file-dialogs", "background-lifecycle", "context-menus"].includes(fixture)) throw new Error("Unknown app fixture")
+const name = fixture === "context-menus" ? "Menus" : fixture === "desktop" ? "Desktop" : fixture === "system-appearance" ? "Appearance" : fixture === "file-dialogs" ? "Dialogs" : fixture === "background-lifecycle" ? "Background" : "Commands"
 // CI runs Solid tests before its package build. Build the public package here
 // so this fixture verifies the same exports that a consuming app bundles.
 execFileSync("bun", ["run", "build"], { cwd: root, stdio: "inherit" })
@@ -18,6 +18,13 @@ const output = mkdtempSync(join(tmpdir(), "solo-commands-"))
 const bundle = join(output, `Solo ${name}.app`)
 const executable = join(bundle, "Contents", "MacOS", `Solo${name}`)
 mkdirSync(dirname(executable), { recursive: true })
+if (fixture === "context-menus") {
+  const resources = join(bundle, "Contents", "Resources")
+  mkdirSync(resources, { recursive: true })
+  const helper = `solo-context-menu.darwin-${process.arch}`
+  copyFileSync(resolve(root, "../native", helper), join(resources, helper))
+  chmodSync(join(resources, helper), 0o755)
+}
 if (fixture === "background-lifecycle") {
   const resources = join(bundle, "Contents", "Resources")
   mkdirSync(resources, { recursive: true })

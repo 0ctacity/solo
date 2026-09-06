@@ -3,6 +3,8 @@
 export { render } from "./root.js"
 export type { Root, RenderOptions, FrameLoop } from "./root.js"
 export { registerApplicationCommand } from "./commands.js"
+export { createContextMenu } from "./context-menu.js"
+export type { ContextMenu, ContextMenuAnchor, ContextMenuItem } from "./context-menu.js"
 export type { ApplicationCommand } from "./commands.js"
 export { openExternalUrl, writeClipboardText } from "./desktop.js"
 export { selectFiles, selectSavePath } from "./file-dialogs.js"
