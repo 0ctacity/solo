@@ -71,6 +71,20 @@ describe("reactive text update", () => {
 })
 
 describe("event handling", () => {
+  it("forwards explicit button focus options without changing the default Tab order", () => {
+    const t = mountTest(() => <View>
+      <Button testId="keyboard" tabIndex={0}>Action</Button>
+      <Button testId="manual" tabIndex={-1}>Manual focus</Button>
+      <Button testId="default">Default</Button>
+    </View>)
+    try {
+      const button = findByTestId(t.renderer, "keyboard")!
+      expect(button.customProps.tabIndex).toBe(0)
+      expect(findByTestId(t.renderer, "manual")!.customProps.tabIndex).toBe(-1)
+      expect(findByTestId(t.renderer, "default")!.customProps.tabIndex).toBeUndefined()
+    } finally { t.unmount() }
+  })
+
   it("routes native events through the shared registry to Solid handlers", () => {
     const clicks: number[] = []
     function App() {

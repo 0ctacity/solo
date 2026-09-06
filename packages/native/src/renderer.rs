@@ -2539,8 +2539,10 @@ impl SoloView {
                 .and_then(|value| value.as_i64())
                 .and_then(|index| isize::try_from(index).ok())
         };
+        let has_commands = crate::application_commands::has_commands(cx);
         let needs_focus = |element: &crate::retained_tree::RetainedElement| {
-            matches!(element.element_type.as_str(), "input" | "textarea")
+            (has_commands && tree.root_id == Some(element.id))
+                || matches!(element.element_type.as_str(), "input" | "textarea")
                 || tab_index(element).is_some()
                 || element.events.contains("keyDown")
                 || element.events.contains("keyUp")
@@ -2607,6 +2609,16 @@ impl SoloView {
         // Clean up handles for elements that no longer exist.
         self.focus_handles
             .retain(|id, _| tree.elements.get(id).is_some_and(&needs_focus));
+        // Route global shortcuts through the root capture listener before the
+        // first control is focused, without stealing focus from native views.
+        if has_commands
+            && window.focused(cx).is_none()
+            && !crate::application_commands::native_child_has_focus(window)
+        {
+            if let Some(handle) = tree.root_id.and_then(|id| self.focus_handles.get(&id)) {
+                handle.focus(window, cx);
+            }
+        }
     }
 }
 
@@ -2688,6 +2700,9 @@ impl gpui::Render for SoloView {
             use gpui::prelude::*;
             gpui::div()
                 .size_full()
+                .capture_key_down(cx.listener(|view, event, window, cx| {
+                    crate::application_commands::dispatch_shortcut(event, view, window, cx);
+                }))
                 .on_action(|_: &FocusNext, window, cx| window.focus_next(cx))
                 .on_action(|_: &FocusPrevious, window, cx| window.focus_prev(cx))
                 .child(selection_frame_reset(self.selection.clone()))

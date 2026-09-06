@@ -8,8 +8,12 @@ export interface ApplicationCommand {
   /** Unique among currently registered commands. Reusable after disposal. */
   id: string
   label: string
-  /** One native modifier shortcut, e.g. "cmd-r". Not a system-wide hotkey. */
+  /** One chord, e.g. "s", "space", or "cmd-option-p". Not a system-wide hotkey. */
   shortcut?: string
+  /** Limit keyboard dispatch to this element and its focused descendants. */
+  scopeElementId?: number
+  /** Allow held-key repeats. Defaults to false; menu clicks are unaffected. */
+  allowRepeat?: boolean
   /** Optional top-level native menu containing this command. */
   menu?: string
   /** Only enabled is reactive; other options are fixed for this registration. */
@@ -22,6 +26,8 @@ interface Entry {
     id: string
     label: string
     shortcut?: string
+    scopeElementId?: number
+    allowRepeat?: boolean
     menu?: string
     enabled: boolean
   }
@@ -51,6 +57,12 @@ export function registerApplicationCommand(command: ApplicationCommand): () => v
     }
   }
   if (typeof command.run !== "function") throw new TypeError("Application command run must be a function")
+  if (command.scopeElementId !== undefined && (!Number.isSafeInteger(command.scopeElementId) || command.scopeElementId < 0)) {
+    throw new TypeError("Application command scopeElementId must be a non-negative safe integer")
+  }
+  if (command.allowRepeat !== undefined && typeof command.allowRepeat !== "boolean") {
+    throw new TypeError("Application command allowRepeat must be boolean")
+  }
   const enabledOption = command.enabled
   const enabled = (): boolean => {
     const value = typeof enabledOption === "function" ? enabledOption() : enabledOption ?? true
@@ -72,6 +84,7 @@ export function registerApplicationCommand(command: ApplicationCommand): () => v
     descriptor: {
       id: String(++nextToken), label: command.label, shortcut: command.shortcut,
       menu: command.menu, enabled: untrack(enabled),
+      scopeElementId: command.scopeElementId, allowRepeat: command.allowRepeat,
     },
     run: command.run,
     enabled,

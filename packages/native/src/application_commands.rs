@@ -17,6 +17,10 @@ pub(crate) struct ApplicationCommand {
     pub id: String,
     pub label: String,
     pub shortcut: Option<String>,
+    #[serde(rename = "scopeElementId")]
+    pub scope_element_id: Option<u64>,
+    #[serde(default, rename = "allowRepeat")]
+    pub allow_repeat: bool,
     pub enabled: bool,
     pub menu: Option<String>,
 }
@@ -93,24 +97,40 @@ fn parse_application_shortcut(source: &str) -> Result<Keystroke> {
         )));
     }
 
-    let keystroke = Keystroke::parse(source).map_err(|error| {
+    let normalized = source
+        .split('-')
+        .map(|part| {
+            if part.eq_ignore_ascii_case("option") {
+                "alt"
+            } else {
+                part
+            }
+        })
+        .collect::<Vec<_>>()
+        .join("-");
+    let keystroke = Keystroke::parse(&normalized).map_err(|error| {
         Error::from_reason(format!(
             "Invalid application command shortcut {source:?}: {error}"
         ))
     })?;
-    let modifiers = keystroke.modifiers;
-    let primary_modifier_count = [modifiers.platform, modifiers.control, modifiers.alt]
-        .into_iter()
-        .filter(|enabled| *enabled)
-        .count();
-    if primary_modifier_count != 1 || modifiers.function {
+    if keystroke.modifiers.function {
         return Err(Error::from_reason(format!(
-            "Application command shortcut {source:?} must use exactly one of cmd, ctrl, or alt, optionally with shift"
+            "Application command shortcut {source:?} must not use fn"
         )));
     }
     if keystroke.key == "tab" {
         return Err(Error::from_reason(
             "Application command shortcut must not use tab",
+        ));
+    }
+    if keystroke.key.is_empty()
+        || matches!(
+            keystroke.key.as_str(),
+            "shift" | "control" | "alt" | "platform" | "function"
+        )
+    {
+        return Err(Error::from_reason(
+            "Application command shortcut requires a non-modifier key",
         ));
     }
 
@@ -132,6 +152,137 @@ struct CommandState {
 }
 
 impl gpui::Global for CommandState {}
+
+pub(crate) fn has_commands(cx: &gpui::App) -> bool {
+    cx.try_global::<CommandState>()
+        .is_some_and(|state| !state.commands.is_empty())
+}
+
+/// Scope is keyboard-only: explicit native menu selection still uses enabled.
+fn accepts_focus(
+    command: &ParsedApplicationCommand,
+    focused: Option<u64>,
+    tree: &crate::retained_tree::RetainedTree,
+) -> bool {
+    let Some(key) = &command.shortcut else {
+        return false;
+    };
+    let guarded = command.command.scope_element_id.is_some() || !key.modifiers.platform;
+    if !guarded {
+        return true;
+    }
+    let mut current = focused;
+    let mut in_scope = command.command.scope_element_id.is_none();
+    while let Some(id) = current {
+        let Some(element) = tree.elements.get(&id) else {
+            return false;
+        };
+        if matches!(
+            element.element_type.as_str(),
+            "input" | "textarea" | "webview"
+        ) {
+            return false;
+        }
+        // Let focused controls handle activation, even inside an article scope.
+        if Some(id) == focused
+            && matches!(key.key.as_str(), "space" | "enter")
+            && !key.modifiers.platform
+            && !key.modifiers.control
+            && !key.modifiers.alt
+            && (element.events.contains("click")
+                || element.custom_props.get("role").and_then(|v| v.as_str()) == Some("button"))
+        {
+            return false;
+        }
+        in_scope |= command.command.scope_element_id == Some(id);
+        if tree.root_id == Some(id) {
+            return in_scope;
+        }
+        current = element.parent;
+    }
+    false
+}
+
+pub(crate) fn dispatch_shortcut(
+    event: &gpui::KeyDownEvent,
+    view: &crate::renderer::SoloView,
+    window: &mut gpui::Window,
+    cx: &mut gpui::App,
+) {
+    let Some(state) = cx.try_global::<CommandState>() else {
+        return;
+    };
+    let focused = view
+        .focus_handles
+        .iter()
+        .find_map(|(id, handle)| handle.is_focused(window).then_some(*id));
+    let tree = view.tree.lock().unwrap();
+    let Some(entry) = state.commands.iter().find(|entry| {
+        entry.command.enabled
+            && entry.shortcut.as_ref().is_some_and(|key| {
+                key.modifiers == event.keystroke.modifiers && key.key == event.keystroke.key
+            })
+            && accepts_focus(entry, focused, &tree)
+    }) else {
+        return;
+    };
+    if (entry.command.scope_element_id.is_some() || !event.keystroke.modifiers.platform)
+        && native_child_has_focus(window)
+    {
+        return;
+    }
+    if event.prefer_character_input {
+        return;
+    }
+    if !event.is_held || entry.command.allow_repeat {
+        crate::renderer::emit_event_full(&state.callback, 0, APPLICATION_COMMAND_EVENT, |event| {
+            event.value = Some(entry.command.id.clone());
+        });
+    }
+    // Swallow repeats too, so holding a toggle cannot leak to a local handler.
+    cx.stop_propagation();
+}
+
+#[cfg(target_os = "macos")]
+pub(crate) fn native_child_has_focus(window: &gpui::Window) -> bool {
+    use raw_window_handle::{HasWindowHandle, RawWindowHandle};
+    let Ok(handle) = HasWindowHandle::window_handle(window) else {
+        return false;
+    };
+    let RawWindowHandle::AppKit(handle) = handle.as_raw() else {
+        return false;
+    };
+    // SAFETY: the live GPUI window owns this view throughout this UI-thread call.
+    let view = unsafe { &*handle.ns_view.as_ptr().cast::<objc2_app_kit::NSView>() };
+    view.window()
+        .and_then(|window| window.firstResponder())
+        .is_some_and(|responder| {
+            let responder: *const objc2_app_kit::NSResponder = &*responder;
+            responder.cast::<std::ffi::c_void>() != handle.ns_view.as_ptr().cast_const()
+        })
+}
+
+#[cfg(not(target_os = "macos"))]
+pub(crate) fn native_child_has_focus(_: &gpui::Window) -> bool {
+    false
+}
+
+#[cfg(target_os = "macos")]
+fn native_key_repeat() -> bool {
+    let Some(mtm) = objc2::MainThreadMarker::new() else {
+        return false;
+    };
+    objc2_app_kit::NSApplication::sharedApplication(mtm)
+        .currentEvent()
+        .is_some_and(|event| {
+            event.r#type() == objc2_app_kit::NSEventType::KeyDown && event.isARepeat()
+        })
+}
+
+#[cfg(not(target_os = "macos"))]
+fn native_key_repeat() -> bool {
+    false
+}
 
 /// AppKit auto-validation overrides MenuItem.disabled. GPUI's default only
 /// checks the action type, so commands sharing InvokeCommand need an ID check.
@@ -211,15 +362,24 @@ pub(crate) fn replace_application_commands(
     // Bindings are prepared using GPUI's fallible parser before replacing state.
     let mut bindings = retained;
     for command in &commands {
-        if command.command.enabled {
-            if let Some(shortcut) = &command.command.shortcut {
+        if command.command.enabled && command.command.scope_element_id.is_none() {
+            if let Some(shortcut) = command
+                .shortcut
+                .as_ref()
+                .filter(|key| key.modifiers.platform)
+            {
                 bindings.push(
                     gpui::KeyBinding::load(
-                        shortcut,
+                        &shortcut.unparse(),
                         Box::new(InvokeCommand {
                             id: command.command.id.clone(),
                         }),
-                        None,
+                        // Menu accelerator metadata only. Solo handles keyboard
+                        // events below, where focus and is_held are available.
+                        Some(std::rc::Rc::new(
+                            gpui::KeyBindingContextPredicate::parse("SoloNativeMenu")
+                                .map_err(|e| Error::from_reason(e.to_string()))?,
+                        )),
                         false,
                         None,
                         &gpui::DummyKeyboardMapper,
@@ -242,11 +402,11 @@ pub(crate) fn replace_application_commands(
         });
         cx.on_action(|action: &InvokeCommand, cx| {
             let state = cx.global::<CommandState>();
-            if state
-                .commands
-                .iter()
-                .any(|entry| entry.command.id == action.id && entry.command.enabled)
-            {
+            if state.commands.iter().any(|entry| {
+                entry.command.id == action.id
+                    && entry.command.enabled
+                    && (entry.command.allow_repeat || !native_key_repeat())
+            }) {
                 crate::renderer::emit_event_full(
                     &state.callback,
                     0,
@@ -372,13 +532,86 @@ mod tests {
     }
 
     #[test]
-    fn rejects_shortcuts_without_a_command_modifier() {
-        for shortcut in ["r", "shift-r", "tab", "shift-tab", "cmd-r cmd-s"] {
+    fn accepts_unmodified_and_multiple_modifier_shortcuts() {
+        for shortcut in [
+            "space",
+            "s",
+            "h",
+            "o",
+            "shift-r",
+            "cmd-option-p",
+            "ctrl-alt-shift-p",
+        ] {
+            assert!(parse_application_shortcut(shortcut).is_ok(), "{shortcut}");
+        }
+        let first = parse_application_shortcut("cmd-option-p").unwrap();
+        let second = parse_application_shortcut("alt-super-p").unwrap();
+        assert_eq!(first, second);
+        assert!(parse_application_commands(
+            r#"[
+          {"id":"a","label":"A","shortcut":"cmd-option-p","enabled":true},
+          {"id":"b","label":"B","shortcut":"alt-super-p","enabled":false}
+        ]"#
+        )
+        .is_err());
+    }
+
+    #[test]
+    fn scopes_require_attached_focus_and_preserve_editors_and_control_activation() {
+        let commands = parse_application_commands(
+            r#"[
+          {"id":"s","label":"Star","shortcut":"s","scopeElementId":2,"enabled":true},
+          {"id":"space","label":"Read","shortcut":"space","scopeElementId":2,"enabled":true}
+        ]"#,
+        )
+        .unwrap();
+        let mut tree = crate::retained_tree::RetainedTree::new();
+        for (id, kind, parent) in [
+            (1, "div", None),
+            (2, "div", Some(1)),
+            (3, "div", Some(2)),
+            (4, "input", Some(2)),
+            (5, "textarea", Some(2)),
+            (6, "webview", Some(2)),
+            (7, "div", Some(1)),
+            (8, "div", Some(2)),
+        ] {
+            tree.create_element(id, kind.into());
+            tree.elements.get_mut(&id).unwrap().parent = parent;
+        }
+        tree.root_id = Some(1);
+        tree.elements
+            .get_mut(&8)
+            .unwrap()
+            .events
+            .insert("click".into());
+        for focus in [Some(2), Some(3)] {
+            assert!(accepts_focus(&commands[0], focus, &tree));
+        }
+        for focus in [None, Some(4), Some(5), Some(6), Some(7), Some(99)] {
+            assert!(!accepts_focus(&commands[0], focus, &tree));
+        }
+        assert!(!accepts_focus(&commands[1], Some(8), &tree));
+        tree.elements.get_mut(&2).unwrap().parent = None;
+        assert!(!accepts_focus(&commands[0], Some(3), &tree));
+    }
+
+    #[test]
+    fn rejects_reserved_and_multichord_shortcuts() {
+        for shortcut in [
+            "tab",
+            "shift-tab",
+            "cmd-r cmd-s",
+            "fn-r",
+            "cmd",
+            "option",
+            "shift",
+        ] {
             let json = format!(
                 r#"[{{"id":"command","label":"Command","shortcut":"{shortcut}","enabled":true}}]"#
             );
             let error = parse_application_commands(&json)
-                .expect_err("application shortcuts require one command modifier");
+                .expect_err("reserved keys and sequences must be rejected");
             assert!(
                 error.to_string().contains("shortcut"),
                 "unexpected error for {shortcut:?}: {error}"
