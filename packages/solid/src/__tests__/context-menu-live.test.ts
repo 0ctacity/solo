@@ -1,5 +1,5 @@
 import { execFile, spawn } from "node:child_process"
-import { mkdirSync, readdirSync, rmSync } from "node:fs"
+import { mkdirSync, readdirSync, realpathSync, rmSync } from "node:fs"
 import { basename, dirname, join } from "node:path"
 import { fileURLToPath } from "node:url"
 import { promisify } from "node:util"
@@ -8,7 +8,11 @@ import { connectStdio } from "../automation.js"
 import type { TreeNode } from "../automation.js"
 
 describe.skipIf(process.platform !== "darwin")("packaged native menus", () => {
-  it("keeps JS responsive, selects with native keys, cancels unmounts, and closes cleanly", async () => {
+  it.each([
+    { action: "close", stallHelper: false },
+    { action: "close", stallHelper: true },
+    { action: "quit", stallHelper: true },
+  ])("keeps JS responsive and drains helper cleanup ($action, stalled: $stallHelper)", async ({ action, stallHelper }) => {
     const packager = fileURLToPath(new URL("./fixtures/package-commands.ts", import.meta.url))
     const { stdout } = await promisify(execFile)("bun", [packager, "context-menus"], { timeout: 30_000 })
     const executable = stdout.match(/^commands-executable:(.+)$/m)?.[1]
@@ -24,6 +28,7 @@ describe.skipIf(process.platform !== "darwin")("packaged native menus", () => {
     })
     void exited.catch(() => {})
     const watchdog = setTimeout(() => child.kill("SIGKILL"), 20_000)
+    let stoppedHelper: number | undefined
     try {
       const app = await connectStdio({
         write: (chunk) => { child.stdin.write(chunk) },
@@ -57,13 +62,39 @@ describe.skipIf(process.platform !== "darwin")("packaged native menus", () => {
       await app.getByTestId("restore").click()
       await app.getByTestId("owner").click()
       await expect.poll(() => text("status")).toBe("Menu pending")
-      await app.getByTestId("close").click()
+      if (stallHelper) {
+        // Suspend the real helper at the OS process boundary. Cancellation must
+        // reach its bounded kill/reap path, not win by favorable AppKit timing.
+        await expect.poll(async () => {
+          const { stdout } = await promisify(execFile)("ps", ["-axo", "pid=,command="])
+          for (const directory of readdirSync(runtimeTmp).filter((name) => name.startsWith("solo-context-menu-"))) {
+            const executable = join(runtimeTmp, directory, "solo-context-menu")
+            const physicalExecutable = realpathSync(executable)
+            const match = stdout.split("\n").map((line) => line.trim().match(/^(\d+)\s+(.+)$/))
+              .find((match) => match?.[2] === executable || match?.[2] === physicalExecutable)
+            if (match) {
+              stoppedHelper = Number(match[1])
+              return stoppedHelper
+            }
+          }
+          return 0
+        }).toBeGreaterThan(0)
+        process.kill(stoppedHelper!, "SIGSTOP")
+      }
+      await app.getByTestId(action).click()
       expect(await exited, errors).toBe(0)
-      await expect.poll(() => readdirSync(runtimeTmp).filter((name) => name.startsWith("solo-context-menu-"))).toEqual([])
+      expect(readdirSync(runtimeTmp).filter((name) => name.startsWith("solo-context-menu-"))).toEqual([])
+      if (stoppedHelper !== undefined) {
+        expect(() => process.kill(stoppedHelper!, 0)).toThrow()
+        expect(errors).toContain("shutdown-tick")
+      }
     } catch (error) {
       throw new Error(`Packaged context menu failed:\n${errors}`, { cause: error })
     } finally {
       clearTimeout(watchdog)
+      if (stoppedHelper !== undefined) {
+        try { process.kill(stoppedHelper, "SIGKILL") } catch { /* already reaped */ }
+      }
       child.kill("SIGKILL")
       await exited.catch(() => {})
       if (basename(output).startsWith("solo-commands-")) rmSync(output, { recursive: true, force: true })

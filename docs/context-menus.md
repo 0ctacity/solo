@@ -51,6 +51,10 @@ helper reads descriptors and automation keys from a private pipe, and returns
 only a selected ID. Closing the parent pipe dismisses the menu, including when
 the application crashes or exits. Normal cancellation releases AppKit objects;
 the parent has a bounded forced-cleanup fallback if the helper cannot exit.
+Closing the window or quitting cancels every unfinished menu session. Solo
+defers AppKit termination until workers have reaped the helpers and removed
+their temporary copies; JavaScript keeps running during this drain. Updates
+after window closure retain state without trying to repaint the closed window.
 
 The existing `@solo/native` build commands also build the matching
 `solo-context-menu.darwin-arm64` or `solo-context-menu.darwin-x64` executable.
@@ -65,6 +69,9 @@ launching it. This avoids the bundled-helper keyboard-tracking failure covered
 by the packaged regression test. The copy is removed after the child exits;
 `TMPDIR` selects its disk. If the parent exits first, EOF dismisses the child,
 which removes its own staged executable and empty directory before exiting.
+An independent pipe-disconnection watchdog also exits the helper if AppKit
+tracking does not respond. Cleanup handles macOS temporary-directory aliases
+and never removes the shipped helper.
 
 The helper opens a transient accessory application while its menu tracks; it
 has no Dock icon. Menu labels contain application data, so the helper receives

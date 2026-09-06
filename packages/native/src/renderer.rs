@@ -184,11 +184,20 @@ struct MacApplicationState {
     subscriptions: Vec<gpui::Subscription>,
     appearance_token: Option<String>,
     last_appearance: String,
+    window_closed: bool,
+}
+
+#[cfg(target_os = "macos")]
+struct EmbeddedPlatform {
+    // Fields drop in declaration order: restore the original AppKit delegate
+    // before releasing the final platform reference, including at thread exit.
+    _shutdown: Option<crate::macos_shutdown::ShutdownGuard>,
+    platform: Rc<gpui_macos::MacPlatform>,
 }
 
 thread_local! {
     #[cfg(target_os = "macos")]
-    static MAC_PLATFORM: RefCell<Option<Rc<gpui_macos::MacPlatform>>> = const { RefCell::new(None) };
+    static MAC_PLATFORM: RefCell<Option<EmbeddedPlatform>> = const { RefCell::new(None) };
     #[cfg(target_os = "macos")]
     static GPUI_APP: RefCell<Option<gpui::ApplicationHandle>> = const { RefCell::new(None) };
     #[cfg(target_os = "macos")]
@@ -237,6 +246,11 @@ fn open_macos_window(cx: &mut gpui::App) -> Result<gpui::WindowHandle<SoloView>>
         )
         .map_err(|error| Error::from_reason(format!("Failed to open the GPUI window: {error}")))?;
     GPUI_WINDOW.with(|stored| *stored.borrow_mut() = Some(window));
+    MAC_APPLICATION.with(|state| {
+        if let Some(state) = state.borrow_mut().as_mut() {
+            state.window_closed = false;
+        }
+    });
 
     let token = MAC_APPLICATION.with(|state| {
         state
@@ -396,13 +410,16 @@ fn update_window_for_input<R>(
 fn invalidate_window() -> Result<()> {
     let has_window = GPUI_WINDOW.with(|window| window.borrow().is_some());
     if !has_window {
-        let background = MAC_APPLICATION.with(|state| {
+        let closed = MAC_APPLICATION.with(|state| {
             state
                 .borrow()
                 .as_ref()
-                .is_some_and(|state| state.window.options.menu_bar.is_some())
+                .is_some_and(|state| state.window_closed)
         });
-        return if background {
+        // Cancellation promises/timers can commit while native cleanup drains.
+        // Keep retained state (also needed by background apps), but never try
+        // to paint a window that has already closed.
+        return if closed {
             Ok(())
         } else {
             Err(Error::from_reason("GPUI window is not initialized"))
@@ -753,6 +770,7 @@ impl SoloRenderer {
                 subscriptions: Vec::new(),
                 appearance_token: None,
                 last_appearance: "light".to_string(),
+                window_closed: false,
             });
         });
 
@@ -779,6 +797,11 @@ impl SoloRenderer {
                 });
                 if matches_current {
                     crate::context_menu::cancel_all();
+                    MAC_APPLICATION.with(|state| {
+                        if let Some(state) = state.borrow_mut().as_mut() {
+                            state.window_closed = true;
+                        }
+                    });
                     GPUI_WINDOW.with(|stored| stored.borrow_mut().take());
                     SCROLL_HANDLES.with(|handles| handles.borrow_mut().clear());
                     VIRTUAL_LIST_STATES.with(|states| states.borrow_mut().clear());
@@ -787,6 +810,12 @@ impl SoloRenderer {
             });
             let quitting = cx.on_app_quit(|_cx| {
                 crate::context_menu::cancel_all();
+                MAC_APPLICATION.with(|state| {
+                    if let Some(state) = state.borrow_mut().as_mut() {
+                        state.window_closed = true;
+                    }
+                });
+                GPUI_WINDOW.with(|window| window.borrow_mut().take());
                 crate::native_view::with_registry(|registry| registry.destroy_all());
                 async {}
             });
@@ -822,7 +851,10 @@ impl SoloRenderer {
                 app_handle.update(|cx| cx.quit());
                 if crate::macos_event_pump::pump_events(&platform)? {
                     MAC_PLATFORM.with(|stored| {
-                        *stored.borrow_mut() = Some(platform.clone());
+                        *stored.borrow_mut() = Some(EmbeddedPlatform {
+                            _shutdown: None,
+                            platform: platform.clone(),
+                        });
                     });
                 }
                 return Err(error);
@@ -839,8 +871,12 @@ impl SoloRenderer {
                 })
             })
         }));
+        let shutdown = crate::macos_shutdown::install()?;
         MAC_PLATFORM.with(|stored| {
-            *stored.borrow_mut() = Some(platform);
+            *stored.borrow_mut() = Some(EmbeddedPlatform {
+                _shutdown: Some(shutdown),
+                platform,
+            });
         });
         GPUI_APP.with(|a| {
             *a.borrow_mut() = Some(app_handle);
@@ -1090,10 +1126,11 @@ impl SoloRenderer {
 
         #[cfg(target_os = "macos")]
         {
+            crate::macos_shutdown::poll()?;
             let running = MAC_PLATFORM.with(|p| {
                 p.borrow()
                     .as_ref()
-                    .map(|platform| crate::macos_event_pump::pump_events(platform))
+                    .map(|platform| crate::macos_event_pump::pump_events(&platform.platform))
                     .unwrap_or(Ok(false))
             })?;
             if !running {

@@ -21,6 +21,7 @@ mod protocol;
 
 struct Session {
     cancelled: AtomicBool,
+    completed: AtomicBool,
     keys: Mutex<VecDeque<String>>,
 }
 struct ActiveMenu {
@@ -29,6 +30,29 @@ struct ActiveMenu {
     session: Weak<Session>,
 }
 thread_local! { static ACTIVE: RefCell<Option<ActiveMenu>> = const { RefCell::new(None) }; }
+// Replaced/dismissed sessions can still be reaping a child. Track all of them,
+// not just the menu currently accepting input.
+thread_local! { static PENDING: RefCell<Vec<Weak<Session>>> = const { RefCell::new(Vec::new()) }; }
+
+pub(crate) fn has_pending_cleanup() -> bool {
+    PENDING.with(|pending| {
+        let mut pending = pending.borrow_mut();
+        pending.retain(|session| {
+            session
+                .upgrade()
+                .is_some_and(|session| !session.completed.load(Ordering::Acquire))
+        });
+        !pending.is_empty()
+    })
+}
+
+struct Completion<'a>(&'a Session);
+
+impl Drop for Completion<'_> {
+    fn drop(&mut self) {
+        self.0.completed.store(true, Ordering::Release);
+    }
+}
 
 pub(crate) fn cancel(request_id: u64) {
     ACTIVE.with(|cell| {
@@ -43,6 +67,11 @@ pub(crate) fn cancel(request_id: u64) {
 }
 
 pub(crate) fn cancel_all() {
+    PENDING.with(|pending| {
+        for session in pending.borrow().iter().filter_map(Weak::upgrade) {
+            session.cancelled.store(true, Ordering::Release);
+        }
+    });
     ACTIVE.with(|cell| {
         if let Some(active) = cell.borrow_mut().take() {
             if let Some(session) = active.session.upgrade() {
@@ -138,6 +167,9 @@ pub(crate) fn show(
     tree: &crate::retained_tree::RetainedTree,
     window: &gpui::Window,
 ) -> Result<AsyncTask<ContextMenuTask>> {
+    if crate::macos_shutdown::is_quitting() {
+        return Err(Error::from_reason("Application is quitting"));
+    }
     if json.len() > 1_048_576 {
         return Err(Error::from_reason("Context menu request is too large"));
     }
@@ -193,8 +225,11 @@ pub(crate) fn show(
     cancel_all();
     let session = Arc::new(Session {
         cancelled: AtomicBool::new(false),
+        completed: AtomicBool::new(false),
         keys: Mutex::new(VecDeque::new()),
     });
+    has_pending_cleanup(); // prune completed weak entries on ordinary use too
+    PENDING.with(|pending| pending.borrow_mut().push(Arc::downgrade(&session)));
     ACTIVE.with(|cell| {
         *cell.borrow_mut() = Some(ActiveMenu {
             id,
@@ -221,6 +256,9 @@ impl Task for ContextMenuTask {
     type JsValue = Option<String>;
 
     fn compute(&mut self) -> Result<Self::Output> {
+        // Declared first, dropped last: completion includes child reap AND
+        // TempDir destruction, including every early-return/error path.
+        let _completion = Completion(&self.session);
         if self.session.cancelled.load(Ordering::Acquire) {
             return Ok(None);
         }
@@ -314,5 +352,40 @@ impl Task for ContextMenuTask {
         } else {
             output
         })
+    }
+}
+
+#[cfg(test)]
+mod shutdown_tests {
+    use super::*;
+
+    #[test]
+    fn shutdown_waits_for_replaced_and_current_workers() {
+        let sessions: Vec<_> = (0..2)
+            .map(|_| {
+                Arc::new(Session {
+                    cancelled: AtomicBool::new(false),
+                    completed: AtomicBool::new(false),
+                    keys: Mutex::new(VecDeque::new()),
+                })
+            })
+            .collect();
+        PENDING.with(|pending| *pending.borrow_mut() = sessions.iter().map(Arc::downgrade).collect());
+        ACTIVE.with(|active| {
+            *active.borrow_mut() = Some(ActiveMenu {
+                id: 2,
+                owner: 1,
+                session: Arc::downgrade(&sessions[1]),
+            });
+        });
+        cancel_all();
+        assert!(sessions
+            .iter()
+            .all(|session| session.cancelled.load(Ordering::Acquire)));
+        assert!(has_pending_cleanup());
+        drop(Completion(&sessions[1]));
+        assert!(has_pending_cleanup(), "replaced worker still owns cleanup");
+        drop(Completion(&sessions[0]));
+        assert!(!has_pending_cleanup());
     }
 }
