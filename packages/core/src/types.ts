@@ -255,6 +255,9 @@ export interface NativeRenderer {
   cancelWebviewNavigation?(elementId: number, navigationId: number): void
   /** Show the native file-open dialog. Resolves null only when cancelled. */
   selectFiles?(optionsJson: string): Promise<string[] | null>
+  /** Native context menu session; null is normal cancellation. */
+  showContextMenu?(optionsJson: string): Promise<string | null>
+  cancelContextMenu?(requestId: number): void
   /** Show the native save-destination dialog. Resolves null only when cancelled. */
   selectSavePath?(optionsJson: string): Promise<string | null>
   /** Replace/drop the native appearance observer and return its current snapshot. */

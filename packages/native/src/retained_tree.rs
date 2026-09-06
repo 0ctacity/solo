@@ -93,6 +93,8 @@ impl RetainedTree {
     pub fn destroy_element(&mut self, id: u64) -> Vec<u64> {
         let mut destroyed = Vec::new();
         self.destroy_element_recursive(id, &mut destroyed);
+        #[cfg(target_os = "macos")]
+        crate::context_menu::cancel_destroyed(&destroyed);
         if self.root_id == Some(id) {
             self.root_id = None;
         }

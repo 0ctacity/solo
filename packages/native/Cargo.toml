@@ -48,6 +48,8 @@ unicode-segmentation = "1"
 # macOS text/graphics deps - pinned to avoid core-graphics version conflicts
 # core-text 21.1.0 uses core-graphics 0.25 which conflicts with font-kit's core-graphics 0.24
 [target.'cfg(target_os = "macos")'.dependencies]
+libc = "0.2"
+tempfile = "3"
 core-text = "=21.0.0"
 core-graphics = "=0.24.0"
 # Production uses the embedded AppKit loop; tests use the native Metal renderer.
