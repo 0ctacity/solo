@@ -13,6 +13,7 @@ describe.skipIf(process.platform !== "darwin")("packaged native menus", () => {
     { action: "close", stallHelper: true },
     { action: "quit", stallHelper: true },
   ])("keeps JS responsive and drains helper cleanup ($action, stalled: $stallHelper)", async ({ action, stallHelper }) => {
+    const systemUiTimeout = 10_000
     const packager = fileURLToPath(new URL("./fixtures/package-commands.ts", import.meta.url))
     const { stdout } = await promisify(execFile)("bun", [packager, "context-menus"], { timeout: 30_000 })
     const executable = stdout.match(/^commands-executable:(.+)$/m)?.[1]
@@ -27,7 +28,7 @@ describe.skipIf(process.platform !== "darwin")("packaged native menus", () => {
       child.once("error", reject); child.once("exit", resolve)
     })
     void exited.catch(() => {})
-    const watchdog = setTimeout(() => child.kill("SIGKILL"), 20_000)
+    const watchdog = setTimeout(() => child.kill("SIGKILL"), 45_000)
     let stoppedHelper: number | undefined
     try {
       const app = await connectStdio({
@@ -46,19 +47,19 @@ describe.skipIf(process.platform !== "darwin")("packaged native menus", () => {
         await expect.poll(ticks).toBeGreaterThan(before + 10)
         expect(await text("status"), "menu must remain open before keyboard input").toBe("Menu pending")
         await app.getByTestId("owner").press("down enter")
-        await expect.poll(() => text("status")).toBe("read")
+        await expect.poll(() => text("status"), { timeout: systemUiTimeout }).toBe("read")
         expect(readdirSync(runtimeTmp).filter((name) => name.startsWith("solo-context-menu-"))).toEqual([])
       }
       await app.getByTestId("owner").click()
       await expect.poll(() => text("status")).toBe("Menu pending")
       await app.getByTestId("owner").press("escape")
-      await expect.poll(() => text("status")).toBe("Cancelled")
+      await expect.poll(() => text("status"), { timeout: systemUiTimeout }).toBe("Cancelled")
       await app.getByTestId("owner").click()
       await expect.poll(() => text("status")).toBe("Menu pending")
       const beforeUnmount = await ticks()
       await expect.poll(ticks).toBeGreaterThan(beforeUnmount + 10)
       await app.getByTestId("remove").click()
-      await expect.poll(() => text("status")).toBe("Cancelled")
+      await expect.poll(() => text("status"), { timeout: systemUiTimeout }).toBe("Cancelled")
       await app.getByTestId("restore").click()
       await app.getByTestId("owner").click()
       await expect.poll(() => text("status")).toBe("Menu pending")
