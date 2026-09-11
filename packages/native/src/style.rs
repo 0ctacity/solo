@@ -172,6 +172,9 @@ pub struct StyleDesc {
     pub overflow: Option<String>,
     pub overflow_x: Option<String>,
     pub overflow_y: Option<String>,
+    pub overscroll_behavior: Option<String>,
+    pub overscroll_behavior_x: Option<String>,
+    pub overscroll_behavior_y: Option<String>,
 
     // Cursor
     pub cursor: Option<String>,

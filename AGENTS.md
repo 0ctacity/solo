@@ -70,8 +70,9 @@ signal write → Solid effects → runtime ops → batching queue
   Taffy's automatic minimum size doesn't pin them to content height.
 - The retained-tree root div is created unstyled by JS; build_div gives it
   `size_full()` so percentage heights resolve against the window.
-- Nested scrolling is unsupported: one scroll parent, inner content grows
-  or collapses behind an expandable.
+- Nested scrolling chains to ancestors by default. Set
+  `overscrollBehavior: "contain"` (or its axis-specific variant) on an inner
+  scroll container when wheel input must stop there, including at a boundary.
 - Every `overflow-x: scroll` uses `restrict_scroll_to_axis()` so vertical
   wheels are not remapped horizontally.
 - Filled in-flow children use `block_mouse_except_scroll`; plain `occlude`

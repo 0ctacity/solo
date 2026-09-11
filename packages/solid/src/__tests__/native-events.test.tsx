@@ -749,6 +749,142 @@ describeNative("events", () => {
       expect(innerOffset).toEqual([0, 0])
     })
 
+    it("contains vertical wheel input inside a nested scroller at both boundaries", () => {
+      function NestedScroll() {
+        return (
+          <div style={{ width: 240, height: 180, overflowY: "scroll" }}>
+            <div
+              style={{
+                width: 240,
+                height: 120,
+                overflowY: "scroll",
+                overscrollBehaviorY: "contain",
+              }}
+            >
+              <div style={{ width: 240, height: 360 }}>
+                <Text>inner content</Text>
+              </div>
+            </div>
+            <div style={{ width: 240, height: 360 }}>
+              <Text>outer content</Text>
+            </div>
+          </div>
+        )
+      }
+
+      testRoot.render(() => <NestedScroll />)
+
+      const scrollers = testRoot.findByType("div").filter((d) => d.style?.overflowY === "scroll")
+      const [outer, inner] = scrollers
+
+      testRoot.renderer.scrollTo!(inner.id, 0, -240)
+      testRoot.renderer.nativeSimulateScrollWheel!(80, 60, 0, -60)
+      expect(testRoot.renderer.getScrollOffset(inner.id)).toEqual([0, -240])
+      expect(testRoot.renderer.getScrollOffset(outer.id)).toEqual([0, 0])
+
+      testRoot.renderer.scrollTo!(outer.id, 0, -40)
+      testRoot.renderer.scrollTo!(inner.id, 0, 0)
+      testRoot.renderer.nativeSimulateScrollWheel!(80, 20, 0, 60)
+      expect(testRoot.renderer.getScrollOffset(inner.id)).toEqual([0, 0])
+      expect(testRoot.renderer.getScrollOffset(outer.id)).toEqual([0, -40])
+    })
+
+    it("chains wheel input to an ancestor by default at an inner boundary", () => {
+      function NestedScroll() {
+        return (
+          <div style={{ width: 240, height: 180, overflowY: "scroll" }}>
+            <div style={{ width: 240, height: 120, overflowY: "scroll" }}>
+              <div style={{ width: 240, height: 360 }}>
+                <Text>inner content</Text>
+              </div>
+            </div>
+            <div style={{ width: 240, height: 360 }}>
+              <Text>outer content</Text>
+            </div>
+          </div>
+        )
+      }
+
+      testRoot.render(() => <NestedScroll />)
+
+      const [outer, inner] = testRoot
+        .findByType("div")
+        .filter((d) => d.style?.overflowY === "scroll")
+      testRoot.renderer.scrollTo!(inner.id, 0, -240)
+      testRoot.renderer.nativeSimulateScrollWheel!(80, 60, 0, -60)
+
+      expect(testRoot.renderer.getScrollOffset(inner.id)).toEqual([0, -240])
+      expect(testRoot.renderer.getScrollOffset(outer.id)![1]).toBeLessThan(0)
+    })
+
+    it("keeps the uncontained axis available to an ancestor scroller", () => {
+      function NestedAxisScroll() {
+        return (
+          <div style={{ width: 240, height: 120, overflowY: "scroll" }}>
+            <div
+              style={{
+                width: 240,
+                height: 80,
+                overflowX: "scroll",
+                overscrollBehaviorX: "contain",
+              }}
+            >
+              <div style={{ width: 800, height: 80 }}>
+                <Text>wide row</Text>
+              </div>
+            </div>
+            <div style={{ height: 400 }}>
+              <Text>below</Text>
+            </div>
+          </div>
+        )
+      }
+
+      testRoot.render(() => <NestedAxisScroll />)
+
+      const parent = testRoot.findByType("div").find((d) => d.style?.overflowY === "scroll")!
+      const inner = testRoot.findByType("div").find((d) => d.style?.overflowX === "scroll")!
+      testRoot.renderer.nativeSimulateScrollWheel!(80, 40, 0, -60)
+
+      expect(testRoot.renderer.getScrollOffset(parent.id)![1]).toBeLessThan(0)
+      expect(testRoot.renderer.getScrollOffset(inner.id)).toEqual([0, 0])
+    })
+
+    it("contains horizontal wheel input inside a nested scroller at its boundary", () => {
+      function NestedHorizontalScroll() {
+        return (
+          <div style={{ width: 300, height: 100, overflowX: "scroll" }}>
+            <div
+              style={{
+                width: 180,
+                height: 100,
+                overflowX: "scroll",
+                overscrollBehaviorX: "contain",
+              }}
+            >
+              <div style={{ width: 500, height: 100 }}>
+                <Text>inner wide row</Text>
+              </div>
+            </div>
+            <div style={{ width: 400, height: 100 }}>
+              <Text>outer wide row</Text>
+            </div>
+          </div>
+        )
+      }
+
+      testRoot.render(() => <NestedHorizontalScroll />)
+
+      const [outer, inner] = testRoot
+        .findByType("div")
+        .filter((d) => d.style?.overflowX === "scroll")
+      testRoot.renderer.scrollTo!(inner.id, -320, 0)
+      testRoot.renderer.nativeSimulateScrollWheel!(80, 40, -60, 0)
+
+      expect(testRoot.renderer.getScrollOffset(inner.id)).toEqual([-320, 0])
+      expect(testRoot.renderer.getScrollOffset(outer.id)).toEqual([0, 0])
+    })
+
     it("pans overflow-x when the child is wider than the viewport", () => {
       function WideRow() {
         return (

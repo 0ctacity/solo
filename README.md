@@ -75,6 +75,11 @@ WKWebView). Styles are a CSS-like subset
 (`StyleDesc`) applied natively, including hover/active pseudo-states,
 overflow scrolling, opacity, borders, and text metrics.
 
+Nested scroll containers chain wheel input to ancestors by default. Add
+`overscrollBehavior: "contain"` to keep both axes in the inner container, or
+use `overscrollBehaviorX` / `overscrollBehaviorY` for one axis. Containment is
+handled synchronously by the native event path, including at scroll boundaries.
+
 ## Automation
 
 Solo ships a Playwright-style automation protocol over stdio (SSE
