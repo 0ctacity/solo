@@ -60,6 +60,13 @@ export declare class SoloRenderer {
   showWindow(): void
   /** Close the current macOS window. Background applications keep running. */
   closeWindow(): void
+  /**
+   * Enter or leave the standard macOS zoomed state. AppKit owns the saved
+   * normal frame, so restoring uses exactly the platform's previous frame.
+   */
+  setWindowMaximized(maximized: boolean): void
+  /** Read AppKit's live zoomed state, including native zoom-button changes. */
+  isWindowMaximized(): boolean
   /** Explicitly terminate the application, including background apps. */
   quitApplication(): void
   getWindowSize(): WindowSize
