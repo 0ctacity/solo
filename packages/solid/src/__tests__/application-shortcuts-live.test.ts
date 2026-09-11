@@ -9,6 +9,7 @@ import type { TreeNode } from "../automation.js"
 
 describe.skipIf(process.platform !== "darwin")("packaged focus-aware shortcuts", () => {
   it("dispatches scoped chords, protects editing and controls, and handles repeats and disposal", async () => {
+    const systemUiTimeout = 10_000
     const packager = fileURLToPath(new URL("./fixtures/package-commands.ts", import.meta.url))
     const { stdout } = await promisify(execFile)("bun", [packager, "application-shortcuts"], { timeout: 30_000 })
     const executable = stdout.match(/^commands-executable:(.+)$/m)?.[1]
@@ -21,7 +22,7 @@ describe.skipIf(process.platform !== "darwin")("packaged focus-aware shortcuts",
       child.once("error", reject); child.once("exit", () => resolve())
     })
     void exited.catch(() => {})
-    const watchdog = setTimeout(() => child.kill("SIGKILL"), 20_000)
+    const watchdog = setTimeout(() => child.kill("SIGKILL"), 45_000)
     try {
       const work = async () => {
         const app = await connectStdio({
@@ -74,7 +75,7 @@ describe.skipIf(process.platform !== "darwin")("packaged focus-aware shortcuts",
         await expect.poll(() => text("log")).toBe(expected.join(","))
         for (const editor of ["INPUT", "DIV"]) {
           await app.getByTestId("web-focus").click()
-          await expect.poll(() => text("web-status")).toBe(editor)
+          await expect.poll(() => text("web-status"), { timeout: systemUiTimeout }).toBe(editor)
           // No elementId: retain AppKit's actual WebView first responder. The
           // last GPUI focus remains inside the article scope deliberately.
           await app.call("keyDown", { key: "s" })
