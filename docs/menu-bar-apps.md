@@ -22,6 +22,36 @@ to light and dark menu bars. The status-item menu contains `Open <title>` and
 `Quit <title>` actions. Open activates the existing window or creates exactly
 one replacement; Quit terminates the native event loop and JavaScript process.
 
+Use `configureMenuBar` inside the mounted Solid owner to prepend reactive,
+application-defined controls and update the icon or tooltip at runtime:
+
+```tsx
+import { configureMenuBar } from "@solo/solid"
+
+function App() {
+  configureMenuBar(() => ({
+    iconPath: refreshing() ? refreshingIcon : idleIcon,
+    tooltip: error() ?? "Newsprint",
+    items: [
+      {
+        id: "refresh",
+        label: refreshing() ? "Refreshing…" : "Refresh now",
+        enabled: !refreshing(),
+        run: refresh,
+      },
+      { type: "separator" },
+      { type: "status", label: `Last refresh: ${lastRefresh()}` },
+    ],
+  }))
+  return <Newsprint />
+}
+```
+
+Action items support native disabled and checked states. Status items are
+non-actionable text. Solo keeps its built-in Open and Quit entries after the
+custom items. When the owning component unmounts, it drops the callbacks and
+restores the original icon, tooltip, and default menu.
+
 The render root exposes the same lifecycle controls for application UI:
 
 ```ts

@@ -1260,6 +1260,33 @@ impl SoloRenderer {
         }
     }
 
+    /// Replace the macOS status-item presentation, or restore the initial
+    /// icon, tooltip, and built-in Open/Quit menu when passed null.
+    #[napi]
+    pub fn set_menu_bar(&self, json: Option<String>) -> Result<()> {
+        #[cfg(target_os = "macos")]
+        {
+            return MAC_APPLICATION.with(|application| {
+                let mut application = application.borrow_mut();
+                let state = application
+                    .as_mut()
+                    .ok_or_else(|| Error::from_reason("GPUI application is not initialized"))?;
+                let callback = state.window.callback.clone();
+                let menu_bar = state.menu_bar.as_mut().ok_or_else(|| {
+                    Error::from_reason("The application was not created with menuBar options")
+                })?;
+                menu_bar.update(json.as_deref(), callback)
+            });
+        }
+        #[cfg(not(target_os = "macos"))]
+        {
+            let _ = json;
+            Err(Error::from_reason(
+                "Menu-bar configuration is supported only on macOS",
+            ))
+        }
+    }
+
     /// Show the macOS file-open dialog without blocking the JavaScript or UI
     /// thread. The returned promise resolves to selected paths, or `null` on
     /// cancellation.

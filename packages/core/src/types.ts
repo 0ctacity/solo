@@ -264,6 +264,8 @@ export interface NativeRenderer {
   setSystemAppearanceSubscription?(token: string | null): string
   /** Replace the application command descriptors atomically (native capability). */
   setApplicationCommands?(json: string): void
+  /** Replace the macOS status-item presentation, or restore its defaults. */
+  setMenuBar?(json: string | null): void
   createElement(id: number, elementType: string): void
   destroyElement(id: number): Array<number>
   appendChild(parentId: number, childId: number): void
