@@ -199,6 +199,13 @@ impl TestSoloRenderer {
     }
 
     #[napi]
+    pub fn set_menu_bar(&self, _json: Option<String>) -> Result<()> {
+        Err(Error::from_reason(
+            "Menu-bar configuration requires a live macOS application",
+        ))
+    }
+
+    #[napi]
     pub fn select_files(
         &self,
         options_json: String,

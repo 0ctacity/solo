@@ -66,6 +66,11 @@ export declare class SoloRenderer {
   /** Replace application commands atomically. macOS only for now. */
   setApplicationCommands(json: string): void
   /**
+   * Replace the macOS status-item presentation, or restore the initial
+   * icon, tooltip, and built-in Open/Quit menu when passed null.
+   */
+  setMenuBar(json?: string | undefined | null): void
+  /**
    * Show the macOS file-open dialog without blocking the JavaScript or UI
    * thread. The returned promise resolves to selected paths, or `null` on
    * cancellation.
@@ -173,6 +178,7 @@ export declare class SoloRenderer {
 export declare class TestSoloRenderer {
   constructor()
   setApplicationCommands(json: string): void
+  setMenuBar(json?: string | undefined | null): void
   selectFiles(optionsJson: string): Promise<Array<string> | null>
   selectSavePath(optionsJson: string): Promise<string | null>
   setSystemAppearanceSubscription(token?: string | undefined | null): string
