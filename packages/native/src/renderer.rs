@@ -3151,6 +3151,18 @@ pub(crate) fn build_div(
 
         let needs_scroll_x = resolved_x == Some("scroll");
         let needs_scroll_y = resolved_y == Some("scroll");
+        let contains_scroll_x = needs_scroll_x
+            && style
+                .overscroll_behavior_x
+                .as_deref()
+                .or(style.overscroll_behavior.as_deref())
+                == Some("contain");
+        let contains_scroll_y = needs_scroll_y
+            && style
+                .overscroll_behavior_y
+                .as_deref()
+                .or(style.overscroll_behavior.as_deref())
+                == Some("contain");
 
         // Scroll containers must be allowed to shrink BELOW their content
         // size. Taffy's automatic minimum size (min-height/min-width: auto)
@@ -3185,6 +3197,22 @@ pub(crate) fn build_div(
                 .entry(element.id)
                 .or_insert_with(gpui::ScrollHandle::new);
             el = el.track_scroll(handle);
+
+            if contains_scroll_x || contains_scroll_y {
+                // GPUI registers this element's built-in scroll handler after
+                // custom wheel handlers, then dispatches bubble handlers in
+                // reverse order. The element therefore consumes its delta
+                // first; stopping here prevents an ancestor from consuming the
+                // same gesture even when this scroller is already at a boundary.
+                el = el.on_scroll_wheel(move |event, window, cx| {
+                    let delta = event.delta.pixel_delta(window.line_height());
+                    let contains_x = contains_scroll_x && delta.x != gpui::px(0.0);
+                    let contains_y = contains_scroll_y && delta.y != gpui::px(0.0);
+                    if contains_x || contains_y {
+                        cx.stop_propagation();
+                    }
+                });
+            }
         } else {
             // Element is no longer scrollable — remove stale handle.
             ctx.scroll_handles.remove(&element.id);

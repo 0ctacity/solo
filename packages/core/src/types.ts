@@ -108,6 +108,10 @@ export interface StyleDesc {
   overflow?: string
   overflowX?: string
   overflowY?: string
+  /** Controls whether wheel input may continue to an ancestor scroller. */
+  overscrollBehavior?: "auto" | "contain"
+  overscrollBehaviorX?: "auto" | "contain"
+  overscrollBehaviorY?: "auto" | "contain"
 
   cursor?: string
   /** `"auto"` blocks hits behind this element. `"none"` never does. Unset blocks when the element paints a fill or is absolutely positioned. */
