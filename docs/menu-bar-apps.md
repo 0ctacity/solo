@@ -60,6 +60,20 @@ application.showWindow()
 application.quitApplication()
 ```
 
+The same root exposes the standard macOS zoomed state separately from
+fullscreen:
+
+```ts
+application.maximizeWindow()
+application.isWindowMaximized() // reads AppKit's live state
+application.restoreWindow()
+application.toggleWindowMaximized()
+```
+
+These methods use `NSWindow`'s native zoom operation, so restoring returns to
+the frame macOS saved before maximizing. A change made with the green window
+button is visible through `isWindowMaximized()` as well.
+
 ## State across reopening
 
 Solo keeps the Solid owner, signals, timers, registered application commands,

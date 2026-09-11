@@ -23,6 +23,14 @@ export interface Root {
   showWindow: () => void
   /** Close the current window without necessarily quitting a background app. */
   closeWindow: () => void
+  /** Enter the platform's standard zoomed/maximized window state. */
+  maximizeWindow: () => void
+  /** Restore the window frame saved by the platform's zoom operation. */
+  restoreWindow: () => void
+  /** Toggle the standard zoomed/maximized window state. */
+  toggleWindowMaximized: () => void
+  /** Read the current native zoomed/maximized state. */
+  isWindowMaximized: () => boolean
   /** Explicitly terminate the native application. */
   quitApplication: () => void
 }
@@ -115,6 +123,24 @@ export function render(code: () => SolidElement, options: RenderOptions = {}): R
     closeWindow: () => {
       if (!host.closeWindow) throw new Error("This renderer does not support closing windows")
       host.closeWindow()
+    },
+    maximizeWindow: () => {
+      if (!host.setWindowMaximized) throw new Error("This renderer does not support maximizing windows")
+      host.setWindowMaximized(true)
+    },
+    restoreWindow: () => {
+      if (!host.setWindowMaximized) throw new Error("This renderer does not support restoring windows")
+      host.setWindowMaximized(false)
+    },
+    toggleWindowMaximized: () => {
+      if (!host.setWindowMaximized || !host.isWindowMaximized) {
+        throw new Error("This renderer does not support toggling maximized windows")
+      }
+      host.setWindowMaximized(!host.isWindowMaximized())
+    },
+    isWindowMaximized: () => {
+      if (!host.isWindowMaximized) throw new Error("This renderer does not expose maximized window state")
+      return host.isWindowMaximized()
     },
     quitApplication: () => {
       if (!host.quitApplication) throw new Error("This renderer does not support quitting applications")

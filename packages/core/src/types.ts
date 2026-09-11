@@ -302,6 +302,8 @@ export interface NativeRenderer {
   // ── Window API ─────────────────────────────────────────────────
   showWindow?(): void
   closeWindow?(): void
+  setWindowMaximized?(maximized: boolean): void
+  isWindowMaximized?(): boolean
   quitApplication?(): void
   getWindowSize?(): { width: number; height: number }
   setWindowTitle?(title: string): void

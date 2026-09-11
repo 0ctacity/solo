@@ -58,7 +58,7 @@ gpui_macos = { git = "https://github.com/remorses/zed", rev = "db0820f6756b9d789
 # already resolves — a second objc2 build would produce duplicate,
 # incompatible `NSView`/`WKWebView` types.
 objc2 = "0.6"
-objc2-app-kit = { version = "0.3.2", default-features = false, features = ["NSApplication", "NSEvent", "NSButton", "NSCell", "NSControl", "NSImage", "NSMenu", "NSMenuItem", "NSResponder", "NSScreen", "NSStatusBar", "NSStatusBarButton", "NSStatusItem", "NSView", "NSWorkspace", "NSPasteboard", "objc2-core-foundation"] }
+objc2-app-kit = { version = "0.3.2", default-features = false, features = ["NSApplication", "NSEvent", "NSButton", "NSCell", "NSControl", "NSImage", "NSMenu", "NSMenuItem", "NSResponder", "NSScreen", "NSStatusBar", "NSStatusBarButton", "NSStatusItem", "NSView", "NSWindow", "NSWorkspace", "NSPasteboard", "objc2-core-foundation"] }
 objc2-core-foundation = { version = "0.3.2", features = ["CFCGTypes"] }
 objc2-foundation = { version = "=0.3.2", default-features = false, features = ["NSError", "NSObject", "NSString", "NSURL", "NSURLRequest"] }
 block2 = "0.6.2"

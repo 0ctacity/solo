@@ -166,6 +166,14 @@ mod application_lifecycle_tests {
         };
         validate_menu_bar_options(&absolute).unwrap();
     }
+
+    #[test]
+    fn window_zoom_only_toggles_when_the_requested_state_changes() {
+        assert!(should_toggle_window_zoom(false, true));
+        assert!(should_toggle_window_zoom(true, false));
+        assert!(!should_toggle_window_zoom(true, true));
+        assert!(!should_toggle_window_zoom(false, false));
+    }
 }
 
 #[cfg(target_os = "macos")]
@@ -381,6 +389,26 @@ fn update_window<R>(
                 .map_err(|error| Error::from_reason(error.to_string()))
         })
     })
+}
+
+#[cfg(target_os = "macos")]
+fn appkit_window(window: &gpui::Window) -> Result<objc2::rc::Retained<objc2_app_kit::NSWindow>> {
+    use raw_window_handle::{HasWindowHandle, RawWindowHandle};
+
+    let handle = HasWindowHandle::window_handle(window)
+        .map_err(|error| Error::from_reason(error.to_string()))?;
+    let RawWindowHandle::AppKit(handle) = handle.as_raw() else {
+        return Err(Error::from_reason("Window does not have an AppKit handle"));
+    };
+    // SAFETY: GPUI owns this NSView for the duration of the synchronous
+    // window update, and AppKit retains the returned NSWindow.
+    let view = unsafe { &*handle.ns_view.as_ptr().cast::<objc2_app_kit::NSView>() };
+    view.window()
+        .ok_or_else(|| Error::from_reason("The macOS window is closed"))
+}
+
+fn should_toggle_window_zoom(current: bool, requested: bool) -> bool {
+    current != requested
 }
 
 /// Update only the window, without leasing its root `SoloView` entity.
@@ -1210,6 +1238,40 @@ impl SoloRenderer {
         #[cfg(not(target_os = "macos"))]
         Err(Error::from_reason(
             "Background window lifecycle is supported only on macOS",
+        ))
+    }
+
+    /// Enter or leave the standard macOS zoomed state. AppKit owns the saved
+    /// normal frame, so restoring uses exactly the platform's previous frame.
+    #[napi]
+    pub fn set_window_maximized(&self, maximized: bool) -> Result<()> {
+        #[cfg(target_os = "macos")]
+        return update_window(move |_view, window, _cx| {
+            let window = appkit_window(window)?;
+            if should_toggle_window_zoom(window.isZoomed(), maximized) {
+                window.zoom(None);
+            }
+            Ok(())
+        })?;
+
+        #[cfg(not(target_os = "macos"))]
+        {
+            let _ = maximized;
+            Err(Error::from_reason(
+                "Maximized window state is supported only on macOS",
+            ))
+        }
+    }
+
+    /// Read AppKit's live zoomed state, including native zoom-button changes.
+    #[napi]
+    pub fn is_window_maximized(&self) -> Result<bool> {
+        #[cfg(target_os = "macos")]
+        return update_window(move |_view, window, _cx| Ok(appkit_window(window)?.isZoomed()))?;
+
+        #[cfg(not(target_os = "macos"))]
+        Err(Error::from_reason(
+            "Maximized window state is supported only on macOS",
         ))
     }
 
