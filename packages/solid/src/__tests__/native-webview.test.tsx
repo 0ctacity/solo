@@ -26,6 +26,16 @@ describeNative("custom element: webview", () => {
     testRoot = createSolidNativeTestRoot()
   })
 
+  it("renders and flushes without violating GPUI draw phases", () => {
+    testRoot.render(() => (
+      <div style={{ width: 400, height: 300 }}>
+        <webview testId="web" style={{ width: 400, height: 300 }} />
+      </div>
+    ))
+
+    expect(() => testRoot.renderer.flush()).not.toThrow()
+  })
+
   it("takes part in layout like any other element", () => {
     testRoot.render(() => (
       <div style={{ display: "flex", width: 400, height: 300 }}>

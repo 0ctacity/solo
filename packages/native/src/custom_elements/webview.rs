@@ -115,6 +115,11 @@ impl Element for WebviewPlaceholder {
         window: &mut Window,
         _: &mut App,
     ) -> Self::PrepaintState {
+        // The WKWebView is an AppKit subview that swallows mouse events in its
+        // own rect. Claim the same rect in GPUI's hit-test bookkeeping so a
+        // click over the webview is not routed to an element underneath.
+        window.insert_hitbox(bounds, gpui::HitboxBehavior::Normal);
+
         let content_height = window.viewport_size().height;
         let frame = to_native_frame(
             f32::from(bounds.origin.x),
@@ -159,17 +164,12 @@ impl Element for WebviewPlaceholder {
         &mut self,
         _: Option<&GlobalElementId>,
         _: Option<&InspectorElementId>,
-        bounds: Bounds<Pixels>,
+        _: Bounds<Pixels>,
         _: &mut Self::RequestLayoutState,
         _: &mut Self::PrepaintState,
-        window: &mut Window,
+        _: &mut Window,
         _: &mut App,
-    ) {
-        // The WKWebView is an AppKit subview that swallows mouse events in its
-        // own rect. Claim the same rect in GPUI's hit-test bookkeeping so a
-        // click over the webview is not routed to an element underneath.
-        window.insert_hitbox(bounds, gpui::HitboxBehavior::Normal);
-    }
+    ) {}
 }
 
 impl IntoElement for WebviewPlaceholder {
